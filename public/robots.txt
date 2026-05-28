@@ -1,0 +1,17 @@
+# *
+User-agent: *
+Allow: /
+
+# Googlebot
+User-agent: Googlebot
+Allow: /blog
+
+# Bingbot
+User-agent: Bingbot
+Disallow: /private
+
+# Host
+Host: https://google.com
+
+# Sitemaps
+Sitemap: https://google.com/sitemap.xml
