@@ -21,6 +21,7 @@ import {
   createDraftTemplate,
   createTemplate,
   submitDraftTemplate,
+  updateApprovedTemplate,
   updateDraftTemplate
 } from "@/api/functions/templates";
 import { MediaAsset } from "@/api/types/media.type";
@@ -30,6 +31,7 @@ import {
   TemplateButton,
   TemplateButtonType,
   TemplateCategory,
+  TemplateComponent,
   TemplateCreationType,
   TemplateHeaderFormat
 } from "@/api/types/templates.type";
@@ -63,6 +65,12 @@ import {
 
 type HeaderFormatOption = "NONE" | TemplateHeaderFormat;
 type ActionMode = "NONE" | "CTA" | "QUICK_REPLY" | "ALL";
+
+interface CarouselCardState {
+  mediaId: string;
+  mediaName: string;
+  mediaUrl: string;
+}
 
 const MAX_TOTAL_BUTTONS = 10;
 const MAX_URL_BUTTONS = 2;
@@ -227,9 +235,17 @@ export default function TemplateCreateForm({
   const [headerExampleUrl, setHeaderExampleUrl] = useState("");
   const [selectedMediaId, setSelectedMediaId] = useState("");
   const [selectedMediaName, setSelectedMediaName] = useState("");
+  const [selectedMediaUrl, setSelectedMediaUrl] = useState("");
   const [isMediaPickerOpen, setIsMediaPickerOpen] = useState(false);
+  const [carouselMediaIndex, setCarouselMediaIndex] = useState<number | null>(
+    null
+  );
   const [offerText, setOfferText] = useState("Limited-time offer");
   const [carouselCardCount, setCarouselCardCount] = useState(2);
+  const [carouselCards, setCarouselCards] = useState<CarouselCardState[]>([
+    { mediaId: "", mediaName: "", mediaUrl: "" },
+    { mediaId: "", mediaName: "", mediaUrl: "" }
+  ]);
   const [bodyText, setBodyText] = useState(
     "Hi {{1}}, thanks for connecting with us. We have an update for you."
   );
@@ -305,10 +321,29 @@ export default function TemplateCreateForm({
     setSelectedMediaName(
       header?.mediaId || initialTemplate.defaultMediaId ? "Linked media" : ""
     );
+    setSelectedMediaUrl(header?.example?.header_handle?.[0] || "");
     setBodyText(bodyTextValue);
     setFooterText(footer?.text || "");
     setButtons(buttonsComponent?.buttons || []);
     setActionMode(buttonsComponent?.buttons?.length ? "ALL" : "NONE");
+
+    const carousel = initialTemplate.components.find(
+      (component) => component.type === "CAROUSEL"
+    );
+    if (carousel?.cards?.length) {
+      setCarouselCardCount(carousel.cards.length);
+      setCarouselCards(
+        carousel.cards.map((card) => {
+          const cardHeader = getHeaderComponent(card.components);
+
+          return {
+            mediaId: cardHeader?.mediaId || "",
+            mediaName: cardHeader?.mediaId ? "Linked image" : "",
+            mediaUrl: cardHeader?.example?.header_handle?.[0] || ""
+          };
+        })
+      );
+    }
 
     const examples = body?.example?.body_text;
     const sampleValues = Array.isArray(examples?.[0])
@@ -358,6 +393,24 @@ export default function TemplateCreateForm({
       router.push("/templates");
     }
   });
+
+  const { mutate: patchApproved, isPending: isPatchingApproved } = useMutation({
+    mutationFn: updateApprovedTemplate,
+    onSuccess: (data) => {
+      upsertTemplate(data.data.template);
+      toast.success("Template edit submitted. Status is now pending.");
+      router.push("/templates");
+    }
+  });
+
+  useEffect(() => {
+    setCarouselCards((current) =>
+      Array.from({ length: carouselCardCount }).map(
+        (_item, index) =>
+          current[index] || { mediaId: "", mediaName: "", mediaUrl: "" }
+      )
+    );
+  }, [carouselCardCount]);
 
   const addVariable = () => {
     const next = variables.length + 1;
@@ -465,6 +518,14 @@ export default function TemplateCreateForm({
       return null;
     }
 
+    if (
+      templateType === "CAROUSEL" &&
+      carouselCards.some((card) => !card.mediaId)
+    ) {
+      toast.error("Select an image for every carousel card");
+      return null;
+    }
+
     const components = [];
 
     if (templateType === "LIMITED_TIME_OFFER") {
@@ -478,22 +539,43 @@ export default function TemplateCreateForm({
     }
 
     if (templateType === "CAROUSEL") {
-      // The backend receives a simplified carousel component. Each card follows
-      // Meta's carousel model: consistent media card format and repeated buttons.
       components.push({
         type: "CAROUSEL" as const,
-        cards: Array.from({ length: carouselCardCount }).map(() => ({
-          components: [
+        cards: carouselCards.map((card) => {
+          const cardComponents: TemplateComponent[] = [
             {
               type: "HEADER" as const,
-              format: "IMAGE" as const
+              format: "IMAGE" as const,
+              mediaId: card.mediaId
             },
             {
               type: "BODY" as const,
-              text: "Carousel card body"
+              text: bodyText.trim()
             }
-          ]
-        }))
+          ];
+
+          const cardButtons = buildButtonsComponent(
+            visibleButtons
+              .filter((button) => button.text.trim())
+              .slice(0, 2)
+              .map((button) => ({
+                ...button,
+                text: button.text.trim(),
+                ...(button.type === "URL" ? { url: button.url?.trim() } : {}),
+                ...(button.type === "PHONE_NUMBER"
+                  ? { phone_number: button.phone_number?.trim() }
+                  : {})
+              }))
+          );
+
+          if (cardButtons) {
+            cardComponents.push(cardButtons);
+          }
+
+          return {
+            components: cardComponents
+          };
+        })
       });
     }
 
@@ -575,13 +657,18 @@ export default function TemplateCreateForm({
   };
 
   const handleSubmitForReview = () => {
-    if (isEditing && !isDraftEdit) {
-      toast.info("Template update API is not connected yet");
-      return;
-    }
-
     const payload = buildPayload();
     if (!payload) return;
+
+    if (isEditing && !isDraftEdit && initialTemplate?.templateId) {
+      patchApproved({
+        templateId: initialTemplate.templateId,
+        payload: {
+          components: payload.components
+        }
+      });
+      return;
+    }
 
     if (isDraftEdit && initialTemplate?.draftId) {
       patchDraft(
@@ -641,7 +728,12 @@ export default function TemplateCreateForm({
               ) : null}
               <Button
                 type="submit"
-                isLoading={isPending || isSubmittingDraft || isPatchingDraft}
+                isLoading={
+                  isPending ||
+                  isSubmittingDraft ||
+                  isPatchingDraft ||
+                  isPatchingApproved
+                }
                 disabled={!canEditFields}
               >
                 <FilePlus2 className="size-4" />
@@ -721,44 +813,46 @@ export default function TemplateCreateForm({
 
           <div className="mt-4">
             <Label>Template type</Label>
-            <div className="mt-2 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {templateTypes.map((item) => (
-                <button
-                  key={item.value}
-                  type="button"
-                  onClick={() => {
-                    if (isEditing) return;
-                    setTemplateType(item.value);
-                    setHeaderFormat(
-                      getHeaderFormatForTemplateType(item.value, headerFormat)
-                    );
-                    if (
-                      item.value === "LOCATION" ||
-                      item.value === "CAROUSEL"
-                    ) {
-                      setFooterText("");
-                    }
-                    if (!["IMAGE", "VIDEO", "DOCUMENT"].includes(item.value)) {
-                      setSelectedMediaId("");
-                      setSelectedMediaName("");
-                    }
-                  }}
-                  className={cn(
-                    "rounded-sm bg-muted/60 p-3 text-left transition hover:bg-accent",
-                    templateType === item.value &&
-                      "bg-primary/10 text-primary shadow-xs",
-                    isEditing && "cursor-not-allowed opacity-70"
-                  )}
-                >
-                  <span className="font-heading text-sm font-semibold">
+            <Select
+              value={templateType}
+              onValueChange={(value) => {
+                if (isEditing) return;
+
+                const nextType = value as TemplateCreationType;
+                setTemplateType(nextType);
+                setHeaderFormat(
+                  getHeaderFormatForTemplateType(nextType, headerFormat)
+                );
+
+                if (nextType === "LOCATION" || nextType === "CAROUSEL") {
+                  setFooterText("");
+                }
+
+                if (!["IMAGE", "VIDEO", "DOCUMENT"].includes(nextType)) {
+                  setSelectedMediaId("");
+                  setSelectedMediaName("");
+                  setSelectedMediaUrl("");
+                }
+              }}
+              disabled={isEditing}
+            >
+              <SelectTrigger className="mt-2 h-11 w-full border-0 bg-muted/70 shadow-none">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {templateTypes.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
                     {item.label}
-                  </span>
-                  <span className="mt-1 block text-xs text-muted-foreground">
-                    {item.description}
-                  </span>
-                </button>
-              ))}
-            </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="mt-2 text-xs text-muted-foreground">
+              {
+                templateTypes.find((item) => item.value === templateType)
+                  ?.description
+              }
+            </p>
           </div>
 
           <p className="mt-4 rounded-sm bg-muted/60 p-3 text-xs text-muted-foreground">
@@ -833,7 +927,10 @@ export default function TemplateCreateForm({
                     type="button"
                     variant="outline"
                     disabled={!canEditFields}
-                    onClick={() => setIsMediaPickerOpen(true)}
+                    onClick={() => {
+                      setCarouselMediaIndex(null);
+                      setIsMediaPickerOpen(true);
+                    }}
                   >
                     Select media
                   </Button>
@@ -867,26 +964,69 @@ export default function TemplateCreateForm({
           )}
 
           {templateType === "CAROUSEL" && (
-            <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_180px]">
-              <div className="rounded-sm bg-muted/60 p-3 text-sm text-muted-foreground">
-                Carousel cards use a consistent media card format. This builder
-                previews the card count and submits a simplified carousel
-                component for your API.
+            <div className="mt-4 space-y-4">
+              <div className="grid gap-3 sm:grid-cols-[1fr_180px]">
+                <div className="rounded-sm bg-muted/60 p-3 text-sm text-muted-foreground">
+                  Carousel cards use a consistent media card format and submit
+                  image media IDs in each card header.
+                </div>
+                <div>
+                  <Label>Cards</Label>
+                  <Input
+                    type="number"
+                    min={2}
+                    max={10}
+                    value={carouselCardCount}
+                    onChange={(event) =>
+                      setCarouselCardCount(
+                        Math.max(
+                          2,
+                          Math.min(10, Number(event.target.value) || 2)
+                        )
+                      )
+                    }
+                    className="mt-2 h-11 border-0 bg-muted/70 shadow-none"
+                  />
+                </div>
               </div>
-              <div>
-                <Label>Cards</Label>
-                <Input
-                  type="number"
-                  min={2}
-                  max={10}
-                  value={carouselCardCount}
-                  onChange={(event) =>
-                    setCarouselCardCount(
-                      Math.max(2, Math.min(10, Number(event.target.value) || 2))
-                    )
-                  }
-                  className="mt-2 h-11 border-0 bg-muted/70 shadow-none"
-                />
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                {carouselCards.map((card, index) => (
+                  <div key={index} className="rounded-sm border p-3">
+                    {card.mediaUrl ? (
+                      <img
+                        src={card.mediaUrl}
+                        alt={card.mediaName || `Carousel card ${index + 1}`}
+                        className="mb-3 aspect-[1.45] w-full rounded-sm object-cover"
+                      />
+                    ) : (
+                      <div className="mb-3 flex aspect-[1.45] items-center justify-center rounded-sm bg-muted text-sm text-muted-foreground">
+                        No image selected
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">
+                          Card {index + 1}
+                        </p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {card.mediaName || "Select carousel image"}
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={!canEditFields}
+                        onClick={() => {
+                          setCarouselMediaIndex(index);
+                          setIsMediaPickerOpen(true);
+                        }}
+                      >
+                        Select
+                      </Button>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -1161,6 +1301,8 @@ export default function TemplateCreateForm({
             buttons={visibleButtons}
             offerText={offerText}
             carouselCardCount={carouselCardCount}
+            mediaUrl={selectedMediaUrl}
+            carouselCards={carouselCards}
           />
 
           <div className="rounded-lg bg-white p-4 shadow-xs">
@@ -1199,7 +1341,12 @@ export default function TemplateCreateForm({
             <Button
               type="submit"
               className="mt-3 w-full"
-              isLoading={isPending || isSubmittingDraft || isPatchingDraft}
+              isLoading={
+                isPending ||
+                isSubmittingDraft ||
+                isPatchingDraft ||
+                isPatchingApproved
+              }
               disabled={!canEditFields}
             >
               <Plus className="size-4" />
@@ -1211,13 +1358,36 @@ export default function TemplateCreateForm({
 
       <MediaPickerDialog
         open={isMediaPickerOpen}
-        selectedMediaId={selectedMediaId}
-        requiredType={headerFormat}
-        onOpenChange={setIsMediaPickerOpen}
+        selectedMediaId={
+          carouselMediaIndex === null
+            ? selectedMediaId
+            : carouselCards[carouselMediaIndex]?.mediaId
+        }
+        requiredType={carouselMediaIndex === null ? headerFormat : "IMAGE"}
+        onOpenChange={(open) => {
+          setIsMediaPickerOpen(open);
+          if (!open) setCarouselMediaIndex(null);
+        }}
         onSelect={(media: MediaAsset) => {
-          setSelectedMediaId(media._id);
-          setSelectedMediaName(media.name);
+          if (carouselMediaIndex !== null) {
+            setCarouselCards((current) =>
+              current.map((card, index) =>
+                index === carouselMediaIndex
+                  ? {
+                      mediaId: media._id,
+                      mediaName: media.name,
+                      mediaUrl: media.cloudinaryUrl
+                    }
+                  : card
+              )
+            );
+          } else {
+            setSelectedMediaId(media._id);
+            setSelectedMediaName(media.name);
+            setSelectedMediaUrl(media.cloudinaryUrl);
+          }
           setIsMediaPickerOpen(false);
+          setCarouselMediaIndex(null);
         }}
       />
     </form>

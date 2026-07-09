@@ -18,6 +18,8 @@ export const ORGANIZATION_ENDPOINTS = {
   GET_ORGANIZATION: `${ORGANIZATIONS_BASE}/`,
   SETUP: `${ORGANIZATIONS_BASE}/setup`,
   INTEGRATION_STATUS: `${ORGANIZATIONS_BASE}/integration-status`,
+  CONNECT_META: `${ORGANIZATIONS_BASE}/connect-meta`,
+  SYNC_INTEGRATION: `${ORGANIZATIONS_BASE}/integration/sync`,
   BILLING_SUBSCRIBE: `${ORGANIZATIONS_BASE}/billing/subscribe`,
   BILLING_TOPUP_WALLET: `${ORGANIZATIONS_BASE}/billing/topup-wallet`,
   BILLING_HISTORY: `${ORGANIZATIONS_BASE}/billing/history`,
@@ -35,6 +37,7 @@ export const TEMPLATE_ENDPOINTS = {
   SUBMIT_DRAFT: (draftId: string) =>
     `${TEMPLATES_BASE}/drafts/${draftId}/submit`,
   GET_BY_ID: (templateId: string) => `${TEMPLATES_BASE}/${templateId}`,
+  UPDATE_APPROVED: (templateId: string) => `${TEMPLATES_BASE}/${templateId}`,
   DELETE: (templateId: string) => `${TEMPLATES_BASE}/${templateId}`,
   LINK_MEDIA: (templateId: string) =>
     `${TEMPLATES_BASE}/${templateId}/link-media`

@@ -47,7 +47,9 @@ interface OrganizationState {
   organizations: Organization[];
   activeOrganization: Organization | null;
   integration: IntegrationStatus | null;
+  ownerUserId: string | null;
   hasHydrated: boolean;
+  setOrganizationOwner: (userId: string | null) => void;
   setOrganizations: (organizations: Organization[]) => void;
   addOrganization: (organization: Organization) => void;
   upsertOrganization: (organization: Organization) => void;
@@ -63,8 +65,24 @@ export const useOrganizationStore = create<OrganizationState>()(
       organizations: [],
       activeOrganization: null,
       integration: null,
+      ownerUserId: null,
       hasHydrated: false,
-      setOrganizations: (organizations) => set({ organizations }),
+      setOrganizationOwner: (userId) => set({ ownerUserId: userId }),
+      setOrganizations: (organizations) =>
+        set((state) => {
+          const activeOrganization = state.activeOrganization?._id
+            ? organizations.find(
+                (organization) =>
+                  organization._id === state.activeOrganization?._id
+              ) || null
+            : null;
+
+          if (typeof window !== "undefined" && !activeOrganization) {
+            localStorage.removeItem("orgId");
+          }
+
+          return { organizations, activeOrganization };
+        }),
       addOrganization: (organization) =>
         set((state) => ({
           organizations: [
@@ -106,7 +124,8 @@ export const useOrganizationStore = create<OrganizationState>()(
         set({
           organizations: [],
           activeOrganization: null,
-          integration: null
+          integration: null,
+          ownerUserId: null
         });
       },
       setHasHydrated: (hasHydrated) => set({ hasHydrated })
@@ -117,9 +136,18 @@ export const useOrganizationStore = create<OrganizationState>()(
       partialize: (state) => ({
         organizations: state.organizations,
         activeOrganization: state.activeOrganization,
-        integration: state.integration
+        integration: state.integration,
+        ownerUserId: state.ownerUserId
       }),
       onRehydrateStorage: () => (state) => {
+        if (
+          state &&
+          !state.ownerUserId &&
+          (state.activeOrganization || state.organizations.length)
+        ) {
+          state.clearOrganizations();
+        }
+
         state?.setHasHydrated(true);
       }
     }

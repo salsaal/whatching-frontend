@@ -163,3 +163,7 @@ export interface UpdateDraftPayload {
   name?: string;
   components?: TemplateComponent[];
 }
+
+export interface UpdateApprovedTemplatePayload {
+  components: TemplateComponent[];
+}

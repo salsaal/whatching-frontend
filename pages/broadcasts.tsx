@@ -2,6 +2,7 @@
 
 import {
   CalendarClock,
+  CalendarIcon,
   Eye,
   Megaphone,
   Play,
@@ -34,6 +35,8 @@ import {
   AlertDialogTitle
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -43,6 +46,18 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger
+} from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import AppLayout from "@/layouts/AppLayout";
 import { cn } from "@/lib/utils";
@@ -58,6 +73,23 @@ const formatDate = (date?: string | null) =>
       }).format(new Date(date))
     : "-";
 
+const formatCalendarDate = (date?: Date) =>
+  date
+    ? new Intl.DateTimeFormat("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric"
+      }).format(date)
+    : "Pick date";
+
+const getLocalDateValue = (date: Date, time: string) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}T${time || "09:00"}`;
+};
+
 const statusClasses: Record<string, string> = {
   draft: "bg-muted text-muted-foreground",
   scheduled: "bg-blue-50 text-blue-700",
@@ -72,7 +104,8 @@ export default function BroadcastsPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [selectedBroadcastId, setSelectedBroadcastId] = useState("");
   const [cancelTarget, setCancelTarget] = useState<Broadcast | null>(null);
-  const [scheduleLocal, setScheduleLocal] = useState("");
+  const [scheduleDate, setScheduleDate] = useState<Date | undefined>();
+  const [scheduleTime, setScheduleTime] = useState("09:00");
   const [broadcastName, setBroadcastName] = useState("");
   const [templateId, setTemplateId] = useState("");
   const [audienceMode, setAudienceMode] =
@@ -154,7 +187,8 @@ export default function BroadcastsPage() {
     mutationFn: startBroadcast,
     onSuccess: () => {
       toast.success("Broadcast accepted for processing");
-      setScheduleLocal("");
+      setScheduleDate(undefined);
+      setScheduleTime("09:00");
       refetch();
       refetchSelectedBroadcast();
     }
@@ -342,21 +376,21 @@ export default function BroadcastsPage() {
               </div>
               <div>
                 <Label>Template</Label>
-                <select
-                  value={templateId}
-                  onChange={(event) => setTemplateId(event.target.value)}
-                  className="mt-2 h-11 w-full rounded-sm border bg-background px-3 text-sm"
-                >
-                  <option value="">Select template</option>
-                  {templates.map((template) => (
-                    <option
-                      key={template.templateId}
-                      value={template.templateId}
-                    >
-                      {template.name}
-                    </option>
-                  ))}
-                </select>
+                <Select value={templateId} onValueChange={setTemplateId}>
+                  <SelectTrigger className="mt-2 h-11 w-full border-0 bg-muted/70 shadow-none">
+                    <SelectValue placeholder="Select template" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {templates.map((template) => (
+                      <SelectItem
+                        key={template.templateId}
+                        value={template.templateId}
+                      >
+                        {template.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
@@ -405,27 +439,34 @@ export default function BroadcastsPage() {
 
             {audienceMode === "specific" && (
               <div className="max-h-56 space-y-2 overflow-y-auto rounded-sm border p-3">
-                {subscribers.map((subscriber) => (
-                  <label
-                    key={subscriber._id}
-                    className="flex items-center gap-2 text-sm"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedSubscriberIds.includes(subscriber._id)}
-                      onChange={(event) =>
-                        setSelectedSubscriberIds((current) =>
-                          event.target.checked
-                            ? [...current, subscriber._id]
-                            : current.filter((item) => item !== subscriber._id)
-                        )
-                      }
-                    />
-                    {[subscriber.firstName, subscriber.lastName]
-                      .filter(Boolean)
-                      .join(" ") || subscriber.phoneNumber}
-                  </label>
-                ))}
+                {subscribers.length ? (
+                  subscribers.map((subscriber) => (
+                    <label
+                      key={subscriber._id}
+                      className="flex items-center gap-2 text-sm"
+                    >
+                      <Checkbox
+                        checked={selectedSubscriberIds.includes(subscriber._id)}
+                        onCheckedChange={(checked) =>
+                          setSelectedSubscriberIds((current) =>
+                            checked
+                              ? [...current, subscriber._id]
+                              : current.filter(
+                                  (item) => item !== subscriber._id
+                                )
+                          )
+                        }
+                      />
+                      {[subscriber.firstName, subscriber.lastName]
+                        .filter(Boolean)
+                        .join(" ") || subscriber.phoneNumber}
+                    </label>
+                  ))
+                ) : (
+                  <div className="py-6 text-center text-sm text-muted-foreground">
+                    No subscribers found.
+                  </div>
+                )}
               </div>
             )}
 
@@ -456,18 +497,41 @@ export default function BroadcastsPage() {
 
           {selectedBroadcast ? (
             <div className="space-y-4">
-              <div className="grid gap-3 sm:grid-cols-4">
+              <div className="grid gap-3 sm:grid-cols-3">
                 {[
                   ["Status", selectedBroadcast.status],
                   ["Template", selectedBroadcast.template?.name],
-                  ["Recipients", selectedBroadcast.stats.totalRecipients],
-                  ["Failed", selectedBroadcast.stats.failedRecipients]
+                  ["Created", formatDate(selectedBroadcast.createdAt)],
+                  ["Started", formatDate(selectedBroadcast.startedAt)],
+                  ["Completed", formatDate(selectedBroadcast.completedAt)],
+                  ["Scheduled", formatDate(selectedBroadcast.scheduledAt)]
                 ].map(([label, value]) => (
                   <div key={label} className="rounded-sm bg-muted/60 p-3">
                     <p className="text-xs text-muted-foreground">{label}</p>
-                    <p className="mt-1 font-medium capitalize">
+                    <p className="mt-1 truncate font-medium capitalize">
                       {value || "-"}
                     </p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-4">
+                {[
+                  ["Total", selectedBroadcast.stats.totalRecipients],
+                  ["Queued", selectedBroadcast.stats.queuedRecipients],
+                  ["Sent", selectedBroadcast.stats.sentRecipients],
+                  ["Delivered", selectedBroadcast.stats.deliveredRecipients],
+                  ["Read", selectedBroadcast.stats.readRecipients],
+                  ["Failed", selectedBroadcast.stats.failedRecipients],
+                  ["Skipped", selectedBroadcast.stats.skippedRecipients],
+                  ["Canceled", selectedBroadcast.stats.canceledRecipients]
+                ].map(([label, value]) => (
+                  <div
+                    key={label}
+                    className="rounded-sm border bg-white p-3 shadow-xs"
+                  >
+                    <p className="text-xs text-muted-foreground">{label}</p>
+                    <p className="mt-1 text-2xl font-semibold">{value}</p>
                   </div>
                 ))}
               </div>
@@ -481,12 +545,32 @@ export default function BroadcastsPage() {
               {canStart && (
                 <div className="rounded-sm border p-3">
                   <Label>Schedule time</Label>
-                  <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                  <div className="mt-2 grid gap-2 sm:grid-cols-[220px_140px_auto]">
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="justify-start"
+                        >
+                          <CalendarIcon className="size-4" />
+                          {formatCalendarDate(scheduleDate)}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={scheduleDate}
+                          onSelect={setScheduleDate}
+                          disabled={{ before: new Date() }}
+                        />
+                      </PopoverContent>
+                    </Popover>
                     <Input
-                      type="datetime-local"
-                      value={scheduleLocal}
-                      onChange={(event) => setScheduleLocal(event.target.value)}
-                      className="sm:max-w-xs"
+                      type="time"
+                      value={scheduleTime}
+                      onChange={(event) => setScheduleTime(event.target.value)}
+                      className="h-11 border-0 bg-muted/70 shadow-none"
                     />
                     <Button
                       type="button"
@@ -494,44 +578,98 @@ export default function BroadcastsPage() {
                       onClick={() =>
                         startSelected({
                           broadcastId: selectedBroadcast._id,
-                          payload: scheduleLocal
+                          payload: scheduleDate
                             ? {
-                                scheduledLocal: scheduleLocal,
+                                scheduledLocal: getLocalDateValue(
+                                  scheduleDate,
+                                  scheduleTime
+                                ),
                                 timezone: "Asia/Kolkata"
                               }
                             : undefined
                         })
                       }
                     >
-                      {scheduleLocal ? (
+                      {scheduleDate ? (
                         <CalendarClock className="size-4" />
                       ) : (
                         <Play className="size-4" />
                       )}
-                      {scheduleLocal ? "Schedule" : "Start now"}
+                      {scheduleDate ? "Schedule" : "Start now"}
                     </Button>
                   </div>
                 </div>
               )}
 
               <div className="rounded-sm border">
-                <div className="border-b p-3 font-medium">Recipients</div>
-                <div className="max-h-64 overflow-y-auto">
-                  {(selectedBroadcastData?.data.recipients || []).map(
-                    (recipient) => (
-                      <div
-                        key={recipient._id}
-                        className="flex items-center justify-between border-b p-3 text-sm last:border-0"
-                      >
-                        <span>
-                          {recipient.subscriberId?.firstName ||
-                            recipient.phoneNumber}
-                        </span>
-                        <span className="capitalize text-muted-foreground">
-                          {recipient.status}
-                        </span>
-                      </div>
-                    )
+                <div className="flex items-center justify-between gap-3 border-b p-3">
+                  <p className="font-medium">Recipients</p>
+                  <p className="text-xs text-muted-foreground">
+                    {selectedBroadcastData?.data.recipientsPagination?.total ??
+                      selectedBroadcastData?.data.recipients?.length ??
+                      0}{" "}
+                    total
+                  </p>
+                </div>
+                <div className="max-h-80 overflow-y-auto">
+                  {(selectedBroadcastData?.data.recipients || []).length ? (
+                    <table className="w-full text-sm">
+                      <thead className="sticky top-0 bg-white text-left text-primary">
+                        <tr>
+                          <th className="p-3">Recipient</th>
+                          <th className="p-3">Status</th>
+                          <th className="p-3">Sent</th>
+                          <th className="p-3">Delivered</th>
+                          <th className="p-3">Read</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(selectedBroadcastData?.data.recipients || []).map(
+                          (recipient) => (
+                            <tr key={recipient._id} className="border-t">
+                              <td className="p-3">
+                                <p className="font-medium">
+                                  {[
+                                    recipient.subscriberId?.firstName,
+                                    recipient.subscriberId?.lastName
+                                  ]
+                                    .filter(Boolean)
+                                    .join(" ") || recipient.phoneNumber}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {recipient.phoneNumber}
+                                </p>
+                              </td>
+                              <td className="p-3 capitalize">
+                                {recipient.status}
+                              </td>
+                              <td className="p-3">
+                                {formatDate(
+                                  recipient.sentAt ||
+                                    recipient.messageId?.sentAt
+                                )}
+                              </td>
+                              <td className="p-3">
+                                {formatDate(
+                                  recipient.deliveredAt ||
+                                    recipient.messageId?.deliveredAt
+                                )}
+                              </td>
+                              <td className="p-3">
+                                {formatDate(
+                                  recipient.readAt ||
+                                    recipient.messageId?.readAt
+                                )}
+                              </td>
+                            </tr>
+                          )
+                        )}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <div className="p-8 text-center text-sm text-muted-foreground">
+                      No recipients returned for this broadcast.
+                    </div>
                   )}
                 </div>
               </div>

@@ -72,8 +72,9 @@ function Organisations() {
   );
 
   const { data: organizationsData, isLoading } = useQuery({
-    queryKey: ["organizations"],
-    queryFn: getMyOrganizations
+    queryKey: ["organizations", user?._id],
+    queryFn: getMyOrganizations,
+    enabled: Boolean(user?._id)
   });
 
   const { mutate: createOrganization, isPending: isCreating } = useMutation({

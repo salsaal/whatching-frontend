@@ -14,7 +14,7 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import { parseAsString, useQueryState } from "nuqs";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   deleteDraftTemplate,
@@ -50,6 +50,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import AppLayout from "@/layouts/AppLayout";
 import { cn } from "@/lib/utils";
+import { useOrganizationStore } from "@/stores/organizationStore";
 import { useTemplateStore } from "@/stores/templateStore";
 
 const statusIcons: Record<string, React.ElementType> = {
@@ -65,26 +66,40 @@ const TEMPLATE_SYNC_SESSION_KEY = "whatching_templates_synced";
 
 export default function TemplatesPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<MessageTemplate | null>(
     null
   );
   const [mediaTarget, setMediaTarget] = useState<MessageTemplate | null>(null);
-  const hasBootstrappedRef = useRef(false);
+  const bootstrappedOrgIdRef = useRef<string | null>(null);
   const [status, setStatus] = useQueryState(
     "status",
     parseAsString.withDefault("ALL")
   );
   const [query, setQuery] = useQueryState("q", parseAsString.withDefault(""));
   const { templates, setTemplates, removeTemplate } = useTemplateStore();
+  const activeOrgId = useOrganizationStore(
+    (state) => state.activeOrganization?._id
+  );
+  const templatesQueryKey = useMemo(
+    () => ["templates", activeOrgId] as const,
+    [activeOrgId]
+  );
+  const templateDraftsQueryKey = useMemo(
+    () => ["template-drafts", activeOrgId] as const,
+    [activeOrgId]
+  );
+  const templateSyncSessionKey = `${TEMPLATE_SYNC_SESSION_KEY}:${activeOrgId || "none"}`;
 
   const {
     data,
     isLoading: isTemplatesLoading,
     refetch: refetchTemplates
   } = useQuery({
-    queryKey: ["templates"],
-    queryFn: getAllTemplates
+    queryKey: templatesQueryKey,
+    queryFn: getAllTemplates,
+    enabled: Boolean(activeOrgId)
   });
 
   const {
@@ -92,8 +107,9 @@ export default function TemplatesPage() {
     isLoading: isDraftsLoading,
     refetch: refetchDrafts
   } = useQuery({
-    queryKey: ["template-drafts"],
-    queryFn: getAllDraftTemplates
+    queryKey: templateDraftsQueryKey,
+    queryFn: getAllDraftTemplates,
+    enabled: Boolean(activeOrgId)
   });
 
   const { mutate: syncTemplatesMutate, mutateAsync: syncTemplatesAsync } =
@@ -112,10 +128,44 @@ export default function TemplatesPage() {
         : deleteTemplate(template.templateId);
     },
     onSuccess: (_data, template) => {
-      removeTemplate(
-        template.source === "draft" ? template._id : template.templateId
+      const id =
+        template.source === "draft" ? template._id : template.templateId;
+
+      removeTemplate(id);
+      queryClient.setQueryData<typeof data>(templatesQueryKey, (current) =>
+        current?.data.templates
+          ? {
+              ...current,
+              data: {
+                ...current.data,
+                templates: current.data.templates.filter(
+                  (item) => item.templateId !== id && item._id !== id
+                )
+              }
+            }
+          : current
+      );
+      queryClient.setQueryData<typeof draftsData>(
+        templateDraftsQueryKey,
+        (current) =>
+          current?.data.drafts
+            ? {
+                ...current,
+                data: {
+                  ...current.data,
+                  drafts: current.data.drafts.filter(
+                    (item) => item.templateId !== id && item._id !== id
+                  )
+                }
+              }
+            : current
       );
       setDeleteTarget(null);
+      syncTemplatesMutate(undefined, {
+        onSuccess: async () => {
+          await Promise.all([refetchTemplates(), refetchDrafts()]);
+        }
+      });
     },
     onSettled: () => setDeletingId(null)
   });
@@ -129,18 +179,30 @@ export default function TemplatesPage() {
   });
 
   useEffect(() => {
-    if (hasBootstrappedRef.current) return;
-    hasBootstrappedRef.current = true;
+    setTemplates([]);
+    bootstrappedOrgIdRef.current = null;
+  }, [activeOrgId, setTemplates]);
 
-    if (sessionStorage.getItem(TEMPLATE_SYNC_SESSION_KEY)) return;
+  useEffect(() => {
+    if (!activeOrgId) return;
+    if (bootstrappedOrgIdRef.current === activeOrgId) return;
+    bootstrappedOrgIdRef.current = activeOrgId;
+
+    if (sessionStorage.getItem(templateSyncSessionKey)) return;
 
     syncTemplatesMutate(undefined, {
       onSuccess: async () => {
-        sessionStorage.setItem(TEMPLATE_SYNC_SESSION_KEY, "true");
+        sessionStorage.setItem(templateSyncSessionKey, "true");
         await Promise.all([refetchTemplates(), refetchDrafts()]);
       }
     });
-  }, [refetchDrafts, refetchTemplates, syncTemplatesMutate]);
+  }, [
+    activeOrgId,
+    refetchDrafts,
+    refetchTemplates,
+    syncTemplatesMutate,
+    templateSyncSessionKey
+  ]);
 
   useEffect(() => {
     if (data?.data.templates || draftsData?.data.drafts) {
@@ -183,7 +245,7 @@ export default function TemplatesPage() {
 
     try {
       await syncTemplatesAsync();
-      sessionStorage.setItem(TEMPLATE_SYNC_SESSION_KEY, "true");
+      sessionStorage.setItem(templateSyncSessionKey, "true");
       await Promise.all([refetchTemplates(), refetchDrafts()]);
     } catch {
       // Keep the button from getting stuck if the refresh request fails.

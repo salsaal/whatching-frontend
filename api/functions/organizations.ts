@@ -1,6 +1,7 @@
 import api from "../axiosInstance";
 import { ORGANIZATION_ENDPOINTS } from "../endpoints";
 import {
+  ConnectMetaPayload,
   IntegrationStatusResponse,
   BillingHistoryResponse,
   CancelSubscriptionResponse,
@@ -37,6 +38,24 @@ export const getIntegrationStatus =
   async (): Promise<IntegrationStatusResponse> => {
     const res = await api.get<IntegrationStatusResponse>(
       ORGANIZATION_ENDPOINTS.INTEGRATION_STATUS
+    );
+    return res.data;
+  };
+
+export const connectMeta = async (
+  payload: ConnectMetaPayload
+): Promise<OrganizationResponse> => {
+  const res = await api.patch<OrganizationResponse>(
+    ORGANIZATION_ENDPOINTS.CONNECT_META,
+    payload
+  );
+  return res.data;
+};
+
+export const syncMetaIntegration =
+  async (): Promise<IntegrationStatusResponse> => {
+    const res = await api.post<IntegrationStatusResponse>(
+      ORGANIZATION_ENDPOINTS.SYNC_INTEGRATION
     );
     return res.data;
   };

@@ -83,14 +83,34 @@ export interface BroadcastResponse {
       _id: string;
       phoneNumber: string;
       status: string;
+      queuedAt?: string;
+      sentAt?: string;
+      deliveredAt?: string;
+      readAt?: string;
+      metaMessageId?: string;
       subscriberId?: {
         _id: string;
         phoneNumber: string;
         firstName?: string;
+        lastName?: string;
         tags?: string[];
         isOptedIn?: boolean;
       };
+      messageId?: {
+        _id: string;
+        status: string;
+        sentAt?: string;
+        deliveredAt?: string;
+        readAt?: string;
+        metaMessageId?: string;
+      };
     }>;
+    recipientsPagination?: {
+      page: number;
+      limit: number;
+      total: number;
+      totalPages: number;
+    };
   };
 }
 

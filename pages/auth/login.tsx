@@ -6,7 +6,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { loginUser } from "@/api/functions/auth";
 import { useRouter } from "next/router";
 import { AxiosError } from "axios";
@@ -27,6 +27,7 @@ type LoginForm = z.infer<typeof loginSchema>;
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
+  const queryClient = useQueryClient();
   const setAuth = useAuthStore((state) => state.setAuth);
   const {
     register,
@@ -46,6 +47,7 @@ export default function LoginPage() {
         token: data.token,
         user: data.data.user
       });
+      queryClient.clear();
 
       toast.success("Login successful");
 

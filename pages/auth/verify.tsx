@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ShieldCheck, Loader2, ArrowRight, RefreshCcw } from "lucide-react";
 import { useRouter } from "next/router";
 import { toast } from "sonner";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import AuthLayout from "@/layouts/AuthLayout";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,7 @@ export default function VerifyPage() {
   const [status, setStatus] = useState<"loading" | "success" | "error">(
     "loading"
   );
+  const queryClient = useQueryClient();
   const setAuth = useAuthStore((state) => state.setAuth);
   const verifiedTokenRef = useRef<string | null>(null);
   const missingTokenHandledRef = useRef(false);
@@ -39,6 +40,7 @@ export default function VerifyPage() {
           token: accessToken,
           user: data.data.user
         });
+        queryClient.clear();
       }
 
       toast.success(data.message || "Email verified successfully");

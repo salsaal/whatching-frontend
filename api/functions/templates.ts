@@ -9,6 +9,7 @@ import {
   SyncTemplatesResponse,
   TemplateResponse,
   TemplatesResponse,
+  UpdateApprovedTemplatePayload,
   UpdateDraftPayload
 } from "../types/templates.type";
 import { ApiResponse } from "../types/api";
@@ -82,6 +83,20 @@ export const submitDraftTemplate = async (
 ): Promise<SubmitDraftResponse> => {
   const res = await api.post<SubmitDraftResponse>(
     TEMPLATE_ENDPOINTS.SUBMIT_DRAFT(draftId)
+  );
+  return res.data;
+};
+
+export const updateApprovedTemplate = async ({
+  templateId,
+  payload
+}: {
+  templateId: string;
+  payload: UpdateApprovedTemplatePayload;
+}): Promise<TemplateResponse> => {
+  const res = await api.patch<TemplateResponse>(
+    TEMPLATE_ENDPOINTS.UPDATE_APPROVED(templateId),
+    payload
   );
   return res.data;
 };

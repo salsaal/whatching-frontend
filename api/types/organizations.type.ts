@@ -22,6 +22,14 @@ export interface IntegrationStatusResponse {
   };
 }
 
+export interface ConnectMetaPayload {
+  wabaId: string;
+  phoneNumberId: string;
+  accessToken?: string;
+  code?: string;
+  coexistenceEnabled?: boolean;
+}
+
 export interface SubscribeResponse {
   status: string;
   data: {

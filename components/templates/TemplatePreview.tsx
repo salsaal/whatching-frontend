@@ -20,19 +20,26 @@ interface TemplatePreviewProps {
   headerFormat: "NONE" | TemplateHeaderFormat;
   templateType?: TemplateCreationType;
   headerText?: string;
+  mediaUrl?: string;
   bodyText: string;
   footerText?: string;
   buttons?: TemplateButton[];
   offerText?: string;
   carouselCardCount?: number;
+  carouselCards?: Array<{
+    mediaUrl?: string;
+    mediaName?: string;
+  }>;
 }
 
 function HeaderPreview({
   format,
-  text
+  text,
+  mediaUrl
 }: {
   format: "NONE" | TemplateHeaderFormat;
   text?: string;
+  mediaUrl?: string;
 }) {
   if (format === "NONE") return null;
 
@@ -48,6 +55,27 @@ function HeaderPreview({
         : format === "DOCUMENT"
           ? FileText
           : MapPin;
+
+  if (format === "IMAGE" && mediaUrl) {
+    return (
+      <img
+        src={mediaUrl}
+        alt="Template header"
+        className="mb-3 aspect-[1.9] w-full rounded-sm object-cover"
+      />
+    );
+  }
+
+  if (format === "VIDEO" && mediaUrl) {
+    return (
+      <video
+        src={mediaUrl}
+        className="mb-3 aspect-[1.9] w-full rounded-sm object-cover"
+        controls
+        muted
+      />
+    );
+  }
 
   return (
     <div className="mb-3 flex aspect-[1.9] items-center justify-center rounded-sm bg-[#fff2dd] text-amber-500">
@@ -68,12 +96,30 @@ const carouselBodySamples = [
   "Bring fresh texture into your space with a low-maintenance plant that looks great on a desk or shelf."
 ];
 
-function CarouselMedia({ index }: { index: number }) {
+function CarouselMedia({
+  index,
+  mediaUrl,
+  mediaName
+}: {
+  index: number;
+  mediaUrl?: string;
+  mediaName?: string;
+}) {
   const palettes = [
     "from-emerald-900 via-teal-500 to-rose-300",
     "from-lime-950 via-emerald-600 to-yellow-200",
     "from-slate-800 via-cyan-600 to-fuchsia-300"
   ];
+
+  if (mediaUrl) {
+    return (
+      <img
+        src={mediaUrl}
+        alt={mediaName || `Carousel card ${index + 1}`}
+        className="aspect-[1.45] w-full rounded-t-lg object-cover"
+      />
+    );
+  }
 
   return (
     <div
@@ -93,11 +139,13 @@ export default function TemplatePreview({
   headerFormat,
   templateType = "TEXT",
   headerText,
+  mediaUrl,
   bodyText,
   footerText,
   buttons = [],
   offerText,
-  carouselCardCount = 2
+  carouselCardCount = 2,
+  carouselCards = []
 }: TemplatePreviewProps) {
   const inlineButtons = buttons.slice(0, 3);
   const hiddenButtonCount = Math.max(buttons.length - inlineButtons.length, 0);
@@ -140,7 +188,11 @@ export default function TemplatePreview({
                       key={index}
                       className="min-w-[250px] overflow-hidden rounded-lg bg-white shadow-xs"
                     >
-                      <CarouselMedia index={index} />
+                      <CarouselMedia
+                        index={index}
+                        mediaUrl={carouselCards[index]?.mediaUrl}
+                        mediaName={carouselCards[index]?.mediaName}
+                      />
                       <p className="p-3 text-sm leading-5 text-foreground">
                         {
                           carouselBodySamples[
@@ -165,7 +217,11 @@ export default function TemplatePreview({
               </div>
             </div>
           ) : (
-            <HeaderPreview format={headerFormat} text={headerText} />
+            <HeaderPreview
+              format={headerFormat}
+              text={headerText}
+              mediaUrl={mediaUrl}
+            />
           )}
 
           {templateType !== "CAROUSEL" && (
