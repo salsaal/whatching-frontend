@@ -3,20 +3,20 @@ import {
   Bot,
   CheckCircle2,
   Loader2,
-  MessageSquareText,
   RefreshCw,
   Send,
   Smartphone,
   Users,
   Wallet
 } from "lucide-react";
+import { useRouter } from "next/router";
 import Script from "next/script";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import {
-  connectMeta,
+  connectMetaEmbeddedSignup,
   syncMetaIntegration
 } from "@/api/functions/organizations";
 import { Button } from "@/components/ui/button";
@@ -25,7 +25,8 @@ import { useOrganizationStore } from "@/stores/organizationStore";
 
 interface EmbeddedSignupSession {
   wabaId: string;
-  phoneNumberId: string;
+  phoneNumberId?: string;
+  event: "FINISH" | "FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING";
 }
 
 interface FacebookAuthResponse {
@@ -60,6 +61,9 @@ declare global {
 
 const facebookGraphVersion =
   process.env.NEXT_PUBLIC_META_GRAPH_VERSION || "v20.0";
+const embeddedSignupVersion =
+  process.env.NEXT_PUBLIC_META_EMBEDDED_SIGNUP_VERSION || "v4";
+const businessAppOnboardingFeatureType = "whatsapp_business_app_onboarding";
 
 const facebookAllowedOrigins = [
   "https://www.facebook.com",
@@ -84,19 +88,29 @@ const getEmbeddedSignupSession = (
     };
   };
 
-  if (data.type !== "WA_EMBEDDED_SIGNUP" || data.event !== "FINISH") {
+  const signupEvent =
+    data.event === "FINISH" ||
+    data.event === "FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING"
+      ? data.event
+      : null;
+  if (data.type !== "WA_EMBEDDED_SIGNUP" || !signupEvent) {
     return null;
   }
 
   const wabaId = data.data?.waba_id;
   const phoneNumberId = data.data?.phone_number_id;
 
-  if (!wabaId || !phoneNumberId) return null;
+  if (!wabaId) return null;
 
-  return { wabaId, phoneNumberId };
+  return {
+    wabaId,
+    phoneNumberId,
+    event: signupEvent
+  };
 };
 
 export default function OverviewPage() {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const [isFacebookSdkReady, setIsFacebookSdkReady] = useState(false);
   const [signupSession, setSignupSession] =
@@ -105,6 +119,7 @@ export default function OverviewPage() {
   const pendingAuthResponseRef = useRef<FacebookAuthResponse | null>(null);
   const signupSessionRef = useRef<EmbeddedSignupSession | null>(null);
   const isConnectingRef = useRef(false);
+  const autoStartConnectRef = useRef(false);
   const {
     activeOrganization,
     integration,
@@ -136,7 +151,7 @@ export default function OverviewPage() {
 
   const { mutate: connectMetaMutate, isPending: isConnectingMeta } =
     useMutation({
-      mutationFn: connectMeta,
+      mutationFn: connectMetaEmbeddedSignup,
       onSuccess: async (data) => {
         const organization = data.data.organization;
 
@@ -172,28 +187,34 @@ export default function OverviewPage() {
       }
     });
 
-  const tryConnectMeta = (
+  const tryConnectMeta = useCallback((
     session: EmbeddedSignupSession | null,
     authResponse: FacebookAuthResponse | null
   ) => {
     if (!session || !authResponse || isConnectingRef.current) return;
 
-    const accessToken = authResponse.accessToken?.trim();
+    if (!session.phoneNumberId) {
+      setLastSignupError(
+        "Meta returned the WhatsApp Business app onboarding event without a phone number id. Backend onboarding needs the phone number id before it can connect this account."
+      );
+      return;
+    }
+
     const code = authResponse.code?.trim();
 
-    if (!accessToken && !code) {
-      setLastSignupError("Meta did not return an authorization response.");
+    if (!code) {
+      setLastSignupError("Meta did not return an authorization code.");
       return;
     }
 
     isConnectingRef.current = true;
     setLastSignupError("");
     connectMetaMutate({
+      code,
       wabaId: session.wabaId,
-      phoneNumberId: session.phoneNumberId,
-      ...(accessToken ? { accessToken } : { code })
+      phoneNumberId: session.phoneNumberId
     });
-  };
+  }, [connectMetaMutate]);
 
   const stats = [
     {
@@ -278,9 +299,9 @@ export default function OverviewPage() {
     window.addEventListener("message", handleEmbeddedSignupMessage);
     return () =>
       window.removeEventListener("message", handleEmbeddedSignupMessage);
-  });
+  }, [tryConnectMeta]);
 
-  const startEmbeddedSignup = () => {
+  const startEmbeddedSignup = useCallback(() => {
     if (!metaAppId || !metaConfigId) {
       setLastSignupError(
         "Meta app id or embedded signup configuration id is missing."
@@ -316,12 +337,29 @@ export default function OverviewPage() {
         response_type: "code",
         override_default_response_type: true,
         extras: {
+          version: embeddedSignupVersion,
           setup: {},
+          featureType: businessAppOnboardingFeatureType,
+          feature_type: businessAppOnboardingFeatureType,
           sessionInfoVersion: "3"
         }
       }
     );
-  };
+  }, [isFacebookSdkReady, metaAppId, metaConfigId, tryConnectMeta]);
+
+  useEffect(() => {
+    if (
+      autoStartConnectRef.current ||
+      router.query.connectMeta !== "1" ||
+      !isFacebookSdkReady
+    ) {
+      return;
+    }
+
+    autoStartConnectRef.current = true;
+    startEmbeddedSignup();
+    router.replace("/overview", undefined, { shallow: true });
+  }, [isFacebookSdkReady, router, startEmbeddedSignup]);
 
   return (
     <AppLayout>
@@ -350,7 +388,7 @@ export default function OverviewPage() {
                 {isMetaReady ? (
                   <CheckCircle2 className="size-4" />
                 ) : (
-                  <MessageSquareText className="size-4" />
+                  <Smartphone className="size-4" />
                 )}
                 {isMetaReady ? "Meta connected" : "Meta pending"}
               </div>
@@ -427,8 +465,8 @@ export default function OverviewPage() {
                   WhatsApp Business API
                 </h2>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  Connect your customer&apos;s Meta Business and WhatsApp
-                  number through Embedded Signup.
+                  Connect your customer&apos;s Meta Business and WhatsApp number
+                  through Embedded Signup.
                 </p>
               </div>
               <div className="flex size-11 shrink-0 items-center justify-center rounded-sm bg-primary/10">
@@ -489,7 +527,7 @@ export default function OverviewPage() {
                 {isConnectingMeta ? (
                   <Loader2 className="size-4 animate-spin" />
                 ) : (
-                  <MessageSquareText className="size-4" />
+                  <Smartphone className="size-4" />
                 )}
                 {isMetaReady ? "Reconnect Meta" : "Connect Meta"}
               </Button>

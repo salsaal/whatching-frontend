@@ -50,7 +50,7 @@ const formatDate = (date: string) =>
   }).format(new Date(date));
 
 const planLabel = (planTier: string) =>
-  planTier === "none" ? "No active plan" : planTier.toUpperCase();
+  planTier === "none" ? "No active plan" : planTier?.toUpperCase();
 
 function Organisations() {
   const router = useRouter();

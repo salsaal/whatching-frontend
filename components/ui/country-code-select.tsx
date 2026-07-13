@@ -27,15 +27,19 @@ import { cn } from "@/lib/utils";
 interface CountryCodeSelectProps {
   value?: string;
   onValueChange: (value: string) => void;
+  onCountryIsoChange?: (value: string) => void;
   placeholder?: string;
   className?: string;
+  compact?: boolean;
 }
 
 export function CountryCodeSelect({
   value,
   onValueChange,
+  onCountryIsoChange,
   placeholder = "Select country code...",
-  className
+  className,
+  compact = false
 }: CountryCodeSelectProps) {
   const [open, setOpen] = useState(false);
 
@@ -59,12 +63,12 @@ export function CountryCodeSelect({
           role="combobox"
           aria-expanded={open}
           className={cn(
-            "w-full justify-between border-blue-200 focus:border-blue-400 hover:bg-blue-50/50",
+            "w-full justify-between border-input bg-background hover:bg-muted/50 focus:border-ring",
             className
           )}
         >
           {selectedCountry ? (
-            <span className="flex items-center gap-2">
+            <span className="flex min-w-0 items-center gap-2">
               <span className="text-lg">
                 {String.fromCodePoint(
                   ...selectedCountry.country
@@ -73,34 +77,44 @@ export function CountryCodeSelect({
                 )}
               </span>
               <span className="font-mono text-sm">{selectedCountry.code}</span>
-              <span className="truncate text-sm text-gray-600">
-                {selectedCountry.name}
-              </span>
+              {!compact && (
+                <span className="truncate text-sm text-muted-foreground">
+                  {selectedCountry.name}
+                </span>
+              )}
             </span>
           ) : (
-            <span className="text-gray-500">{placeholder}</span>
+            <span className="truncate text-muted-foreground">{placeholder}</span>
           )}
           <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[300px] border border-blue-200/50 bg-linear-to-br from-white via-blue-50 to-purple-50 p-0 shadow-xl">
-        <Command className="bg-transparent">
+      <PopoverContent
+        align="start"
+        className="w-64 border bg-popover p-0 text-popover-foreground shadow-lg"
+      >
+        <Command className="h-auto max-h-[22rem] overflow-visible">
           <CommandInput
             placeholder="Search country..."
-            className="border-none bg-transparent focus:ring-0"
+            className="border-none focus:ring-0"
           />
-          <CommandList className="scrollbar-hide max-h-[200px] overflow-y-auto">
+          <CommandList
+            className="h-72 max-h-72 overflow-y-scroll overscroll-contain [scrollbar-color:hsl(var(--border))_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border"
+            onWheel={(event) => event.stopPropagation()}
+            onTouchMove={(event) => event.stopPropagation()}
+          >
             <CommandEmpty>No country found.</CommandEmpty>
-            <CommandGroup>
+            <CommandGroup className="overflow-visible">
               {countries.map((country) => (
                 <CommandItem
                   key={country.value}
                   value={`${country.name} ${country.code}`}
                   onSelect={() => {
                     onValueChange(country.value);
+                    onCountryIsoChange?.(country.country);
                     setOpen(false);
                   }}
-                  className="cursor-pointer hover:bg-linear-to-r hover:from-blue-50 hover:to-purple-50"
+                  className="cursor-pointer"
                 >
                   <Check
                     className={cn(
@@ -116,10 +130,10 @@ export function CountryCodeSelect({
                           .map((char) => 0x1f1e6 + char.charCodeAt(0) - 65)
                       )}
                     </span>
-                    <span className="font-mono text-sm font-medium text-blue-600">
+                    <span className="font-mono text-sm font-medium text-primary">
                       {country.code}
                     </span>
-                    <span className="truncate text-sm text-gray-700">
+                    <span className="truncate text-sm text-muted-foreground">
                       {country.name}
                     </span>
                   </div>

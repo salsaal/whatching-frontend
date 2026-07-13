@@ -57,6 +57,7 @@ export interface SubscriberResponse {
 
 export interface SubscriberPayload {
   phoneNumber: string;
+  countryIso?: string;
   firstName: string;
   lastName?: string;
   tags?: string[];

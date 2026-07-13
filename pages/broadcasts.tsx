@@ -3,14 +3,16 @@
 import {
   CalendarClock,
   CalendarIcon,
+  Clock,
   Eye,
   Megaphone,
-  Play,
   Plus,
   Search,
+  Send,
   XCircle
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -24,6 +26,11 @@ import {
 import { getAllSubscribers, getTags } from "@/api/functions/subscribers";
 import { getAllTemplates } from "@/api/functions/templates";
 import { Broadcast, BroadcastAudience } from "@/api/types/broadcasts.type";
+import { MessageTemplate } from "@/api/types/templates.type";
+import {
+  extractVariables,
+  getBodyComponent
+} from "@/components/templates/templateUtils";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -90,6 +97,11 @@ const getLocalDateValue = (date: Date, time: string) => {
   return `${year}-${month}-${day}T${time || "09:00"}`;
 };
 
+const hourOptions = Array.from({ length: 24 }, (_, index) =>
+  String(index).padStart(2, "0")
+);
+const minuteOptions = ["00", "15", "30", "45"];
+
 const statusClasses: Record<string, string> = {
   draft: "bg-muted text-muted-foreground",
   scheduled: "bg-blue-50 text-blue-700",
@@ -99,7 +111,106 @@ const statusClasses: Record<string, string> = {
   canceled: "bg-muted text-muted-foreground"
 };
 
+type BroadcastVariableSource = "subscriber_field" | "metadata_field" | "literal";
+
+interface BroadcastVariableMapping {
+  source: BroadcastVariableSource;
+  path: string;
+  fallback: string;
+  literal: string;
+}
+
+const subscriberFieldOptions = [
+  { value: "firstName", label: "First name" },
+  { value: "lastName", label: "Last name" },
+  { value: "fullName", label: "Full name" },
+  { value: "phoneNumber", label: "Phone number" },
+  { value: "waId", label: "WhatsApp ID" }
+] as const;
+
+const getTemplateBodyText = (template?: MessageTemplate) =>
+  getBodyComponent(template?.components || [])?.text || "";
+
+const getTemplateBodyVariables = (template?: MessageTemplate) =>
+  extractVariables(getTemplateBodyText(template)).sort(
+    (a, b) => Number(a) - Number(b)
+  );
+
+const getTemplateBodyExample = (template: MessageTemplate | undefined, key: string) => {
+  const examples = getBodyComponent(template?.components || [])?.example?.body_text;
+  const sampleValues = Array.isArray(examples?.[0]) ? examples?.[0] : examples;
+  return Array.isArray(sampleValues) ? String(sampleValues[Number(key) - 1] || "") : "";
+};
+
+const defaultVariableMapping = (key: string): BroadcastVariableMapping => ({
+  source: key === "1" ? "subscriber_field" : "literal",
+  path: key === "1" ? "firstName" : "",
+  fallback: key === "1" ? "Valued Customer" : "",
+  literal: ""
+});
+
+const buildBroadcastComponents = (
+  variables: string[],
+  mappings: Record<string, BroadcastVariableMapping>
+) => {
+  if (!variables.length) return [];
+
+  const parameters = variables.map((key) => {
+    const mapping = mappings[key] || defaultVariableMapping(key);
+
+    if (mapping.source === "literal") {
+      if (!mapping.literal.trim()) {
+        toast.error(`Add a value for {{${key}}}`);
+        return null;
+      }
+
+      return {
+        type: "text",
+        value: {
+          source: "literal",
+          text: mapping.literal.trim()
+        }
+      };
+    }
+
+    if (mapping.source === "metadata_field") {
+      if (!mapping.path.trim()) {
+        toast.error(`Add a metadata path for {{${key}}}`);
+        return null;
+      }
+
+      return {
+        type: "text",
+        value: {
+          source: "metadata_field",
+          path: mapping.path.trim(),
+          fallback: mapping.fallback.trim() || undefined
+        }
+      };
+    }
+
+    return {
+      type: "text",
+      value: {
+        source: "subscriber_field",
+        path: mapping.path || "firstName",
+        fallback: mapping.fallback.trim() || undefined
+      }
+    };
+  });
+
+  if (parameters.some((parameter) => !parameter)) return null;
+
+  return [
+    {
+      type: "body",
+      parameters
+    }
+  ];
+};
+
 export default function BroadcastsPage() {
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [selectedBroadcastId, setSelectedBroadcastId] = useState("");
@@ -108,6 +219,9 @@ export default function BroadcastsPage() {
   const [scheduleTime, setScheduleTime] = useState("09:00");
   const [broadcastName, setBroadcastName] = useState("");
   const [templateId, setTemplateId] = useState("");
+  const [variableMappings, setVariableMappings] = useState<
+    Record<string, BroadcastVariableMapping>
+  >({});
   const [audienceMode, setAudienceMode] =
     useState<BroadcastAudience["mode"]>("all");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -167,6 +281,32 @@ export default function BroadcastsPage() {
   }, [broadcasts, query]);
 
   const selectedBroadcast = selectedBroadcastData?.data.broadcast;
+  const selectedTemplate = useMemo(
+    () => templates.find((template) => template.templateId === templateId),
+    [templateId, templates]
+  );
+  const bodyVariables = useMemo(
+    () => getTemplateBodyVariables(selectedTemplate),
+    [selectedTemplate]
+  );
+  const bodyText = getTemplateBodyText(selectedTemplate);
+
+  useEffect(() => {
+    if (!selectedTemplate) {
+      setVariableMappings({});
+      return;
+    }
+
+    setVariableMappings((current) =>
+      bodyVariables.reduce<Record<string, BroadcastVariableMapping>>(
+        (acc, key) => {
+          acc[key] = current[key] || defaultVariableMapping(key);
+          return acc;
+        },
+        {}
+      )
+    );
+  }, [bodyVariables, selectedTemplate]);
 
   const { mutate: createDraft, isPending: isCreating } = useMutation({
     mutationFn: createBroadcast,
@@ -176,6 +316,7 @@ export default function BroadcastsPage() {
       setSelectedBroadcastId(response.data.broadcast._id);
       setBroadcastName("");
       setTemplateId("");
+      setVariableMappings({});
       setAudienceMode("all");
       setSelectedTags([]);
       setSelectedSubscriberIds([]);
@@ -219,32 +360,44 @@ export default function BroadcastsPage() {
           ? { mode: "specific", subscriberIds: selectedSubscriberIds }
           : { mode: "all" };
 
+    const components = buildBroadcastComponents(bodyVariables, variableMappings);
+    if (!components) return;
+
     createDraft({
       name: broadcastName.trim(),
       templateId,
       audience,
-      components: [
-        {
-          type: "body",
-          parameters: [
-            {
-              type: "text",
-              text: "dynamic",
-              value: {
-                source: "subscriber_field",
-                path: "firstName",
-                fallback: "Valued Customer"
-              }
-            }
-          ]
-        }
-      ]
+      components
     });
   };
 
   const canStart =
     selectedBroadcast?.status === "draft" ||
     selectedBroadcast?.status === "scheduled";
+  const [scheduleHour, scheduleMinute] = scheduleTime.split(":");
+
+  const handleStartNow = () => {
+    if (!selectedBroadcast) return;
+    startSelected({
+      broadcastId: selectedBroadcast._id
+    });
+  };
+
+  const handleScheduleBroadcast = () => {
+    if (!selectedBroadcast) return;
+    if (!scheduleDate) {
+      toast.error("Choose a date before scheduling this broadcast.");
+      return;
+    }
+
+    startSelected({
+      broadcastId: selectedBroadcast._id,
+      payload: {
+        scheduledLocal: getLocalDateValue(scheduleDate, scheduleTime),
+        timezone: "Asia/Kolkata"
+      }
+    });
+  };
 
   return (
     <AppLayout>
@@ -324,7 +477,7 @@ export default function BroadcastsPage() {
                             variant="ghost"
                             size="icon"
                             onClick={() =>
-                              setSelectedBroadcastId(broadcast._id)
+                              router.push(`/broadcasts/${broadcast._id}`)
                             }
                           >
                             <Eye className="size-4" />
@@ -360,24 +513,24 @@ export default function BroadcastsPage() {
       </div>
 
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-        <DialogContent className="sm:max-w-3xl">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
           <DialogHeader>
             <DialogTitle>Create broadcast draft</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleCreate} className="space-y-4">
+          <form onSubmit={handleCreate} className="space-y-5">
             <div className="grid gap-4 sm:grid-cols-2">
-              <div>
+              <div className="space-y-2">
                 <Label>Name</Label>
                 <Input
                   value={broadcastName}
                   onChange={(event) => setBroadcastName(event.target.value)}
-                  className="mt-2"
+                  placeholder="E.g. July product update"
                 />
               </div>
-              <div>
+              <div className="space-y-2">
                 <Label>Template</Label>
                 <Select value={templateId} onValueChange={setTemplateId}>
-                  <SelectTrigger className="mt-2 h-11 w-full border-0 bg-muted/70 shadow-none">
+                  <SelectTrigger className="h-11 w-full">
                     <SelectValue placeholder="Select template" />
                   </SelectTrigger>
                   <SelectContent>
@@ -394,6 +547,164 @@ export default function BroadcastsPage() {
               </div>
             </div>
 
+            {selectedTemplate && (
+              <div className="rounded-lg border bg-muted/30 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold">
+                      {selectedTemplate.name}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {selectedTemplate.language} · {selectedTemplate.category}
+                    </p>
+                  </div>
+                  <span className="rounded-sm bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
+                    {bodyVariables.length
+                      ? `${bodyVariables.length} variable${bodyVariables.length > 1 ? "s" : ""}`
+                      : "No body variables"}
+                  </span>
+                </div>
+                {bodyText && (
+                  <div className="mt-3 rounded-md bg-white p-3 text-sm leading-6 text-muted-foreground shadow-xs">
+                    {bodyText}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {bodyVariables.length > 0 && (
+              <div className="rounded-lg border p-4">
+                <div className="mb-3">
+                  <p className="text-sm font-semibold">Template variables</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Map each WhatsApp placeholder to subscriber data or a fixed
+                    value. The number of fields here must match the template.
+                  </p>
+                </div>
+                <div className="space-y-3">
+                  {bodyVariables.map((key) => {
+                    const mapping =
+                      variableMappings[key] || defaultVariableMapping(key);
+                    const sample = getTemplateBodyExample(selectedTemplate, key);
+
+                    return (
+                      <div
+                        key={key}
+                        className="rounded-md bg-muted/40 p-3"
+                      >
+                        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                          <Label>{`{{${key}}}`}</Label>
+                          {sample && (
+                            <span className="text-xs text-muted-foreground">
+                              Sample: {sample}
+                            </span>
+                          )}
+                        </div>
+                        <div className="grid gap-2 lg:grid-cols-[180px_1fr_1fr]">
+                          <Select
+                            value={mapping.source}
+                            onValueChange={(value) =>
+                              setVariableMappings((current) => ({
+                                ...current,
+                                [key]: {
+                                  ...mapping,
+                                  source: value as BroadcastVariableSource,
+                                  path:
+                                    value === "subscriber_field"
+                                      ? "firstName"
+                                      : ""
+                                }
+                              }))
+                            }
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="subscriber_field">
+                                Subscriber field
+                              </SelectItem>
+                              <SelectItem value="metadata_field">
+                                Metadata field
+                              </SelectItem>
+                              <SelectItem value="literal">
+                                Fixed value
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+
+                          {mapping.source === "subscriber_field" ? (
+                            <Select
+                              value={mapping.path || "firstName"}
+                              onValueChange={(value) =>
+                                setVariableMappings((current) => ({
+                                  ...current,
+                                  [key]: { ...mapping, path: value }
+                                }))
+                              }
+                            >
+                              <SelectTrigger className="w-full">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {subscriberFieldOptions.map((option) => (
+                                  <SelectItem
+                                    key={option.value}
+                                    value={option.value}
+                                  >
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <Input
+                              value={
+                                mapping.source === "literal"
+                                  ? mapping.literal
+                                  : mapping.path
+                              }
+                              placeholder={
+                                mapping.source === "literal"
+                                  ? "Fixed text"
+                                  : "metadata.path"
+                              }
+                              onChange={(event) =>
+                                setVariableMappings((current) => ({
+                                  ...current,
+                                  [key]: {
+                                    ...mapping,
+                                    ...(mapping.source === "literal"
+                                      ? { literal: event.target.value }
+                                      : { path: event.target.value })
+                                  }
+                                }))
+                              }
+                            />
+                          )}
+
+                          <Input
+                            value={mapping.fallback}
+                            placeholder="Fallback optional"
+                            disabled={mapping.source === "literal"}
+                            onChange={(event) =>
+                              setVariableMappings((current) => ({
+                                ...current,
+                                [key]: {
+                                  ...mapping,
+                                  fallback: event.target.value
+                                }
+                              }))
+                            }
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             <div>
               <Label>Audience</Label>
               <div className="mt-2 grid gap-2 sm:grid-cols-3">
@@ -403,8 +714,9 @@ export default function BroadcastsPage() {
                     type="button"
                     onClick={() => setAudienceMode(mode)}
                     className={cn(
-                      "rounded-sm bg-muted/70 p-3 text-left text-sm font-medium capitalize",
-                      audienceMode === mode && "bg-primary/10 text-primary"
+                      "rounded-md border bg-white p-3 text-left text-sm font-medium capitalize shadow-xs transition hover:border-primary/30",
+                      audienceMode === mode &&
+                        "border-primary/40 bg-primary/10 text-primary"
                     )}
                   >
                     {mode}
@@ -490,7 +802,7 @@ export default function BroadcastsPage() {
         open={Boolean(selectedBroadcastId)}
         onOpenChange={(open) => !open && setSelectedBroadcastId("")}
       >
-        <DialogContent className="sm:max-w-4xl">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
           <DialogHeader>
             <DialogTitle>{selectedBroadcast?.name || "Broadcast"}</DialogTitle>
           </DialogHeader>
@@ -543,19 +855,48 @@ export default function BroadcastsPage() {
               )}
 
               {canStart && (
-                <div className="rounded-sm border p-3">
-                  <Label>Schedule time</Label>
-                  <div className="mt-2 grid gap-2 sm:grid-cols-[220px_140px_auto]">
+                <div className="rounded-lg border bg-gradient-to-br from-primary/5 via-white to-emerald-50/60 p-4">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold">Send timing</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Start immediately or pick a local schedule in Asia/Kolkata.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setScheduleDate(undefined)}
+                      >
+                        <Clock className="size-4" />
+                        Clear schedule
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_210px]">
                     <Popover>
                       <PopoverTrigger asChild>
-                        <Button
+                        <button
                           type="button"
-                          variant="outline"
-                          className="justify-start"
+                          className={cn(
+                            "flex min-h-20 items-center gap-3 rounded-lg border bg-white px-4 text-left shadow-xs transition hover:border-primary/40",
+                            scheduleDate && "border-primary/40 bg-primary/5"
+                          )}
                         >
-                          <CalendarIcon className="size-4" />
-                          {formatCalendarDate(scheduleDate)}
-                        </Button>
+                          <span className="flex size-11 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                            <CalendarIcon className="size-5" />
+                          </span>
+                          <span>
+                            <span className="block text-xs text-muted-foreground">
+                              Schedule date
+                            </span>
+                            <span className="mt-1 block font-medium">
+                              {formatCalendarDate(scheduleDate)}
+                            </span>
+                          </span>
+                        </button>
                       </PopoverTrigger>
                       <PopoverContent className="w-auto p-0" align="start">
                         <Calendar
@@ -566,36 +907,88 @@ export default function BroadcastsPage() {
                         />
                       </PopoverContent>
                     </Popover>
-                    <Input
-                      type="time"
-                      value={scheduleTime}
-                      onChange={(event) => setScheduleTime(event.target.value)}
-                      className="h-11 border-0 bg-muted/70 shadow-none"
-                    />
+
+                    <div className="rounded-lg border bg-white p-3 shadow-xs">
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Clock className="size-4" />
+                        Local time
+                      </div>
+                      <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                        <Select
+                          value={scheduleHour || "09"}
+                          onValueChange={(hour) =>
+                            setScheduleTime(`${hour}:${scheduleMinute || "00"}`)
+                          }
+                        >
+                          <SelectTrigger className="h-11 w-full border-primary/20 bg-primary/5 font-semibold">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {hourOptions.map((hour) => (
+                              <SelectItem key={hour} value={hour}>
+                                {hour}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <span className="text-lg font-semibold text-muted-foreground">
+                          :
+                        </span>
+                        <Select
+                          value={scheduleMinute || "00"}
+                          onValueChange={(minute) =>
+                            setScheduleTime(`${scheduleHour || "09"}:${minute}`)
+                          }
+                        >
+                          <SelectTrigger className="h-11 w-full border-primary/20 bg-primary/5 font-semibold">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {minuteOptions.map((minute) => (
+                              <SelectItem key={minute} value={minute}>
+                                {minute}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {["09:00", "12:00", "15:00", "18:00"].map((time) => (
+                      <button
+                        key={time}
+                        type="button"
+                        onClick={() => setScheduleTime(time)}
+                        className={cn(
+                          "rounded-full border bg-white px-3 py-1.5 text-xs font-medium shadow-xs transition hover:border-primary/40",
+                          scheduleTime === time &&
+                            "border-primary/40 bg-primary/10 text-primary"
+                        )}
+                      >
+                        {time}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      isLoading={isStarting}
+                      onClick={handleStartNow}
+                    >
+                      <Send className="size-4" />
+                      Start now
+                    </Button>
                     <Button
                       type="button"
                       isLoading={isStarting}
-                      onClick={() =>
-                        startSelected({
-                          broadcastId: selectedBroadcast._id,
-                          payload: scheduleDate
-                            ? {
-                                scheduledLocal: getLocalDateValue(
-                                  scheduleDate,
-                                  scheduleTime
-                                ),
-                                timezone: "Asia/Kolkata"
-                              }
-                            : undefined
-                        })
-                      }
+                      onClick={handleScheduleBroadcast}
                     >
-                      {scheduleDate ? (
-                        <CalendarClock className="size-4" />
-                      ) : (
-                        <Play className="size-4" />
-                      )}
-                      {scheduleDate ? "Schedule" : "Start now"}
+                      <CalendarClock className="size-4" />
+                      Schedule
                     </Button>
                   </div>
                 </div>

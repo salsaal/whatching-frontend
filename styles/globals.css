@@ -195,4 +195,11 @@
   font-family: var(--font-inter), sans-serif;
 
   }
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  summary,
+  a[href],
+  label:has(input:not(:disabled)) {
+    cursor: pointer;
+  }
 }

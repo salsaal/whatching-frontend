@@ -6,6 +6,7 @@ import {
   CreditCard,
   FileText,
   Images,
+  Instagram,
   LayoutDashboard,
   Loader2,
   LogOut,
@@ -44,6 +45,8 @@ import { useOrganizationStore } from "@/stores/organizationStore";
 
 interface AppLayoutProps {
   children: React.ReactNode;
+  hideHeader?: boolean;
+  fullBleed?: boolean;
 }
 
 const navigation = [
@@ -51,6 +54,8 @@ const navigation = [
   { label: "Templates", href: "/templates", icon: FileText },
   { label: "Broadcasts", href: "/broadcasts", icon: Megaphone },
   { label: "Flows", href: "/flows", icon: Workflow },
+  { label: "Instagram", href: "/instagram", icon: Instagram },
+  { label: "Conversations", href: "/conversations", icon: MessageCircle },
   { label: "Contacts", href: "/contacts", icon: Contact },
   { label: "Media", href: "/media", icon: Images },
   { label: "Settings", href: "/settings", icon: Settings }
@@ -110,7 +115,11 @@ const plans = [
   }
 ];
 
-export default function AppLayout({ children }: AppLayoutProps) {
+export default function AppLayout({
+  children,
+  hideHeader = false,
+  fullBleed = false
+}: AppLayoutProps) {
   const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isPlansOpen, setIsPlansOpen] = useState(false);
@@ -298,69 +307,73 @@ export default function AppLayout({ children }: AppLayoutProps) {
       </aside>
 
       <div className="transition-all duration-200 lg:pl-20">
-        <header className="sticky top-0 z-20 bg-white/95 shadow-xs backdrop-blur">
-          <div className="grid min-h-18 gap-3 px-4 py-3 sm:px-6 lg:grid-cols-[1fr_auto_1fr] lg:items-center lg:px-8">
-            <div className="flex items-center gap-3">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-10 lg:hidden"
-                onClick={() => setIsMobileMenuOpen(true)}
-              >
-                <Menu className="size-5" />
-              </Button>
-              <div>
-                <p className="text-xs text-muted-foreground">Organisation</p>
-                <button
-                  onClick={() => router.push("/organisations")}
-                  className="mt-1 text-left font-heading text-lg font-semibold hover:text-primary"
-                >
-                  {activeOrganization?.name || "Select organisation"}
-                </button>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-start gap-3 rounded-sm bg-background px-3 py-2 shadow-xs lg:justify-center">
-              {isIntegrationLoading ? (
-                <Loader2 className="size-4 animate-spin text-primary" />
-              ) : (
-                <span
-                  className={cn(
-                    "size-2.5 rounded-full",
-                    isReady ? "bg-primary" : "bg-amber-500"
-                  )}
-                />
-              )}
-              <span className="text-sm font-medium">
-                WhatsApp Business API:{" "}
-                <span className="capitalize">{status}</span>
-              </span>
-              {!isReady && (
+        {!hideHeader && (
+          <header className="sticky top-0 z-20 bg-white/95 shadow-xs backdrop-blur">
+            <div className="grid min-h-18 gap-3 px-4 py-3 sm:px-6 lg:grid-cols-[1fr_auto_1fr] lg:items-center lg:px-8">
+              <div className="flex items-center gap-3">
                 <Button
-                  size="sm"
-                  onClick={() => toast.info("Connect flow coming next")}
+                  variant="ghost"
+                  size="icon"
+                  className="size-10 lg:hidden"
+                  onClick={() => setIsMobileMenuOpen(true)}
                 >
-                  Connect now
+                  <Menu className="size-5" />
                 </Button>
-              )}
-            </div>
-
-            <div className="flex items-center justify-start gap-3 lg:justify-end">
-              <div className="text-left lg:text-right">
-                <p className="text-xs text-muted-foreground">Current plan</p>
-                <p className="font-heading text-sm font-semibold uppercase">
-                  {isNoPlan ? "No plan" : currentPlan}
-                </p>
+                <div>
+                  <p className="text-xs text-muted-foreground">Organisation</p>
+                  <button
+                    onClick={() => router.push("/organisations")}
+                    className="mt-1 text-left font-heading text-lg font-semibold hover:text-primary"
+                  >
+                    {activeOrganization?.name || "Select organisation"}
+                  </button>
+                </div>
               </div>
-              <Button variant="outline" onClick={() => setIsPlansOpen(true)}>
-                <BarChart3 className="size-4" />
-                Explore plan
-              </Button>
-            </div>
-          </div>
-        </header>
 
-        <main className="px-4 py-6 sm:px-6 lg:px-8">{children}</main>
+              <div className="flex items-center justify-start gap-3 rounded-sm bg-background px-3 py-2 shadow-xs lg:justify-center">
+                {isIntegrationLoading ? (
+                  <Loader2 className="size-4 animate-spin text-primary" />
+                ) : (
+                  <span
+                    className={cn(
+                      "size-2.5 rounded-full",
+                      isReady ? "bg-primary" : "bg-amber-500"
+                    )}
+                  />
+                )}
+                <span className="text-sm font-medium">
+                  WhatsApp Business API:{" "}
+                  <span className="capitalize">{status}</span>
+                </span>
+                {!isReady && (
+                  <Button
+                    size="sm"
+                    onClick={() => router.push("/overview?connectMeta=1")}
+                  >
+                    Connect now
+                  </Button>
+                )}
+              </div>
+
+              <div className="flex items-center justify-start gap-3 lg:justify-end">
+                <div className="text-left lg:text-right">
+                  <p className="text-xs text-muted-foreground">Current plan</p>
+                  <p className="font-heading text-sm font-semibold uppercase">
+                    {isNoPlan ? "No plan" : currentPlan}
+                  </p>
+                </div>
+                <Button variant="outline" onClick={() => setIsPlansOpen(true)}>
+                  <BarChart3 className="size-4" />
+                  Explore plan
+                </Button>
+              </div>
+            </div>
+          </header>
+        )}
+
+        <main className={cn(fullBleed ? "p-0" : "px-4 py-6 sm:px-6 lg:px-8")}>
+          {children}
+        </main>
       </div>
 
       <Dialog open={isPlansOpen} onOpenChange={setIsPlansOpen}>

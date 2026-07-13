@@ -9,7 +9,6 @@ import {
   EyeOff,
   Mail,
   User,
-  Phone,
   Lock,
   LogIn,
   UserPlus,
@@ -19,6 +18,9 @@ import { toast } from "sonner";
 import AuthLayout from "@/layouts/AuthLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import PhoneNumberInput, {
+  buildInternationalPhoneNumber
+} from "@/components/ui/phone-number-input";
 import { useMutation } from "@tanstack/react-query";
 import { resendVerification, signupUser } from "@/api/functions/auth";
 import Link from "next/link";
@@ -44,13 +46,18 @@ export default function SignupPage() {
   const [isEmailSent, setIsEmailSent] = useState(false);
   const [userEmail, setUserEmail] = useState("");
   const [timer, setTimer] = useState(30);
+  const [countryCode, setCountryCode] = useState("+91");
+  const [countryIso, setCountryIso] = useState("IN");
   const {
     register,
     handleSubmit,
+    setValue,
+    watch,
     formState: { errors }
   } = useForm<SignupForm>({
     resolver: zodResolver(signupSchema)
   });
+  const watchedPhone = watch("phone") || "";
 
   useEffect(() => {
     if (!isEmailSent || timer === 0) return;
@@ -66,7 +73,8 @@ export default function SignupPage() {
     mutate({
       name: `${data.firstName} ${data.lastName}`,
       email: data.email,
-      phoneNumber: data.phone,
+      phoneNumber: buildInternationalPhoneNumber(countryCode, data.phone),
+      countryIso,
       password: data.password,
       passwordConfirm: data.confirmPassword
     });
@@ -164,13 +172,19 @@ export default function SignupPage() {
             </div>
 
             {/* PHONE */}
-            <div className="relative">
-              <Phone className="absolute left-3 top-3.5 size-4 text-muted-foreground" />
-              <Input
-                placeholder="Phone number"
-                className="pl-9"
-                {...register("phone")}
+            <div>
+              <PhoneNumberInput
+                countryCode={countryCode}
+                countryIso={countryIso}
+                phoneNumber={watchedPhone}
+                placeholder="9876543210"
+                onCountryCodeChange={setCountryCode}
+                onCountryIsoChange={setCountryIso}
+                onPhoneNumberChange={(value) =>
+                  setValue("phone", value, { shouldValidate: true })
+                }
               />
+              <input type="hidden" {...register("phone")} />
               <p className="text-xs text-red-500 mt-1">
                 {errors.phone?.message}
               </p>

@@ -63,6 +63,10 @@ api.interceptors.request.use((config) => {
     config.headers["x-org-id"] = orgId;
   }
 
+  if (process.env.NEXT_PUBLIC_API_BASE_URL?.includes("ngrok-free.app")) {
+    config.headers["ngrok-skip-browser-warning"] = "true";
+  }
+
   return config;
 });
 

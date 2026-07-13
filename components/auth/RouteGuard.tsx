@@ -8,7 +8,9 @@ const PUBLIC_ROUTES = [
   "/auth/forgot-password",
   "/auth/reset-password",
   "/auth/verify",
-  "/overview"
+  "/verify",
+  "/reset-password",
+  "/404"
 ];
 
 const isRoutePublic = (pathname: string) =>

@@ -30,6 +30,12 @@ export interface ConnectMetaPayload {
   coexistenceEnabled?: boolean;
 }
 
+export interface EmbeddedSignupConnectPayload {
+  code: string;
+  wabaId: string;
+  phoneNumberId: string;
+}
+
 export interface SubscribeResponse {
   status: string;
   data: {
@@ -62,4 +68,48 @@ export interface BillingHistoryResponse {
 export interface CancelSubscriptionResponse {
   status: string;
   message: string;
+}
+
+export interface TeamMember {
+  _id: string;
+  userId: {
+    _id: string;
+    name: string;
+    email: string;
+    phoneNumber?: string;
+  };
+  orgId: string;
+  role: "owner" | "admin" | "agent" | string;
+  status: "active" | "invited" | "disabled" | string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TeamResponse {
+  status: string;
+  results: number;
+  data: {
+    team: TeamMember[];
+  };
+}
+
+export interface AddAgentPayload {
+  name: string;
+  email: string;
+  phoneNumber: string;
+  password: string;
+  countryIso?: string;
+}
+
+export interface AddAgentResponse {
+  status: string;
+  message?: string;
+  data?: {
+    agent?: {
+      id: string;
+      name: string;
+      email: string;
+      phoneNumber: string;
+    };
+  };
 }

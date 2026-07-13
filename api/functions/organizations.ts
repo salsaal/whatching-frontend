@@ -2,12 +2,16 @@ import api from "../axiosInstance";
 import { ORGANIZATION_ENDPOINTS } from "../endpoints";
 import {
   ConnectMetaPayload,
+  EmbeddedSignupConnectPayload,
   IntegrationStatusResponse,
+  AddAgentPayload,
+  AddAgentResponse,
   BillingHistoryResponse,
   CancelSubscriptionResponse,
   OrganizationResponse,
   OrganizationsResponse,
-  SubscribeResponse
+  SubscribeResponse,
+  TeamResponse
 } from "../types/organizations.type";
 
 export const getMyOrganizations = async (): Promise<OrganizationsResponse> => {
@@ -52,6 +56,16 @@ export const connectMeta = async (
   return res.data;
 };
 
+export const connectMetaEmbeddedSignup = async (
+  payload: EmbeddedSignupConnectPayload
+): Promise<OrganizationResponse> => {
+  const res = await api.post<OrganizationResponse>(
+    ORGANIZATION_ENDPOINTS.CONNECT_META_EMBEDDED_SIGNUP,
+    payload
+  );
+  return res.data;
+};
+
 export const syncMetaIntegration =
   async (): Promise<IntegrationStatusResponse> => {
     const res = await api.post<IntegrationStatusResponse>(
@@ -59,6 +73,27 @@ export const syncMetaIntegration =
     );
     return res.data;
   };
+
+export const getTeam = async (): Promise<TeamResponse> => {
+  const res = await api.get<TeamResponse>(ORGANIZATION_ENDPOINTS.TEAM);
+  return res.data;
+};
+
+export const addAgent = async (
+  payload: AddAgentPayload
+): Promise<AddAgentResponse> => {
+  const res = await api.post<AddAgentResponse>(
+    ORGANIZATION_ENDPOINTS.ADD_AGENT,
+    payload
+  );
+  return res.data;
+};
+
+export const removeTeamMember = async (
+  membershipId: string
+): Promise<void> => {
+  await api.delete(ORGANIZATION_ENDPOINTS.TEAM_MEMBER(membershipId));
+};
 
 export const purchaseSubscription = async (payload: {
   tier: "basic" | "pro" | "enterprise" | string;

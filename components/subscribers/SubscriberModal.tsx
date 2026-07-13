@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 
 import { Subscriber, SubscriberPayload } from "@/api/types/subscribers.type";
 import { Button } from "@/components/ui/button";
+import PhoneNumberInput, {
+  buildInternationalPhoneNumber
+} from "@/components/ui/phone-number-input";
 import {
   Dialog,
   DialogContent,
@@ -36,12 +39,16 @@ export default function SubscriberModal({
   onSave
 }: SubscriberModalProps) {
   const [phoneNumber, setPhoneNumber] = useState("");
+  const [countryCode, setCountryCode] = useState("+91");
+  const [countryIso, setCountryIso] = useState("IN");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
   useEffect(() => {
     setPhoneNumber(subscriber?.phoneNumber || "");
+    setCountryCode("+91");
+    setCountryIso("IN");
     setFirstName(subscriber?.firstName || "");
     setLastName(subscriber?.lastName || "");
     setSelectedTags(subscriber?.tags || []);
@@ -51,7 +58,10 @@ export default function SubscriberModal({
     event.preventDefault();
 
     onSave({
-      phoneNumber: phoneNumber.trim(),
+      phoneNumber: subscriber
+        ? phoneNumber.trim()
+        : buildInternationalPhoneNumber(countryCode, phoneNumber),
+      countryIso: subscriber ? undefined : countryIso,
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       tags: selectedTags
@@ -71,13 +81,18 @@ export default function SubscriberModal({
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <Label>Phone number</Label>
-              <Input
-                value={phoneNumber}
+              <div className="mt-2">
+                <PhoneNumberInput
+                countryCode={countryCode}
+                countryIso={countryIso}
+                phoneNumber={phoneNumber}
                 disabled={Boolean(subscriber)}
-                onChange={(event) => setPhoneNumber(event.target.value)}
-                placeholder="919876543210"
-                className="mt-2"
+                onCountryCodeChange={setCountryCode}
+                onCountryIsoChange={setCountryIso}
+                onPhoneNumberChange={setPhoneNumber}
+                placeholder="9876543210"
               />
+              </div>
             </div>
             <div>
               <Label>First name</Label>
