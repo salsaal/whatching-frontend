@@ -42,7 +42,7 @@ import {
   Video,
   XCircle
 } from "lucide-react";
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { DragEvent, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -190,9 +190,12 @@ const triggerLabels: Record<InstagramTriggerType, string> = {
   first_dm: "First DM",
   keyword: "Keyword",
   story_reply: "Story Reply",
-  comment_private_reply_opened: "Comment Private Reply",
+  comment_private_reply_opened: "Comment opened",
   manual_start: "Manual Start"
 };
+const visibleTriggerEntries = Object.entries(triggerLabels).filter(
+  ([value]) => value !== "comment_private_reply_opened"
+);
 
 const blockTypes = Object.keys(blockMeta) as InstagramBlockType[];
 
@@ -538,6 +541,7 @@ const emptyRule: InstagramCommentRulePayload = {
 
 export default function InstagramPage() {
   const queryClient = useQueryClient();
+  const canvasRef = useRef<HTMLDivElement | null>(null);
   const activeOrganization = useOrganizationStore(
     (state) => state.activeOrganization
   );
@@ -678,6 +682,27 @@ export default function InstagramPage() {
     onError: (error) => toast.error(getErrorMessage(error))
   });
 
+  const saveCurrentDraftBeforeMediaLibrary = useCallback(async () => {
+    if (canvasMode !== "draft") return;
+
+    try {
+      await saveInstagramCanvasDraft(
+        toCanvasState(nodes, edges, draftData?.data.draftState?.version || 1)
+      );
+      queryClient.invalidateQueries({ queryKey: ["instagram-canvas-draft"] });
+      toast.success("Draft saved before opening media library");
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Instagram draft could not be saved"));
+      throw error;
+    }
+  }, [
+    canvasMode,
+    draftData?.data.draftState?.version,
+    edges,
+    nodes,
+    queryClient
+  ]);
+
   const validateMutation = useMutation({
     mutationFn: validateInstagramCanvas,
     onSuccess: (data) => {
@@ -812,7 +837,10 @@ export default function InstagramPage() {
     [selectedNode?.data.content, updateSelectedNode]
   );
 
-  const addNode = (blockType: InstagramBlockType) => {
+  const addNode = (
+    blockType: InstagramBlockType,
+    position?: { x: number; y: number }
+  ) => {
     if (canvasMode === "published") {
       toast.error("Switch to Draft to add Instagram blocks");
       return;
@@ -822,7 +850,7 @@ export default function InstagramPage() {
     const node: InstagramFlowNode = {
       id,
       type: "instagramBlock",
-      position: { x: 180 + nodes.length * 60, y: 160 + nodes.length * 40 },
+      position: position || { x: 180 + nodes.length * 60, y: 160 + nodes.length * 40 },
       data: {
         name: meta.label,
         triggerType: blockType === "quick_replies" ? "manual_start" : undefined,
@@ -837,6 +865,19 @@ export default function InstagramPage() {
     };
     setNodes((current) => [...current, node]);
     setSelectedNodeId(id);
+  };
+
+  const handleCanvasDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const blockType = event.dataTransfer.getData(
+      "application/x-instagram-block"
+    ) as InstagramBlockType;
+    if (!blockType || !blockMeta[blockType]) return;
+    const bounds = canvasRef.current?.getBoundingClientRect();
+    addNode(blockType, {
+      x: Math.max(40, event.clientX - (bounds?.left || 0) - 120),
+      y: Math.max(40, event.clientY - (bounds?.top || 0) - 80)
+    });
   };
 
   const deleteSelectedNode = () => {
@@ -976,7 +1017,7 @@ export default function InstagramPage() {
             onChange={(event) => updateSelectedNode({ name: event.target.value })}
           />
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-3">
           <div className="space-y-2">
             <Label>Trigger</Label>
             <Select
@@ -994,7 +1035,7 @@ export default function InstagramPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">No trigger</SelectItem>
-                {Object.entries(triggerLabels).map(([value, label]) => (
+                {visibleTriggerEntries.map(([value, label]) => (
                   <SelectItem key={value} value={value}>
                     {label}
                   </SelectItem>
@@ -1120,27 +1161,7 @@ export default function InstagramPage() {
                     }
                     placeholder="Button label"
                   />
-                  <div className="grid grid-cols-[1fr_auto] gap-2">
-                    <Select
-                      value={reply.contentType || "text"}
-                      disabled={readOnly}
-                      onValueChange={(value) =>
-                        updateQuickReply(index, {
-                          contentType: value as InstagramQuickReply["contentType"]
-                        })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="text">Text reply</SelectItem>
-                        <SelectItem value="user_phone_number">
-                          User phone
-                        </SelectItem>
-                        <SelectItem value="user_email">User email</SelectItem>
-                      </SelectContent>
-                    </Select>
+                  <div className="flex justify-end">
                     <Button
                       variant="ghost"
                       size="icon"
@@ -1538,11 +1559,10 @@ export default function InstagramPage() {
         <div className="flex shrink-0 items-center justify-between border-b bg-white px-5 py-2">
           <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as PageTab)}>
             <TabsList>
-              <TabsTrigger value="canvas">Canvas</TabsTrigger>
-              <TabsTrigger value="rules">Comment rules</TabsTrigger>
+              <TabsTrigger value="canvas">Message Flow</TabsTrigger>
+              <TabsTrigger value="rules">Comment Automation</TabsTrigger>
               <TabsTrigger value="media">Media</TabsTrigger>
               <TabsTrigger value="logs">Logs</TabsTrigger>
-              <TabsTrigger value="setup">Scope</TabsTrigger>
             </TabsList>
           </Tabs>
           <div className="text-xs text-muted-foreground">
@@ -1572,10 +1592,18 @@ export default function InstagramPage() {
                   const meta = blockMeta[type];
                   const Icon = meta.icon;
                   return (
-                    <button
-                      key={type}
-                      type="button"
-                      onClick={() => addNode(type)}
+	                    <button
+	                      key={type}
+	                      type="button"
+	                      draggable={canvasMode === "draft"}
+	                      onDragStart={(event) => {
+	                        event.dataTransfer.setData(
+	                          "application/x-instagram-block",
+	                          type
+	                        );
+	                        event.dataTransfer.effectAllowed = "copy";
+	                      }}
+	                      onClick={() => addNode(type)}
                       className="flex w-full cursor-pointer items-center gap-3 rounded-xl border bg-white p-3 text-left transition hover:border-pink-200 hover:bg-pink-50"
                     >
                       <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-pink-50 text-pink-600">
@@ -1598,7 +1626,15 @@ export default function InstagramPage() {
               </div>
             </aside>
 
-            <main className="relative min-h-0">
+	            <main
+	              ref={canvasRef}
+	              className="relative min-h-0"
+	              onDragOver={(event) => {
+	                event.preventDefault();
+	                event.dataTransfer.dropEffect = "copy";
+	              }}
+	              onDrop={handleCanvasDrop}
+	            >
               {isDraftLoading ? (
                 <div className="flex h-full items-center justify-center">
                   <Loader2 className="size-6 animate-spin text-pink-500" />
@@ -1616,7 +1652,9 @@ export default function InstagramPage() {
                     nodesDraggable={canvasMode === "draft"}
                     nodesConnectable={canvasMode === "draft"}
                     elementsSelectable
-                    fitView
+	                    fitView
+	                    fitViewOptions={{ padding: 0.35, maxZoom: 0.85 }}
+	                    defaultViewport={{ x: 0, y: 0, zoom: 0.75 }}
                     className="bg-white"
                   >
                     <Background gap={20} size={1} />
@@ -1688,7 +1726,7 @@ export default function InstagramPage() {
           <div className="grid min-h-0 flex-1 grid-cols-[420px_minmax(0,1fr)] gap-0">
             <aside className="min-h-0 overflow-y-auto border-r bg-white p-5">
               <h2 className="text-base font-semibold">
-                {editingRuleId ? "Edit comment rule" : "Create comment rule"}
+                {editingRuleId ? "Edit comment automation" : "Create comment automation"}
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">
                 Reply publicly, privately, or both when comments match.
@@ -1696,8 +1734,9 @@ export default function InstagramPage() {
               <div className="mt-5 space-y-4">
                 <div className="space-y-2">
                   <Label>Rule name</Label>
-                  <Input
-                    value={ruleDraft.name}
+	                  <Input
+	                    value={ruleDraft.name}
+	                    placeholder="Auto-reply to pricing comments"
                     onChange={(event) =>
                       setRuleDraft((draft) => ({
                         ...draft,
@@ -1706,9 +1745,9 @@ export default function InstagramPage() {
                     }
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    <Label>Scope</Label>
+	                <div className="grid grid-cols-2 gap-3">
+	                  <div className="space-y-2">
+	                    <Label>Scope</Label>
                     <Select
                       value={ruleDraft.scope}
                       onValueChange={(value) =>
@@ -1718,7 +1757,7 @@ export default function InstagramPage() {
                         }))
                       }
                     >
-                      <SelectTrigger>
+	                      <SelectTrigger className="w-full">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -1727,8 +1766,8 @@ export default function InstagramPage() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="space-y-2">
-                    <Label>Keywords</Label>
+	                  <div className="space-y-2">
+	                    <Label>Keyword match</Label>
                     <Select
                       value={ruleDraft.keywordMode}
                       onValueChange={(value) =>
@@ -1739,7 +1778,7 @@ export default function InstagramPage() {
                         }))
                       }
                     >
-                      <SelectTrigger>
+	                      <SelectTrigger className="w-full">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -1751,9 +1790,9 @@ export default function InstagramPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>Keyword list</Label>
-                  <Input
-                    value={(ruleDraft.keywords || []).join(", ")}
-                    placeholder="price, link, offer"
+	                  <Input
+	                    value={(ruleDraft.keywords || []).join(", ")}
+	                    placeholder="price, pricing, link, offer"
                     onChange={(event) =>
                       setRuleDraft((draft) => ({
                         ...draft,
@@ -1763,8 +1802,12 @@ export default function InstagramPage() {
                           .filter(Boolean)
                       }))
                     }
-                  />
-                </div>
+	                  />
+	                  <p className="text-xs text-muted-foreground">
+	                    Add multiple keywords separated by commas. Backend stores
+	                    them as a keyword array.
+	                  </p>
+	                </div>
                 <div className="grid grid-cols-2 gap-3 rounded-xl border p-3">
                   <label className="flex cursor-pointer items-center gap-2 text-sm">
                     <Switch
@@ -1793,9 +1836,10 @@ export default function InstagramPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>Public reply text</Label>
-                  <Textarea
-                    value={ruleDraft.publicReplyText}
-                    maxLength={2200}
+	                  <Textarea
+	                    value={ruleDraft.publicReplyText}
+	                    maxLength={2200}
+	                    placeholder="Thanks for your comment. We sent the details in DM."
                     onChange={(event) =>
                       setRuleDraft((draft) => ({
                         ...draft,
@@ -1806,9 +1850,10 @@ export default function InstagramPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>Private reply text</Label>
-                  <Textarea
-                    value={ruleDraft.privateReplyText}
-                    maxLength={1000}
+	                  <Textarea
+	                    value={ruleDraft.privateReplyText}
+	                    maxLength={1000}
+	                    placeholder="Here are the details you asked for..."
                     onChange={(event) =>
                       setRuleDraft((draft) => ({
                         ...draft,
@@ -1819,22 +1864,41 @@ export default function InstagramPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>Cooldown seconds</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={ruleDraft.cooldownSeconds}
-                    onChange={(event) =>
-                      setRuleDraft((draft) => ({
-                        ...draft,
-                        cooldownSeconds: Number(event.target.value)
-                      }))
-                    }
-                  />
-                </div>
-                {ruleDraft.scope === "specific_media" && (
-                  <div className="space-y-2">
-                    <Label>Media selection</Label>
-                    <div className="max-h-48 space-y-2 overflow-y-auto rounded-xl border p-2">
+	                  <Input
+	                    type="text"
+	                    inputMode="numeric"
+	                    pattern="[0-9]*"
+	                    value={String(ruleDraft.cooldownSeconds || 0)}
+	                    placeholder="0"
+	                    onChange={(event) =>
+	                      setRuleDraft((draft) => ({
+	                        ...draft,
+	                        cooldownSeconds: Number(
+	                          event.target.value.replace(/\D/g, "")
+	                        )
+	                      }))
+	                    }
+	                  />
+	                </div>
+	                {ruleDraft.scope === "specific_media" && (
+	                  <div className="space-y-3 rounded-xl border bg-muted/20 p-3">
+	                    <div className="flex items-center justify-between gap-3">
+	                      <div>
+	                        <Label>Selected posts</Label>
+	                        <p className="text-xs text-muted-foreground">
+	                          Choose synced Instagram posts for this automation.
+	                        </p>
+	                      </div>
+	                      <Button
+	                        type="button"
+	                        variant="outline"
+	                        size="sm"
+	                        onClick={() => setActiveTab("media")}
+	                      >
+	                        Choose posts
+	                      </Button>
+	                    </div>
+	                    <div className="max-h-48 space-y-2 overflow-y-auto rounded-xl border bg-white p-2">
                       {media.map((item) => {
                         const selected = (ruleDraft.mediaIds || []).includes(
                           item.mediaId
@@ -1877,7 +1941,7 @@ export default function InstagramPage() {
                     {saveRuleMutation.isPending && (
                       <Loader2 className="mr-2 size-4 animate-spin" />
                     )}
-                    {editingRuleId ? "Update rule" : "Create rule"}
+                    {editingRuleId ? "Update automation" : "Create automation"}
                   </Button>
                   {editingRuleId && (
                     <Button
@@ -1901,10 +1965,10 @@ export default function InstagramPage() {
                   </div>
                 ) : rules.length ? (
                   rules.map((rule) => (
-                    <div key={rule._id} className="rounded-xl border bg-white p-4 shadow-xs">
+	                    <div key={rule._id} className="rounded-xl border bg-white p-4 shadow-xs transition hover:border-pink-200 hover:shadow-md">
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <h3 className="font-semibold">{rule.name}</h3>
+	                          <h3 className="font-semibold">{rule.name}</h3>
                           <p className="mt-1 text-xs text-muted-foreground">
                             {rule.scope === "all_media"
                               ? "All Instagram media"
@@ -1922,17 +1986,23 @@ export default function InstagramPage() {
                           {rule.status}
                         </Badge>
                       </div>
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        {(rule.keywords || []).map((keyword) => (
-                          <Badge key={keyword} variant="secondary">
-                            {keyword}
-                          </Badge>
-                        ))}
-                      </div>
-                      <div className="mt-4 grid gap-2 text-xs text-muted-foreground">
-                        <p>Public: {rule.sendPublicReply ? "on" : "off"}</p>
-                        <p>Private: {rule.sendPrivateReply ? "on" : "off"}</p>
-                        <p>Cooldown: {rule.cooldownSeconds || 0}s</p>
+	                      <div className="mt-4 flex flex-wrap gap-2">
+	                        {(rule.keywords || []).map((keyword) => (
+	                          <Badge key={keyword} variant="secondary">
+	                            {keyword}
+	                          </Badge>
+	                        ))}
+	                        {!(rule.keywords || []).length && (
+	                          <span className="text-xs text-muted-foreground">
+	                            No keywords configured
+	                          </span>
+	                        )}
+	                      </div>
+	                      <div className="mt-4 grid gap-2 text-xs text-muted-foreground">
+	                        <p>Keyword mode: {rule.keywordMode}</p>
+	                        <p>Public reply: {rule.sendPublicReply ? "on" : "off"}</p>
+	                        <p>Private DM: {rule.sendPrivateReply ? "on" : "off"}</p>
+	                        <p>Cooldown: {rule.cooldownSeconds || 0}s</p>
                       </div>
                       <div className="mt-4 flex flex-wrap gap-2">
                         <Button size="sm" variant="outline" onClick={() => editRule(rule)}>
@@ -1969,7 +2039,7 @@ export default function InstagramPage() {
                   ))
                 ) : (
                   <div className="rounded-xl border bg-white p-8 text-center text-sm text-muted-foreground">
-                    No Instagram comment rules yet.
+	                    No Instagram comment automations yet.
                   </div>
                 )}
               </div>
@@ -2184,6 +2254,7 @@ export default function InstagramPage() {
         open={Boolean(mediaPickerTarget)}
         onOpenChange={(open) => !open && setMediaPickerTarget(null)}
         onSelect={onMediaSelected}
+        onBeforeOpenMediaLibrary={saveCurrentDraftBeforeMediaLibrary}
         requiredType={mediaPickerTarget?.type}
         selectedMediaId={
           mediaPickerTarget?.kind === "node"

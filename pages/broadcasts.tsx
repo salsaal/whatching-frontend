@@ -265,7 +265,10 @@ export default function BroadcastsPage() {
     [templatesData?.data.templates]
   );
   const subscribers = useMemo(
-    () => subscribersData?.data.subscribers || [],
+    () =>
+      (subscribersData?.data.subscribers || []).filter(
+        (subscriber) => Boolean(subscriber.phoneNumber)
+      ),
     [subscribersData?.data.subscribers]
   );
   const tags = useMemo(() => tagsData?.data.tags || [], [tagsData?.data.tags]);
@@ -357,7 +360,12 @@ export default function BroadcastsPage() {
       audienceMode === "tags"
         ? { mode: "tags", tags: selectedTags, tagMatch: "any" }
         : audienceMode === "specific"
-          ? { mode: "specific", subscriberIds: selectedSubscriberIds }
+          ? {
+              mode: "specific",
+              subscriberIds: selectedSubscriberIds.filter((subscriberId) =>
+                subscribers.some((subscriber) => subscriber._id === subscriberId)
+              )
+            }
           : { mode: "all" };
 
     const components = buildBroadcastComponents(bodyVariables, variableMappings);

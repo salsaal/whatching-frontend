@@ -11,6 +11,9 @@ export interface Subscriber {
   lastOutboundAt?: string;
   optInSource?: string;
   waId?: string;
+  instagramUserId?: string;
+  instagramUsername?: string;
+  instagramProfilePictureUrl?: string;
   createdAt: string;
   updatedAt: string;
   __v?: number;

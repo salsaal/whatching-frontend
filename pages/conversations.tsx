@@ -7,18 +7,22 @@ import {
   FileText,
   ImageIcon,
   Inbox,
+  Instagram,
   Loader2,
   MessageCircle,
+  MessageSquareReply,
   Paperclip,
   Search,
   Send,
   ShieldAlert,
+  Smartphone,
   UserCheck,
   X
 } from "lucide-react";
 import {
   ChangeEvent,
   DragEvent,
+  ElementType,
   FormEvent,
   KeyboardEvent,
   useEffect,
@@ -46,6 +50,7 @@ import { getAllTemplates } from "@/api/functions/templates";
 import {
   ChatMessage,
   Conversation,
+  ConversationChannel,
   ConversationMode,
   ConversationStatus,
   TemplateSendComponent
@@ -96,6 +101,16 @@ const modeOptions: Array<{ value: ConversationMode | "all"; label: string }> = [
   { value: "interactive", label: "Bot flow" },
   { value: "ai_fallback", label: "AI fallback" },
   { value: "agent_manual", label: "Agent manual" }
+];
+
+const channelOptions: Array<{
+  value: ConversationChannel | "all";
+  label: string;
+  icon: ElementType;
+}> = [
+  { value: "all", label: "All", icon: Inbox },
+  { value: "whatsapp", label: "WhatsApp", icon: Smartphone },
+  { value: "instagram", label: "Instagram", icon: Instagram }
 ];
 
 const formatDateTime = (value?: string | null) =>
@@ -250,7 +265,16 @@ const getString = (...values: unknown[]) => {
 
 const getMetaMediaUrl = (value: unknown) => {
   const media = asRecord(value);
-  return getString(media.link, media.url, media.mediaUrl, media.cloudinaryUrl);
+  return getString(
+    media.link,
+    media.url,
+    media.mediaUrl,
+    media.cloudinaryUrl,
+    media.proxyUrl,
+    media.downloadUrl,
+    media.signedUrl,
+    media.permalink
+  );
 };
 
 const getMetaMediaName = (value: unknown, fallback: string) => {
@@ -344,9 +368,15 @@ const getMessageMedia = (message: ChatMessage): MessageMediaPreview[] => {
     });
   }
 
+  addPreview(message.type === "video" ? "video" : "image", payload, "Media");
   addPreview("image", payload.image, "Image", payload.caption);
   addPreview("video", payload.video, "Video", payload.caption);
   addPreview("document", payload.document, "Document", payload.caption);
+  addPreview("image", payload.instagramImage, "Instagram image", payload.caption);
+  addPreview("video", payload.instagramVideo, "Instagram video", payload.caption);
+  addPreview("image", payload.media, "Media", payload.caption);
+  addPreview("image", payload.mediaData, "Media", payload.caption);
+  addPreview("image", payload.attachment, "Attachment", payload.caption);
   addPreview("image", payload.headerImage, "Image", payload.caption);
 
   const interactive = asRecord(payload.interactive);
@@ -440,6 +470,16 @@ const priorityClass: Record<string, string> = {
   low: "bg-slate-100 text-slate-600"
 };
 
+const takeoverSourceLabel: Record<string, string> = {
+  dashboard: "Dashboard",
+  whatsapp_business_app: "WhatsApp Business app",
+  instagram_app: "Instagram app",
+  automation_handoff: "Automation handoff"
+};
+
+const canReplyToMessage = (message: ChatMessage) =>
+  message.direction === "inbound" && message.status !== "failed";
+
 function ConversationListItem({
   conversation,
   selected,
@@ -495,10 +535,12 @@ function ConversationListItem({
 
 function MessageBubble({
   message,
-  onPreview
+  onPreview,
+  onReplyTo
 }: {
   message: ChatMessage;
   onPreview: (preview: MessageMediaPreview) => void;
+  onReplyTo: (message: ChatMessage) => void;
 }) {
   const isOutbound = message.direction === "outbound";
   const isSystem = message.direction === "system" || message.senderRole === "system";
@@ -522,7 +564,25 @@ function MessageBubble({
   }
 
   return (
-    <div className={cn("flex", isOutbound ? "justify-end" : "justify-start")}>
+    <div
+      className={cn(
+        "group flex items-center gap-2",
+        isOutbound ? "justify-end" : "justify-start"
+      )}
+      onDoubleClick={() => {
+        if (canReplyToMessage(message)) onReplyTo(message);
+      }}
+    >
+      {!isOutbound && canReplyToMessage(message) && (
+        <button
+          type="button"
+          className="order-2 flex size-8 cursor-pointer items-center justify-center rounded-full border bg-white text-muted-foreground opacity-0 shadow-sm transition hover:text-primary group-hover:opacity-100"
+          onClick={() => onReplyTo(message)}
+          title="Reply"
+        >
+          <MessageSquareReply className="size-4" />
+        </button>
+      )}
       <div
         className={cn(
           "max-w-[78%] rounded-2xl px-3 py-2 text-sm shadow-xs",
@@ -566,6 +626,21 @@ function MessageBubble({
             ))}
           </div>
         )}
+        {message.replyContext && (
+          <div
+            className={cn(
+              "mb-2 rounded-lg border-l-2 px-2 py-1 text-xs",
+              isOutbound
+                ? "border-primary-foreground/40 bg-primary-foreground/10 text-primary-foreground/80"
+                : "border-primary bg-muted text-muted-foreground"
+            )}
+          >
+            Reply to{" "}
+            {message.replyContext.messageId
+              ? `message ${message.replyContext.messageId.slice(-6)}`
+              : "WhatsApp message"}
+          </div>
+        )}
         {documentPreviews.map((preview) => (
           <a
             key={preview.url}
@@ -606,6 +681,16 @@ function MessageBubble({
           {isOutbound && <CheckCheck className="size-3" />}
         </div>
       </div>
+      {isOutbound && canReplyToMessage(message) && (
+        <button
+          type="button"
+          className="order-first flex size-8 cursor-pointer items-center justify-center rounded-full border bg-white text-muted-foreground opacity-0 shadow-sm transition hover:text-primary group-hover:opacity-100"
+          onClick={() => onReplyTo(message)}
+          title="Reply"
+        >
+          <MessageSquareReply className="size-4" />
+        </button>
+      )}
     </div>
   );
 }
@@ -623,11 +708,13 @@ function ThreadSkeleton() {
 export default function ConversationsPage() {
   const queryClient = useQueryClient();
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const replyInputRef = useRef<HTMLTextAreaElement | null>(null);
   const activeOrganization = useOrganizationStore(
     (state) => state.activeOrganization
   );
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<ConversationStatus | "all">("all");
+  const [channel, setChannel] = useState<ConversationChannel | "all">("all");
   const [mode, setMode] = useState<ConversationMode | "all">("all");
   const [assignedTo, setAssignedTo] = useState("all");
   const [unreadOnly, setUnreadOnly] = useState(false);
@@ -635,6 +722,7 @@ export default function ConversationsPage() {
   const [page, setPage] = useState(1);
   const [selectedId, setSelectedId] = useState("");
   const [replyText, setReplyText] = useState("");
+  const [replyTarget, setReplyTarget] = useState<ChatMessage | null>(null);
   const [attachment, setAttachment] = useState<File | null>(null);
   const [attachmentPreviewUrl, setAttachmentPreviewUrl] = useState("");
   const [selectedMedia, setSelectedMedia] = useState<MediaAsset | null>(null);
@@ -710,15 +798,22 @@ export default function ConversationsPage() {
     () => conversationsData?.data.conversations || [],
     [conversationsData]
   );
+  const visibleConversations = useMemo(
+    () =>
+      channel === "all"
+        ? conversations
+        : conversations.filter((conversation) => conversation.channel === channel),
+    [channel, conversations]
+  );
   const selectedConversation =
-    conversations.find((conversation) => conversation._id === selectedId) ||
+    visibleConversations.find((conversation) => conversation._id === selectedId) ||
     null;
 
   useEffect(() => {
-    if (!selectedId && conversations[0]?._id) {
-      setSelectedId(conversations[0]._id);
+    if (!visibleConversations.some((conversation) => conversation._id === selectedId)) {
+      setSelectedId(visibleConversations[0]?._id || "");
     }
-  }, [conversations, selectedId]);
+  }, [selectedId, visibleConversations]);
 
   const { data: messagesData, isLoading: isMessagesLoading } = useQuery({
     queryKey: ["conversation-messages", activeOrganization?._id, selectedId],
@@ -774,6 +869,7 @@ export default function ConversationsPage() {
     mutationFn: sendConversationReply,
     onSuccess: async () => {
       setReplyText("");
+      setReplyTarget(null);
       setAttachment(null);
       setSelectedMedia(null);
       toast.success("Reply queued.");
@@ -832,6 +928,9 @@ export default function ConversationsPage() {
   const contextConversation = contextData?.data.conversation || selectedConversation;
   const replyWindow = contextConversation?.replyWindow;
   const canReply = Boolean(replyWindow?.isOpen && selectedId);
+  const isInstagramConversation = contextConversation?.channel === "instagram";
+  const canSendMediaReply = canReply && !isInstagramConversation;
+  const canSendTemplate = contextConversation?.channel === "whatsapp";
   const summary = conversationsData?.data.summary || bootstrap?.data.sidebar;
   const templateRecipientPhone =
     contextConversation?.subscriberId?.phoneNumber ||
@@ -844,13 +943,18 @@ export default function ConversationsPage() {
       toast.error("Type a reply, attach a file, or choose media.");
       return;
     }
+    if (isInstagramConversation && (attachment || selectedMedia)) {
+      toast.error("Instagram conversations currently support text replies only.");
+      return;
+    }
     sendReply({
       conversationId: selectedId,
       payload: {
         text: replyText.trim(),
         caption: attachment || selectedMedia ? replyText.trim() : undefined,
         mediaId: selectedMedia?._id,
-        attachment
+        attachment: isInstagramConversation ? null : attachment,
+        replyToMessageId: replyTarget?._id
       }
     });
   };
@@ -864,18 +968,20 @@ export default function ConversationsPage() {
     const file = event.target.files?.[0] || null;
     setAttachment(file);
     if (file) setSelectedMedia(null);
+    if (file) requestAnimationFrame(() => replyInputRef.current?.focus());
   };
 
   const attachFile = (file?: File | null) => {
     if (!file) return;
     setAttachment(file);
     setSelectedMedia(null);
+    requestAnimationFrame(() => replyInputRef.current?.focus());
   };
 
   const handleDrop = (event: DragEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsDraggingFile(false);
-    if (!canReply || isSending) return;
+    if (!canSendMediaReply || isSending) return;
     attachFile(event.dataTransfer.files?.[0]);
   };
 
@@ -883,6 +989,11 @@ export default function ConversationsPage() {
     if (event.key !== "Enter" || event.shiftKey) return;
     event.preventDefault();
     submitReply();
+  };
+
+  const selectReplyTarget = (message: ChatMessage) => {
+    setReplyTarget(message);
+    requestAnimationFrame(() => replyInputRef.current?.focus());
   };
 
   const handleTemplateChange = (templateId: string) => {
@@ -936,6 +1047,12 @@ export default function ConversationsPage() {
   }, [messages, selectedId]);
 
   useEffect(() => {
+    setReplyTarget(null);
+    setAttachment(null);
+    setSelectedMedia(null);
+  }, [selectedId]);
+
+  useEffect(() => {
     if (!attachment || !attachment.type.startsWith("image/")) {
       setAttachmentPreviewUrl("");
       return;
@@ -986,6 +1103,29 @@ export default function ConversationsPage() {
                     setPage(1);
                   }}
                 />
+              </div>
+              <div className="mt-3 grid grid-cols-3 gap-1 rounded-xl bg-muted p-1">
+                {channelOptions.map((option) => {
+                  const Icon = option.icon;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => {
+                        setChannel(option.value);
+                        setPage(1);
+                      }}
+                      className={cn(
+                        "flex cursor-pointer items-center justify-center gap-1 rounded-lg px-2 py-2 text-xs font-medium text-muted-foreground transition",
+                        channel === option.value &&
+                          "bg-white text-foreground shadow-xs"
+                      )}
+                    >
+                      <Icon className="size-3.5" />
+                      {option.label}
+                    </button>
+                  );
+                })}
               </div>
               <div className="mt-3 grid grid-cols-1 gap-2">
                 <Select
@@ -1079,8 +1219,8 @@ export default function ConversationsPage() {
                     <Skeleton key={index} className="h-24 rounded-lg" />
                   ))}
                 </div>
-              ) : conversations.length ? (
-                conversations.map((conversation) => (
+              ) : visibleConversations.length ? (
+                visibleConversations.map((conversation) => (
                   <ConversationListItem
                     key={conversation._id}
                     conversation={conversation}
@@ -1164,11 +1304,12 @@ export default function ConversationsPage() {
                   ) : messages.length ? (
                     <div className="space-y-3">
                       {messages.map((message) => (
-                        <MessageBubble
-                          key={message._id}
-                          message={message}
-                          onPreview={setPreviewMedia}
-                        />
+	                        <MessageBubble
+	                          key={message._id}
+	                          message={message}
+	                          onPreview={setPreviewMedia}
+	                          onReplyTo={selectReplyTarget}
+	                        />
                       ))}
                       <div ref={messagesEndRef} />
                     </div>
@@ -1181,10 +1322,10 @@ export default function ConversationsPage() {
 
                 <form
                   onSubmit={handleReply}
-                  onDragEnter={(event) => {
-                    event.preventDefault();
-                    if (canReply) setIsDraggingFile(true);
-                  }}
+	                  onDragEnter={(event) => {
+	                    event.preventDefault();
+	                    if (canSendMediaReply) setIsDraggingFile(true);
+	                  }}
                   onDragOver={(event) => event.preventDefault()}
                   onDragLeave={(event) => {
                     if (!event.currentTarget.contains(event.relatedTarget as Node)) {
@@ -1202,12 +1343,19 @@ export default function ConversationsPage() {
                       Drop file to attach
                     </div>
                   )}
-                  {!canReply && (
-                    <div className="mb-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
-                      The 24-hour customer service window is closed. Send an
-                      approved template to re-open chat.
-                    </div>
-                  )}
+	                  {!canReply && (
+	                    <div className="mb-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
+	                      {isInstagramConversation
+	                        ? "The 24-hour customer service window is closed for this Instagram conversation."
+	                        : "The 24-hour customer service window is closed. Send an approved template to re-open chat."}
+	                    </div>
+	                  )}
+	                  {isInstagramConversation && canReply && (
+	                    <div className="mb-3 rounded-lg bg-pink-50 p-3 text-sm text-pink-800">
+	                      Instagram replies currently support text only in the
+	                      backend.
+	                    </div>
+	                  )}
                   {(attachment || selectedMedia) && (
                     <div className="mb-2 flex items-center justify-between gap-3 rounded-lg bg-muted px-3 py-2 text-sm">
                       <div className="flex min-w-0 items-center gap-3">
@@ -1248,36 +1396,59 @@ export default function ConversationsPage() {
                       </button>
                     </div>
                   )}
+                  {replyTarget && (
+                    <div className="mb-2 flex items-start justify-between gap-3 rounded-lg border-l-2 border-primary bg-primary/5 px-3 py-2 text-sm">
+                      <div className="min-w-0">
+                        <p className="inline-flex items-center gap-1 font-medium text-primary">
+                          <MessageSquareReply className="size-4" />
+                          Replying to {subscriberName(contextConversation)}
+                        </p>
+                        <p className="mt-1 line-clamp-2 text-muted-foreground">
+                          {messageText(replyTarget)}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        className="cursor-pointer rounded-full p-1 text-muted-foreground hover:bg-white hover:text-foreground"
+                        onClick={() => setReplyTarget(null)}
+                      >
+                        <X className="size-4" />
+                      </button>
+                    </div>
+                  )}
                   <div className="flex items-end gap-2">
                     <label className="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full border hover:bg-muted">
                       <Paperclip className="size-4" />
                       <input
                         type="file"
                         className="hidden"
-                        disabled={!canReply || isSending}
-                        onChange={handleAttachment}
-                      />
+	                        disabled={!canSendMediaReply || isSending}
+	                        onChange={handleAttachment}
+	                      />
                     </label>
                     <Button
                       type="button"
                       variant="outline"
                       className="size-10 shrink-0 rounded-full p-0"
-                      disabled={!canReply || isSending}
-                      onClick={() => setIsMediaPickerOpen(true)}
+	                      disabled={!canSendMediaReply || isSending}
+	                      onClick={() => setIsMediaPickerOpen(true)}
                     >
                       <ImageIcon className="size-4" />
                     </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="h-10 shrink-0 rounded-full px-3"
-                      disabled={!selectedId || isSendingTemplate}
-                      onClick={() => setIsTemplateModalOpen(true)}
-                    >
-                      <FileText className="mr-2 size-4" />
-                      Template
-                    </Button>
-                    <Textarea
+	                    {canSendTemplate && (
+	                      <Button
+	                        type="button"
+	                        variant="outline"
+	                        className="h-10 shrink-0 rounded-full px-3"
+	                        disabled={!selectedId || isSendingTemplate}
+	                        onClick={() => setIsTemplateModalOpen(true)}
+	                      >
+	                        <FileText className="mr-2 size-4" />
+	                        Template
+	                      </Button>
+	                    )}
+	                    <Textarea
+	                      ref={replyInputRef}
                       className="max-h-32 min-h-11 resize-none rounded-2xl"
                       value={replyText}
                       disabled={!canReply || isSending}
@@ -1427,6 +1598,24 @@ export default function ConversationsPage() {
                         contextConversation.takeoverState?.handoffRequestedAt
                       )}
                     </p>
+                    <div className="mt-2 rounded-md bg-white px-2 py-1 text-xs">
+                      <span className="text-muted-foreground">Manual source: </span>
+                      <span className="font-medium">
+                        {contextConversation.takeoverState?.manualTakeoverSource
+                          ? takeoverSourceLabel[
+                              contextConversation.takeoverState
+                                .manualTakeoverSource
+                            ] ||
+                            contextConversation.takeoverState.manualTakeoverSource
+                          : "Not in manual takeover"}
+                      </span>
+                    </div>
+                    {contextConversation.takeoverState?.manualTakeoverBy && (
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        By{" "}
+                        {contextConversation.takeoverState.manualTakeoverBy.name}
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -1741,6 +1930,7 @@ export default function ConversationsPage() {
           setSelectedMedia(media);
           setAttachment(null);
           setIsMediaPickerOpen(false);
+          requestAnimationFrame(() => replyInputRef.current?.focus());
         }}
       />
       <MediaPickerDialog

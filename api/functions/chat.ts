@@ -133,6 +133,9 @@ export const sendConversationReply = async ({
   if (payload.messageType) formData.append("messageType", payload.messageType);
   if (payload.mediaId) formData.append("mediaId", payload.mediaId);
   if (payload.attachment) formData.append("attachment", payload.attachment);
+  if (payload.replyToMessageId) {
+    formData.append("replyToMessageId", payload.replyToMessageId);
+  }
 
   const res = await api.post<SendConversationReplyResponse>(
     CONVERSATION_ENDPOINTS.REPLY(conversationId),

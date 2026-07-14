@@ -2,6 +2,7 @@
 
 import { FileText, ImageIcon, Video } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/router";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
@@ -38,6 +39,7 @@ interface MediaPickerDialogProps {
   open: boolean;
   selectedMediaId?: string;
   requiredType?: string;
+  onBeforeOpenMediaLibrary?: () => Promise<void> | void;
   onOpenChange: (open: boolean) => void;
   onSelect: (media: MediaAsset) => void;
 }
@@ -46,9 +48,11 @@ export default function MediaPickerDialog({
   open,
   selectedMediaId,
   requiredType,
+  onBeforeOpenMediaLibrary,
   onOpenChange,
   onSelect
 }: MediaPickerDialogProps) {
+  const router = useRouter();
   const initialTab =
     (requiredType && mediaTypeByHeaderFormat[requiredType]) || "image";
   const [activeTab, setActiveTab] = useState<MediaFileType>(initialTab);
@@ -79,7 +83,16 @@ export default function MediaPickerDialog({
 
         <div className="rounded-sm bg-muted/60 p-3 text-sm text-muted-foreground">
           Need to add media first? Go to{" "}
-          <Link href="/media" className="font-medium text-primary">
+          <Link
+            href="/media"
+            className="font-medium text-primary"
+            onClick={async (event) => {
+              if (!onBeforeOpenMediaLibrary) return;
+              event.preventDefault();
+              await onBeforeOpenMediaLibrary();
+              router.push("/media");
+            }}
+          >
             Media library
           </Link>
           .

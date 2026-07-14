@@ -12,6 +12,7 @@ export interface OrganizationResponse {
   status: string;
   data: {
     organization: Organization;
+    subscribedAppsWarning?: string | null;
   };
 }
 
@@ -34,6 +35,29 @@ export interface EmbeddedSignupConnectPayload {
   code: string;
   wabaId: string;
   phoneNumberId: string;
+  waba_id?: string;
+  phone_number_id?: string;
+  whatsappBusinessAccountId?: string;
+  businessPhoneNumberId?: string;
+  businessId?: string;
+  business_id?: string;
+  event?: string;
+  sessionEvent?: string;
+  signupEvent?: string;
+  authResponse?: {
+    code?: string;
+    [key: string]: unknown;
+  };
+  data?: {
+    waba_id?: string;
+    wabaId?: string;
+    phone_number_id?: string;
+    phoneNumberId?: string;
+    business_id?: string;
+    event?: string;
+    [key: string]: unknown;
+  };
+  coexistenceEnabled?: boolean;
 }
 
 export interface SubscribeResponse {

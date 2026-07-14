@@ -4,6 +4,11 @@ export type ConversationStatus = "open" | "pending" | "resolved";
 export type ConversationPriority = "low" | "normal" | "high";
 export type ConversationMode = "interactive" | "ai_fallback" | "agent_manual";
 export type ConversationChannel = "whatsapp" | "instagram";
+export type ManualTakeoverSource =
+  | "dashboard"
+  | "whatsapp_business_app"
+  | "instagram_app"
+  | "automation_handoff";
 export type MessageDirection = "inbound" | "outbound" | "system";
 export type MessageSource = "customer" | "agent" | "bot" | "system" | "broadcast";
 export type MessageType =
@@ -76,6 +81,7 @@ export interface Conversation {
     handoffRequestedAt?: string | null;
     handoffReason?: string | null;
     manualTakeoverAt?: string | null;
+    manualTakeoverSource?: ManualTakeoverSource | null;
     manualTakeoverBy?: ChatUser | null;
     lastAgentReplyAt?: string | null;
   };
@@ -123,6 +129,10 @@ export interface ChatMessage {
   systemEvent?: {
     eventType: string | null;
     message: string | null;
+  } | null;
+  replyContext?: {
+    messageId: string | null;
+    metaMessageId: string | null;
   } | null;
   errorMessage?: string;
   sentAt?: string;
@@ -227,6 +237,7 @@ export interface SendConversationReplyPayload {
   messageType?: "text" | "image" | "document" | "audio" | "video";
   mediaId?: string;
   attachment?: File | null;
+  replyToMessageId?: string;
 }
 
 export interface SendConversationReplyResponse {

@@ -708,8 +708,7 @@ const defaultCanvasEdges = (): Edge[] => [
     target: "node_opt_out",
     sourceHandle: "action_opt_out",
     targetHandle: "in",
-    animated: true,
-    type: "smoothstep"
+    animated: false
   }
 ];
 
@@ -962,8 +961,7 @@ const canvasEdgesToFlow = (
       edge.replyId ||
       undefined,
     targetHandle: edge.targetHandle || "in",
-    animated: true,
-    type: "smoothstep",
+    animated: false,
     data: edge.metadata
   }))
   );
@@ -1549,8 +1547,7 @@ function FlowsBuilder() {
           {
             ...connection,
             id: newId("edge"),
-            animated: true,
-            type: "smoothstep"
+            animated: false
           },
           current.filter(
             (edge) =>

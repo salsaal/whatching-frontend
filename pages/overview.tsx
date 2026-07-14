@@ -25,8 +25,19 @@ import { useOrganizationStore } from "@/stores/organizationStore";
 
 interface EmbeddedSignupSession {
   wabaId: string;
-  phoneNumberId?: string;
-  event: "FINISH" | "FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING";
+  phoneNumberId: string;
+  businessId?: string;
+  event: string;
+  data: {
+    waba_id?: string;
+    wabaId?: string;
+    phone_number_id?: string;
+    phoneNumberId?: string;
+    business_id?: string;
+    event?: string;
+    [key: string]: unknown;
+  };
+  coexistenceEnabled: boolean;
 }
 
 interface FacebookAuthResponse {
@@ -64,6 +75,8 @@ const facebookGraphVersion =
 const embeddedSignupVersion =
   process.env.NEXT_PUBLIC_META_EMBEDDED_SIGNUP_VERSION || "v4";
 const businessAppOnboardingFeatureType = "whatsapp_business_app_onboarding";
+const whatsappBusinessAppOnboardingEvent =
+  "FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING";
 
 const facebookAllowedOrigins = [
   "https://www.facebook.com",
@@ -84,28 +97,45 @@ const getEmbeddedSignupSession = (
     event?: string;
     data?: {
       waba_id?: string;
+      wabaId?: string;
       phone_number_id?: string;
+      phoneNumberId?: string;
+      business_id?: string;
+      businessId?: string;
+      event?: string;
+      [key: string]: unknown;
     };
   };
 
   const signupEvent =
-    data.event === "FINISH" ||
-    data.event === "FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING"
-      ? data.event
-      : null;
+    data.event ||
+    (typeof data.data?.event === "string" ? data.data.event : "");
   if (data.type !== "WA_EMBEDDED_SIGNUP" || !signupEvent) {
     return null;
   }
 
-  const wabaId = data.data?.waba_id;
-  const phoneNumberId = data.data?.phone_number_id;
+  const wabaId = data.data?.waba_id || data.data?.wabaId || "";
+  const phoneNumberId =
+    data.data?.phone_number_id || data.data?.phoneNumberId || "";
+  const businessId = data.data?.business_id || data.data?.businessId;
 
-  if (!wabaId) return null;
+  if (!wabaId || !phoneNumberId) return null;
 
   return {
     wabaId,
     phoneNumberId,
-    event: signupEvent
+    businessId,
+    event: signupEvent,
+    data: {
+      ...data.data,
+      waba_id: data.data?.waba_id || wabaId,
+      wabaId,
+      phone_number_id: data.data?.phone_number_id || phoneNumberId,
+      phoneNumberId,
+      ...(businessId ? { business_id: businessId } : {}),
+      event: signupEvent
+    },
+    coexistenceEnabled: signupEvent === whatsappBusinessAppOnboardingEvent
   };
 };
 
@@ -161,6 +191,9 @@ export default function OverviewPage() {
         signupSessionRef.current = null;
         pendingAuthResponseRef.current = null;
         toast.success("Meta integration connected");
+        if (data.data.subscribedAppsWarning) {
+          toast.warning(data.data.subscribedAppsWarning);
+        }
 
         await Promise.all([
           queryClient.invalidateQueries({
@@ -211,8 +244,20 @@ export default function OverviewPage() {
     setLastSignupError("");
     connectMetaMutate({
       code,
+      authResponse: { ...authResponse },
       wabaId: session.wabaId,
-      phoneNumberId: session.phoneNumberId
+      waba_id: session.wabaId,
+      whatsappBusinessAccountId: session.wabaId,
+      phoneNumberId: session.phoneNumberId,
+      phone_number_id: session.phoneNumberId,
+      businessPhoneNumberId: session.phoneNumberId,
+      businessId: session.businessId,
+      business_id: session.businessId,
+      event: session.event,
+      sessionEvent: session.event,
+      signupEvent: session.event,
+      data: session.data,
+      coexistenceEnabled: session.coexistenceEnabled
     });
   }, [connectMetaMutate]);
 
