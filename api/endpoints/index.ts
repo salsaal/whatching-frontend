@@ -16,6 +16,7 @@ const ORGANIZATIONS_BASE = "/organizations";
 export const ORGANIZATION_ENDPOINTS = {
   MY_ORGANIZATIONS: `${ORGANIZATIONS_BASE}/my-organizations`,
   GET_ORGANIZATION: `${ORGANIZATIONS_BASE}/`,
+  DELETE_ORGANIZATION: ORGANIZATIONS_BASE,
   SETUP: `${ORGANIZATIONS_BASE}/setup`,
   INTEGRATION_STATUS: `${ORGANIZATIONS_BASE}/integration-status`,
   CONNECT_META: `${ORGANIZATIONS_BASE}/connect-meta`,
@@ -91,6 +92,17 @@ export const BOT_ENDPOINTS = {
   CANVAS_VALIDATE: `${BOT_BASE}/canvas/validate`,
   CANVAS_PUBLISH: `${BOT_BASE}/canvas/publish`,
   CANVAS_PUBLISHED: `${BOT_BASE}/canvas/published`,
+  CANVASES: `${BOT_BASE}/canvases`,
+  CANVASES_DEACTIVATE: `${BOT_BASE}/canvases/deactivate`,
+  CANVAS_BY_ID: (canvasId: string) => `${BOT_BASE}/canvases/${canvasId}`,
+  CANVAS_DRAFT_BY_ID: (canvasId: string) =>
+    `${BOT_BASE}/canvases/${canvasId}/draft`,
+  CANVAS_VALIDATE_BY_ID: (canvasId: string) =>
+    `${BOT_BASE}/canvases/${canvasId}/validate`,
+  CANVAS_PUBLISH_BY_ID: (canvasId: string) =>
+    `${BOT_BASE}/canvases/${canvasId}/publish`,
+  CANVAS_ACTIVATE_BY_ID: (canvasId: string) =>
+    `${BOT_BASE}/canvases/${canvasId}/activate`,
   KNOWLEDGE_SOURCES: `${BOT_BASE}/knowledge-sources`,
   KNOWLEDGE_TEXT: `${BOT_BASE}/knowledge-sources/text`,
   KNOWLEDGE_UPLOAD: `${BOT_BASE}/knowledge-sources/upload`,
@@ -144,6 +156,17 @@ export const INSTAGRAM_ENDPOINTS = {
   CANVAS_VALIDATE: `${INSTAGRAM_BASE}/canvas/validate`,
   CANVAS_PUBLISH: `${INSTAGRAM_BASE}/canvas/publish`,
   CANVAS_PUBLISHED: `${INSTAGRAM_BASE}/canvas/published`,
+  CANVASES: `${INSTAGRAM_BASE}/canvases`,
+  CANVASES_DEACTIVATE: `${INSTAGRAM_BASE}/canvases/deactivate`,
+  CANVAS_BY_ID: (canvasId: string) => `${INSTAGRAM_BASE}/canvases/${canvasId}`,
+  CANVAS_DRAFT_BY_ID: (canvasId: string) =>
+    `${INSTAGRAM_BASE}/canvases/${canvasId}/draft`,
+  CANVAS_VALIDATE_BY_ID: (canvasId: string) =>
+    `${INSTAGRAM_BASE}/canvases/${canvasId}/validate`,
+  CANVAS_PUBLISH_BY_ID: (canvasId: string) =>
+    `${INSTAGRAM_BASE}/canvases/${canvasId}/publish`,
+  CANVAS_ACTIVATE_BY_ID: (canvasId: string) =>
+    `${INSTAGRAM_BASE}/canvases/${canvasId}/activate`,
   FLOWS: `${INSTAGRAM_BASE}/flows`,
   FLOW_BY_ID: (flowId: string) => `${INSTAGRAM_BASE}/flows/${flowId}`,
   FLOW_PUBLISH: (flowId: string) =>

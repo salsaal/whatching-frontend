@@ -16,6 +16,16 @@ export interface OrganizationResponse {
   };
 }
 
+export interface DeleteOrganizationResponse {
+  status: string;
+  message: string;
+  data: {
+    deletedOrganizationId: string;
+    deletedCounts?: Record<string, number>;
+    cloudinaryCleanup?: unknown;
+  };
+}
+
 export interface IntegrationStatusResponse {
   status: string;
   data: {

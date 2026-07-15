@@ -73,14 +73,30 @@ export interface BotCanvasEdge {
 
 export interface BotCanvasDraftState {
   version: number;
+  defaultTriggerKey?: string;
   nodes: BotCanvasNode[];
   edges: BotCanvasEdge[];
   updatedAt?: string;
+  publishedAt?: string;
   viewport?: {
     x: number;
     y: number;
     zoom: number;
   };
+}
+
+export interface BotCanvasRecord {
+  _id: string;
+  orgId: string;
+  name: string;
+  status: "active" | "inactive" | "archived";
+  draftState?: BotCanvasDraftState;
+  publishedState?: BotCanvasDraftState | null;
+  latestDraftVersionId?: string;
+  latestPublishedVersionId?: string;
+  activePublishedVersionId?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface BotSettings {
@@ -143,13 +159,17 @@ export interface BotStatus {
 
 export type BotSettingsResponse = ApiResponse<{ settings: BotSettings }>;
 export type BotCanvasResponse = ApiResponse<{
-  canvas?: {
+  canvasId?: string;
+  canvas?: BotCanvasRecord & {
     draftState?: BotCanvasDraftState;
-    publishedState?: BotCanvasDraftState;
+    publishedState?: BotCanvasDraftState | null;
     [key: string]: unknown;
   };
   draftState?: BotCanvasDraftState;
-  publishedState?: BotCanvasDraftState;
+  publishedState?: BotCanvasDraftState | null;
+}>;
+export type BotCanvasesResponse = ApiResponse<{
+  canvases: BotCanvasRecord[];
 }>;
 export type KnowledgeSourcesResponse = ApiResponse<{
   sources: KnowledgeSource[];

@@ -1,8 +1,11 @@
 "use client";
 
-import { Edit3, Plus, Search, Tag, Trash2, Upload, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Edit3, Instagram, Plus, Search, Tag, Trash2, Upload, X } from "lucide-react";
+import { ElementType, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { AxiosError } from "axios";
+import { toast } from "sonner";
+import { FaWhatsapp } from "react-icons/fa";
 
 import {
   bulkDeleteSubscribers,
@@ -50,8 +53,21 @@ const formatDate = (date?: string) =>
       }).format(new Date(date))
     : "-";
 
+type ContactChannel = "all" | "whatsapp" | "instagram";
+
+const contactChannelOptions: Array<{
+  value: ContactChannel;
+  label: string;
+  icon: ElementType;
+}> = [
+  { value: "all", label: "All", icon: Tag },
+  { value: "whatsapp", label: "WhatsApp", icon: FaWhatsapp },
+  { value: "instagram", label: "Instagram", icon: Instagram }
+];
+
 export default function ContactsPage() {
   const [query, setQuery] = useState("");
+  const [channel, setChannel] = useState<ContactChannel>("all");
   const [selectedSubscriber, setSelectedSubscriber] =
     useState<Subscriber | null>(null);
   const [isSubscriberModalOpen, setIsSubscriberModalOpen] = useState(false);
@@ -67,8 +83,8 @@ export default function ContactsPage() {
   const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ["subscribers"],
-    queryFn: getAllSubscribers,
+    queryKey: ["subscribers", channel],
+    queryFn: () => getAllSubscribers({ channel }),
     refetchOnMount: "always"
   });
 
@@ -83,9 +99,10 @@ export default function ContactsPage() {
   });
 
   const subscribers = useMemo(
-    () => data?.data.subscribers || [],
-    [data?.data.subscribers]
+    () => data?.data?.subscribers || [],
+    [data?.data?.subscribers]
   );
+  const summary = data?.data?.summary;
   const availableTags = useMemo(
     () => tagsData?.data.tags || [],
     [tagsData?.data.tags]
@@ -105,6 +122,8 @@ export default function ContactsPage() {
           subscriber.firstName,
           subscriber.lastName,
           subscriber.waId,
+          subscriber.instagramUsername,
+          subscriber.instagramUserId,
           subscriber.tags.join(",")
         ]
           .filter(Boolean)
@@ -161,7 +180,12 @@ export default function ContactsPage() {
       const trimmedTag = tag.trim();
       if (!trimmedTag) return null;
 
-      await createTag(trimmedTag);
+      try {
+        await createTag(trimmedTag);
+      } catch (error) {
+        const latestTags = await getTags();
+        if (!latestTags.data.tags.includes(trimmedTag)) throw error;
+      }
       if (editingTag && editingTag !== trimmedTag) {
         await deleteTag(editingTag);
       }
@@ -173,6 +197,26 @@ export default function ContactsPage() {
       setEditingTag(null);
       setIsTagsModalOpen(false);
       refetchTags();
+      toast.success(editingTag ? "Tag updated." : "Tag added.");
+    },
+    onError: async (error: AxiosError<{ message?: string }>) => {
+      const trimmedTag = tagInput.trim();
+      if (trimmedTag) {
+        try {
+          const latestTags = await getTags();
+          if (latestTags.data.tags.includes(trimmedTag)) {
+            setTagInput("");
+            setEditingTag(null);
+            setIsTagsModalOpen(false);
+            refetchTags();
+            toast.success(editingTag ? "Tag updated." : "Tag added.");
+            return;
+          }
+        } catch {
+          // Fall through to the original error message.
+        }
+      }
+      toast.error(error.response?.data?.message || "Unable to save tag.");
     }
   });
 
@@ -294,43 +338,77 @@ export default function ContactsPage() {
         </section>
 
         <section className="rounded-lg bg-white p-4 shadow-xs">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="relative w-full lg:max-w-md">
+          <div className="grid gap-4 lg:grid-cols-[360px_minmax(0,1fr)] lg:items-center">
+            <div className="grid w-full grid-cols-3 gap-1 rounded-xl bg-muted p-1">
+              {contactChannelOptions.map((option) => {
+                const Icon = option.icon;
+                const count =
+                  option.value === "whatsapp"
+                    ? summary?.whatsapp
+                    : option.value === "instagram"
+                      ? summary?.instagram
+                      : summary?.total;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => {
+                      setChannel(option.value);
+                      setSelectedIds([]);
+                    }}
+                    className={cn(
+                      "flex cursor-pointer items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-medium text-muted-foreground transition",
+                      channel === option.value &&
+                        "bg-white text-foreground shadow-xs"
+                    )}
+                  >
+                    <Icon className="size-3.5" />
+                    {option.label}
+                    {typeof count === "number" && (
+                      <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px]">
+                        {count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="relative w-full">
               <Search className="absolute left-3 top-3.5 size-4 text-muted-foreground" />
               <Input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search by name, phone, tag"
+                placeholder="Search by name, phone, Instagram, or tag"
                 className="h-12 rounded-sm border-0 bg-muted/70 pl-9 shadow-none"
               />
             </div>
+          </div>
 
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              {isTagsLoading ? (
-                <Skeleton className="h-10 w-32 shrink-0" />
-              ) : availableTags.length ? (
-                availableTags.map((item) => (
-                  <button
-                    key={item}
-                    type="button"
-                    onClick={() => toggleTagFilter(item)}
-                    className={cn(
-                      "inline-flex h-10 shrink-0 cursor-pointer items-center gap-2 rounded-sm px-3 text-sm font-medium text-muted-foreground transition",
-                      "hover:bg-accent hover:text-accent-foreground",
-                      selectedTagFilters.includes(item) &&
-                        "bg-primary/10 text-primary shadow-xs"
-                    )}
-                  >
-                    <Tag className="size-4" />
-                    {item}
-                  </button>
-                ))
-              ) : (
-                <span className="inline-flex h-10 items-center text-sm text-muted-foreground">
-                  No tags found
-                </span>
-              )}
-            </div>
+          <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
+            {isTagsLoading ? (
+              <Skeleton className="h-10 w-32 shrink-0" />
+            ) : availableTags.length ? (
+              availableTags.map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => toggleTagFilter(item)}
+                  className={cn(
+                    "inline-flex h-10 shrink-0 cursor-pointer items-center gap-2 rounded-sm px-3 text-sm font-medium text-muted-foreground transition",
+                    "hover:bg-accent hover:text-accent-foreground",
+                    selectedTagFilters.includes(item) &&
+                      "bg-primary/10 text-primary shadow-xs"
+                  )}
+                >
+                  <Tag className="size-4" />
+                  {item}
+                </button>
+              ))
+            ) : (
+              <span className="inline-flex h-10 items-center text-sm text-muted-foreground">
+                No tags found
+              </span>
+            )}
           </div>
 
           <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -381,7 +459,7 @@ export default function ContactsPage() {
                   <tr className="text-left text-primary">
                     <th className="w-12 p-4"></th>
                     <th className="p-4">Name</th>
-                    <th className="p-4">Phone</th>
+                    <th className="p-4">Contact</th>
                     <th className="p-4">Tags</th>
                     <th className="p-4">Opt-in</th>
                     <th className="p-4">Last interaction</th>
@@ -404,7 +482,23 @@ export default function ContactsPage() {
                           .filter(Boolean)
                           .join(" ") || "-"}
                       </td>
-                      <td className="p-4">{subscriber.phoneNumber}</td>
+                      <td className="p-4">
+                        <div className="space-y-1">
+                          {subscriber.phoneNumber && (
+                            <p>{subscriber.phoneNumber}</p>
+                          )}
+                          {(subscriber.instagramUsername ||
+                            subscriber.instagramUserId) && (
+                            <p className="text-xs text-muted-foreground">
+                              @{subscriber.instagramUsername ||
+                                subscriber.instagramUserId}
+                            </p>
+                          )}
+                          {!subscriber.phoneNumber &&
+                            !subscriber.instagramUsername &&
+                            !subscriber.instagramUserId && "-"}
+                        </div>
+                      </td>
                       <td className="p-4">
                         <div className="flex max-w-md flex-wrap gap-2">
                           {subscriber.tags.length ? (

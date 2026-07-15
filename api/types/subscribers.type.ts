@@ -47,6 +47,14 @@ export interface SubscribersResponse {
   };
   data: {
     subscribers: Subscriber[];
+    summary?: {
+      total: number;
+      optedIn: number;
+      optedOut: number;
+      whatsapp: number;
+      instagram: number;
+      both: number;
+    };
   };
 }
 

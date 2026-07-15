@@ -240,7 +240,7 @@ export default function BroadcastsPage() {
   });
   const { data: subscribersData } = useQuery({
     queryKey: ["subscribers"],
-    queryFn: getAllSubscribers
+    queryFn: () => getAllSubscribers()
   });
   const { data: tagsData } = useQuery({
     queryKey: ["subscriber-tags"],

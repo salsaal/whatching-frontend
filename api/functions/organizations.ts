@@ -2,6 +2,7 @@ import api from "../axiosInstance";
 import { ORGANIZATION_ENDPOINTS } from "../endpoints";
 import {
   ConnectMetaPayload,
+  DeleteOrganizationResponse,
   EmbeddedSignupConnectPayload,
   IntegrationStatusResponse,
   AddAgentPayload,
@@ -34,6 +35,16 @@ export const setupOrganization = async (payload: {
   const res = await api.post<OrganizationResponse>(
     ORGANIZATION_ENDPOINTS.SETUP,
     payload
+  );
+  return res.data;
+};
+
+export const deleteOrganization = async (payload: {
+  confirmation: string;
+}): Promise<DeleteOrganizationResponse> => {
+  const res = await api.delete<DeleteOrganizationResponse>(
+    ORGANIZATION_ENDPOINTS.DELETE_ORGANIZATION,
+    { data: payload }
   );
   return res.data;
 };

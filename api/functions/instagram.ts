@@ -3,10 +3,13 @@ import { INSTAGRAM_ENDPOINTS } from "../endpoints";
 import {
   ConnectInstagramManualPayload,
   InstagramAutomationLogsResponse,
+  InstagramCanvasDetailResponse,
   InstagramCanvasPublishResponse,
   InstagramCanvasResponse,
+  InstagramCanvasRecord,
   InstagramCanvasState,
   InstagramCanvasValidationResponse,
+  InstagramCanvasesResponse,
   InstagramCommentRulePayload,
   InstagramCommentRuleResponse,
   InstagramCommentRulesResponse,
@@ -126,6 +129,102 @@ export const publishInstagramCanvas = async (
   const res = await api.post<InstagramCanvasPublishResponse>(
     INSTAGRAM_ENDPOINTS.CANVAS_PUBLISH,
     draftState ? { draftState } : {}
+  );
+  return res.data;
+};
+
+export const getInstagramCanvases =
+  async (): Promise<InstagramCanvasesResponse> => {
+    const res = await api.get<InstagramCanvasesResponse>(
+      INSTAGRAM_ENDPOINTS.CANVASES
+    );
+    return res.data;
+  };
+
+export const createInstagramCanvas = async (
+  payload: { name?: string } = {}
+): Promise<{ status: string; data: { canvas: InstagramCanvasRecord } }> => {
+  const res = await api.post<{ status: string; data: { canvas: InstagramCanvasRecord } }>(
+    INSTAGRAM_ENDPOINTS.CANVASES,
+    payload
+  );
+  return res.data;
+};
+
+export const getInstagramCanvas = async (
+  canvasId: string
+): Promise<InstagramCanvasDetailResponse> => {
+  const res = await api.get<InstagramCanvasDetailResponse>(
+    INSTAGRAM_ENDPOINTS.CANVAS_BY_ID(canvasId)
+  );
+  return res.data;
+};
+
+export const updateInstagramCanvas = async ({
+  canvasId,
+  name
+}: {
+  canvasId: string;
+  name: string;
+}): Promise<{ status: string; data: { canvas: InstagramCanvasRecord } }> => {
+  const res = await api.patch<{ status: string; data: { canvas: InstagramCanvasRecord } }>(
+    INSTAGRAM_ENDPOINTS.CANVAS_BY_ID(canvasId),
+    { name }
+  );
+  return res.data;
+};
+
+export const saveInstagramCanvasDraftById = async ({
+  canvasId,
+  draftState
+}: {
+  canvasId: string;
+  draftState: InstagramCanvasState;
+}): Promise<InstagramCanvasResponse> => {
+  const res = await api.put<InstagramCanvasResponse>(
+    INSTAGRAM_ENDPOINTS.CANVAS_DRAFT_BY_ID(canvasId),
+    { draftState }
+  );
+  return res.data;
+};
+
+export const validateInstagramCanvasById = async (
+  canvasId: string
+): Promise<InstagramCanvasValidationResponse> => {
+  const res = await api.post<InstagramCanvasValidationResponse>(
+    INSTAGRAM_ENDPOINTS.CANVAS_VALIDATE_BY_ID(canvasId)
+  );
+  return res.data;
+};
+
+export const publishInstagramCanvasById = async ({
+  canvasId,
+  draftState
+}: {
+  canvasId: string;
+  draftState?: InstagramCanvasState;
+}): Promise<InstagramCanvasPublishResponse> => {
+  const res = await api.post<InstagramCanvasPublishResponse>(
+    INSTAGRAM_ENDPOINTS.CANVAS_PUBLISH_BY_ID(canvasId),
+    draftState ? { draftState } : {}
+  );
+  return res.data;
+};
+
+export const activateInstagramCanvas = async (
+  canvasId: string
+): Promise<{ status: string; data: { canvas: InstagramCanvasRecord } }> => {
+  const res = await api.post<{ status: string; data: { canvas: InstagramCanvasRecord } }>(
+    INSTAGRAM_ENDPOINTS.CANVAS_ACTIVATE_BY_ID(canvasId)
+  );
+  return res.data;
+};
+
+export const deleteInstagramCanvas = async (
+  canvasId: string
+): Promise<{ status: string; data: { canvas: InstagramCanvasRecord } }> => {
+  const res = await api.delete<{ status: string; data: { canvas: InstagramCanvasRecord } }>(
+    INSTAGRAM_ENDPOINTS.CANVAS_BY_ID(canvasId)
   );
   return res.data;
 };

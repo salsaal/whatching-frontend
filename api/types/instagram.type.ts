@@ -195,11 +195,56 @@ export interface InstagramCanvasEdge {
 
 export interface InstagramCanvasState {
   version: number;
+  defaultTriggerKey?: string;
   nodes: InstagramCanvasNode[];
   edges: InstagramCanvasEdge[];
   viewport?: { x: number; y: number; zoom: number };
   updatedAt?: string;
   updatedBy?: string;
+}
+
+export type InstagramCanvasStatus = "active" | "inactive" | "archived";
+
+export interface InstagramCanvasRecord {
+  _id: string;
+  orgId?: string;
+  name: string;
+  status: InstagramCanvasStatus;
+  latestDraftVersionId?: string;
+  latestPublishedVersionId?: string;
+  activePublishedVersionId?: string;
+  draftState?: InstagramCanvasState;
+  publishedState?: InstagramCanvasState | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface InstagramCanvasVersion {
+  _id: string;
+  canvasId: string;
+  type: "draft" | "published";
+  versionNumber: number;
+  state?: InstagramCanvasState;
+  publishedState?: InstagramCanvasState;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface InstagramCanvasesResponse {
+  status: string;
+  results: number;
+  data: {
+    canvases: InstagramCanvasRecord[];
+  };
+}
+
+export interface InstagramCanvasDetailResponse {
+  status: string;
+  data: {
+    canvas: InstagramCanvasRecord;
+    draftVersion?: InstagramCanvasVersion | null;
+    latestPublishedVersion?: InstagramCanvasVersion | null;
+  };
 }
 
 export interface InstagramCanvasResponse {

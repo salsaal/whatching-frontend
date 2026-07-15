@@ -30,6 +30,16 @@ import {
   getOrganization,
   purchaseSubscription
 } from "@/api/functions/organizations";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -123,6 +133,7 @@ export default function AppLayout({
   const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isPlansOpen, setIsPlansOpen] = useState(false);
+  const [isLogoutOpen, setIsLogoutOpen] = useState(false);
   const logout = useAuthStore((state) => state.logout);
   const {
     activeOrganization,
@@ -206,7 +217,7 @@ export default function AppLayout({
                   ? "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground",
               !mobile &&
-                "lg:justify-center lg:group-hover/sidebar:justify-start"
+                "lg:justify-center lg:gap-0 lg:px-0 lg:group-hover/sidebar:justify-start lg:group-hover/sidebar:gap-3 lg:group-hover/sidebar:px-3"
             )}
             title={item.label}
           >
@@ -228,6 +239,7 @@ export default function AppLayout({
   const handleLogout = () => {
     logout();
     clearOrganizations();
+    setIsLogoutOpen(false);
     setIsMobileMenuOpen(false);
     router.push("/auth/login");
   };
@@ -246,7 +258,8 @@ export default function AppLayout({
             : mobile
               ? "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
               : "text-muted-foreground hover:bg-muted hover:text-foreground",
-          !mobile && "lg:justify-center lg:group-hover/sidebar:justify-start"
+          !mobile &&
+            "lg:justify-center lg:gap-0 lg:px-0 lg:group-hover/sidebar:justify-start lg:group-hover/sidebar:gap-3 lg:group-hover/sidebar:px-3"
         )}
       >
         <UserRound className="size-5 shrink-0" />
@@ -261,13 +274,14 @@ export default function AppLayout({
       </Link>
       <button
         type="button"
-        onClick={handleLogout}
+        onClick={() => setIsLogoutOpen(true)}
         className={cn(
           "flex h-11 w-full cursor-pointer items-center gap-3 rounded-sm px-3 text-sm font-medium transition-colors",
           mobile
             ? "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
             : "text-muted-foreground hover:bg-muted hover:text-foreground",
-          !mobile && "lg:justify-center lg:group-hover/sidebar:justify-start"
+          !mobile &&
+            "lg:justify-center lg:gap-0 lg:px-0 lg:group-hover/sidebar:justify-start lg:group-hover/sidebar:gap-3 lg:group-hover/sidebar:px-3"
         )}
       >
         <LogOut className="size-5 shrink-0" />
@@ -286,14 +300,14 @@ export default function AppLayout({
   return (
     <div className="min-h-screen bg-[#f7faf8] text-foreground">
       <aside className="group/sidebar fixed inset-y-0 left-0 z-30 hidden w-20 overflow-hidden bg-white shadow-xs transition-all duration-200 hover:w-64 lg:block">
-        <div className="flex h-18 items-center px-4">
+        <div className="relative flex h-18 items-center px-4">
           {/* Logo */}
-          <div className="opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-200">
+          <div className="w-[150px] opacity-0 transition-opacity duration-200 group-hover/sidebar:opacity-100">
             <Image src={assets.logo} alt="Whatching" width={150} height={42} />
           </div>
 
           {/* Icon */}
-          <div className="absolute left-4 opacity-100 group-hover/sidebar:opacity-0 transition-opacity duration-200">
+          <div className="absolute left-1/2 -translate-x-1/2 opacity-100 transition-opacity duration-200 group-hover/sidebar:opacity-0">
             <div className="flex size-10 items-center justify-center rounded-sm bg-primary/10">
               <MessageCircle className="size-5 text-primary" />
             </div>
@@ -493,6 +507,27 @@ export default function AppLayout({
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={isLogoutOpen} onOpenChange={setIsLogoutOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Log out?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You will leave this workspace and need to sign in again before
+              managing conversations, flows, broadcasts, or settings.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-white hover:bg-destructive/90"
+              onClick={handleLogout}
+            >
+              Log out
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -10,8 +10,16 @@ import {
   TagsResponse
 } from "../types/subscribers.type";
 
-export const getAllSubscribers = async (): Promise<SubscribersResponse> => {
-  const res = await api.get<SubscribersResponse>(SUBSCRIBER_ENDPOINTS.GET_ALL);
+export const getAllSubscribers = async (
+  params: { channel?: "all" | "whatsapp" | "instagram" } = {}
+): Promise<SubscribersResponse> => {
+  const res = await api.get<SubscribersResponse>(SUBSCRIBER_ENDPOINTS.GET_ALL, {
+    params: {
+      ...(params.channel && params.channel !== "all"
+        ? { channel: params.channel }
+        : {})
+    }
+  });
   return res.data;
 };
 

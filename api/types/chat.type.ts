@@ -92,6 +92,7 @@ export interface ChatMessage {
   orgId: string;
   conversationId: string;
   subscriberId: string;
+  metaMessageId?: string;
   direction: MessageDirection;
   source: MessageSource;
   senderUserId?: ChatUser | null;
@@ -133,6 +134,9 @@ export interface ChatMessage {
   replyContext?: {
     messageId: string | null;
     metaMessageId: string | null;
+    previewText?: string | null;
+    direction?: string | null;
+    source?: string | null;
   } | null;
   errorMessage?: string;
   sentAt?: string;

@@ -9,6 +9,7 @@ import {
   Handle,
   MiniMap,
   Node,
+  NodeChange,
   NodeProps,
   Position,
   ReactFlow,
@@ -18,6 +19,7 @@ import {
   useUpdateNodeInternals
 } from "@xyflow/react";
 import {
+  ArrowLeft,
   AlertCircle,
   CheckCircle2,
   Clock3,
@@ -44,26 +46,36 @@ import {
 } from "lucide-react";
 import { DragEvent, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/router";
 import { toast } from "sonner";
 
 import {
   connectInstagramManual,
+  activateInstagramCanvas,
+  createInstagramCanvas,
+  deleteInstagramCanvas,
   createInstagramCommentRule,
   deleteInstagramCommentRule,
   disableInstagramCommentRule,
   enableInstagramCommentRule,
   getInstagramAutomationLogs,
+  getInstagramCanvas,
   getInstagramCanvasDraft,
   getInstagramCanvasPublished,
+  getInstagramCanvases,
   getInstagramCommentRules,
   getInstagramFlows,
   getInstagramMedia,
   getInstagramStatus,
+  publishInstagramCanvasById,
   publishInstagramCanvas,
+  saveInstagramCanvasDraftById,
   saveInstagramCanvasDraft,
   syncInstagramMedia,
   syncInstagramStatus,
+  updateInstagramCanvas,
   updateInstagramCommentRule,
+  validateInstagramCanvasById,
   validateInstagramCanvas
 } from "@/api/functions/instagram";
 import {
@@ -125,6 +137,7 @@ interface InstagramNodeData extends Record<string, unknown> {
   actions: InstagramCanvasAction[];
   locked?: boolean;
   invalid?: boolean;
+  metadata?: Record<string, unknown>;
 }
 
 type InstagramFlowNode = Node<InstagramNodeData, "instagramBlock">;
@@ -246,18 +259,31 @@ const getRawNodeData = (node: InstagramCanvasNode): InstagramNodeData => {
     content: data.content || node.content || {},
     actions: data.actions || node.actions || [],
     locked: Boolean(data.locked || node.locked),
-    invalid: false
+    invalid: false,
+    metadata: data.metadata || node.metadata || {}
   };
 };
 
 const toFlowNodes = (state?: InstagramCanvasState | null): InstagramFlowNode[] =>
   (state?.nodes || []).map((node, index) => {
     const data = getRawNodeData(node);
+    const triggerKey = data.triggerKey ? normalizeKey(data.triggerKey) : "";
+    const defaultTriggerKey = state?.defaultTriggerKey
+      ? normalizeKey(state.defaultTriggerKey)
+      : "";
     return {
       id: node.id || data.triggerKey || `ig_node_${index + 1}`,
       type: "instagramBlock",
       position: node.position || { x: 120 + index * 80, y: 120 + index * 100 },
-      data
+      data: {
+        ...data,
+        metadata: {
+          ...(data.metadata || {}),
+          isDefault:
+            Boolean(defaultTriggerKey && triggerKey === defaultTriggerKey) ||
+            Boolean(data.metadata?.isDefault)
+        }
+      }
     };
   });
 
@@ -387,29 +413,48 @@ const toCanvasState = (
   nodes: InstagramFlowNode[],
   edges: Edge[],
   version = 1
-): InstagramCanvasState => ({
-  version,
-  nodes: nodes.map((node) => {
+): InstagramCanvasState => {
+  const defaultNode =
+    nodes.find((node) =>
+      Boolean((node.data.metadata as Record<string, unknown> | undefined)?.isDefault)
+    ) || nodes[0];
+  const defaultTriggerKey = defaultNode?.data.triggerKey
+    ? normalizeKey(defaultNode.data.triggerKey)
+    : defaultNode?.id
+      ? normalizeKey(defaultNode.id)
+      : undefined;
+
+  return {
+    version,
+    defaultTriggerKey,
+    nodes: nodes.map((node) => {
     const actions = deriveActions(node.data.blockType, node.data.content);
+    const triggerKey = node.data.triggerKey
+      ? normalizeKey(node.data.triggerKey)
+      : node.id === defaultNode?.id && defaultTriggerKey
+        ? defaultTriggerKey
+        : undefined;
     return {
       id: node.id,
       type: "instagramBlock",
       position: node.position,
       data: {
         name: node.data.name,
-        triggerType: node.data.triggerType,
-        triggerKey: node.data.triggerKey
-          ? normalizeKey(node.data.triggerKey)
-          : undefined,
+        triggerType:
+          node.id === defaultNode?.id ? "default" : node.data.triggerType,
+        triggerKey,
         blockType: node.data.blockType,
         content: node.data.content,
         actions,
         locked: node.data.locked,
-        metadata: {}
+        metadata: {
+          ...(node.data.metadata || {}),
+          isDefault: node.id === defaultNode?.id
+        }
       }
     };
-  }),
-  edges: edges.map((edge) => ({
+    }),
+    edges: edges.map((edge) => ({
     id: edge.id,
     source: edge.source,
     target: edge.target,
@@ -422,8 +467,9 @@ const toCanvasState = (
       replyId: edge.sourceHandle || (edge.data?.replyId as string)
     }
   })),
-  viewport: { x: 0, y: 0, zoom: 1 }
-});
+    viewport: { x: 0, y: 0, zoom: 1 }
+  };
+};
 
 function InstagramBlockNode({
   id,
@@ -433,6 +479,9 @@ function InstagramBlockNode({
   const updateNodeInternals = useUpdateNodeInternals();
   const meta = blockMeta[data.blockType] || blockMeta.send_text;
   const Icon = meta.icon;
+  const isDefault = Boolean(
+    (data.metadata as Record<string, unknown> | undefined)?.isDefault
+  );
   const actions = useMemo(
     () =>
       deriveActions(data.blockType, data.content).filter((action) =>
@@ -454,9 +503,15 @@ function InstagramBlockNode({
       className={cn(
         "relative min-w-72 max-w-80 rounded-xl border bg-white shadow-sm transition",
         selected && "border-pink-500 shadow-md ring-2 ring-pink-500/15",
+        isDefault && "border-2 border-pink-600 shadow-md",
         data.invalid && "border-destructive ring-2 ring-destructive/15"
       )}
     >
+      {isDefault && (
+        <span className="absolute left-1/2 top-0 z-10 -translate-x-1/2 -translate-y-1/2 rounded-full bg-pink-600 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-white shadow">
+          Default
+        </span>
+      )}
       <Handle
         id="in"
         type="target"
@@ -539,7 +594,16 @@ const emptyRule: InstagramCommentRulePayload = {
   mediaIds: []
 };
 
-export default function InstagramPage() {
+type InstagramPageProps = {
+  canvasOnly?: boolean;
+  forcedCanvasId?: string;
+};
+
+export function InstagramPage({
+  canvasOnly = false,
+  forcedCanvasId = ""
+}: InstagramPageProps = {}) {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const activeOrganization = useOrganizationStore(
@@ -547,6 +611,7 @@ export default function InstagramPage() {
   );
   const activeOrgId = activeOrganization?._id;
   const [activeTab, setActiveTab] = useState<PageTab>("canvas");
+  const [selectedCanvasId, setSelectedCanvasId] = useState(forcedCanvasId);
   const [canvasMode, setCanvasMode] = useState<CanvasMode>("draft");
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState<InstagramFlowNode>([]);
@@ -575,15 +640,36 @@ export default function InstagramPage() {
     queryFn: getInstagramStatus,
     enabled: Boolean(activeOrgId)
   });
+  const { data: canvasesData, isLoading: isCanvasesLoading } = useQuery({
+    queryKey: ["instagram-canvases", activeOrgId],
+    queryFn: getInstagramCanvases,
+    enabled: Boolean(activeOrgId)
+  });
+  const canvases = canvasesData?.data.canvases || [];
+  useEffect(() => {
+    if (forcedCanvasId && selectedCanvasId !== forcedCanvasId) {
+      setSelectedCanvasId(forcedCanvasId);
+      return;
+    }
+    if (forcedCanvasId || selectedCanvasId || !canvases.length) return;
+    setSelectedCanvasId(canvases.find((canvas) => canvas.status === "active")?._id || canvases[0]._id);
+  }, [canvases, forcedCanvasId, selectedCanvasId]);
+  const selectedCanvas = canvases.find((canvas) => canvas._id === selectedCanvasId) || null;
+  const { data: canvasDetailData, isLoading: isCanvasDetailLoading } = useQuery({
+    queryKey: ["instagram-canvas", activeOrgId, selectedCanvasId],
+    queryFn: () => getInstagramCanvas(selectedCanvasId),
+    enabled: Boolean(activeOrgId && selectedCanvasId)
+  });
+  const canvasDetail = canvasDetailData?.data.canvas;
   const { data: draftData, isLoading: isDraftLoading } = useQuery({
     queryKey: ["instagram-canvas-draft", activeOrgId],
     queryFn: getInstagramCanvasDraft,
-    enabled: Boolean(activeOrgId)
+    enabled: Boolean(activeOrgId && !selectedCanvasId)
   });
   const { data: publishedData } = useQuery({
     queryKey: ["instagram-canvas-published", activeOrgId],
     queryFn: getInstagramCanvasPublished,
-    enabled: Boolean(activeOrgId)
+    enabled: Boolean(activeOrgId && !selectedCanvasId)
   });
   const { data: flowsData } = useQuery({
     queryKey: ["instagram-flows", activeOrgId],
@@ -618,8 +704,8 @@ export default function InstagramPage() {
 
   const activeCanvasState =
     canvasMode === "draft"
-      ? draftData?.data.draftState
-      : publishedData?.data.publishedState;
+      ? canvasDetail?.draftState || draftData?.data.draftState
+      : canvasDetail?.publishedState || publishedData?.data.publishedState;
   const selectedNode = useMemo(
     () => nodes.find((node) => node.id === selectedNodeId) || null,
     [nodes, selectedNodeId]
@@ -629,6 +715,8 @@ export default function InstagramPage() {
   const rules = rulesData?.data.rules || [];
   const media = mediaData?.data.media || [];
   const logs = logsData?.data.logs || [];
+  const selectedCanvasVersion =
+    canvasDetail?.draftState?.version || draftData?.data.draftState?.version || 1;
 
   useEffect(() => {
     setNodes(toFlowNodes(activeCanvasState));
@@ -665,18 +753,24 @@ export default function InstagramPage() {
   });
 
   const saveDraftMutation = useMutation({
-    mutationFn: () =>
-      saveInstagramCanvasDraft(
-        toCanvasState(nodes, edges, draftData?.data.draftState?.version || 1)
-      ),
+    mutationFn: () => {
+      const state = toCanvasState(nodes, edges, selectedCanvasVersion);
+      return selectedCanvasId
+        ? saveInstagramCanvasDraftById({ canvasId: selectedCanvasId, draftState: state })
+        : saveInstagramCanvasDraft(state);
+    },
     onSuccess: async () => {
-      const validation = await validateInstagramCanvas();
+      const validation = selectedCanvasId
+        ? await validateInstagramCanvasById(selectedCanvasId)
+        : await validateInstagramCanvas();
       setValidationMessages(validation.data.validation.errors);
       toast.success(
         validation.data.validation.valid
           ? "Draft saved and validated"
           : "Draft saved with validation issues"
       );
+      queryClient.invalidateQueries({ queryKey: ["instagram-canvases"] });
+      queryClient.invalidateQueries({ queryKey: ["instagram-canvas"] });
       queryClient.invalidateQueries({ queryKey: ["instagram-canvas-draft"] });
     },
     onError: (error) => toast.error(getErrorMessage(error))
@@ -686,9 +780,16 @@ export default function InstagramPage() {
     if (canvasMode !== "draft") return;
 
     try {
-      await saveInstagramCanvasDraft(
-        toCanvasState(nodes, edges, draftData?.data.draftState?.version || 1)
-      );
+      const state = toCanvasState(nodes, edges, selectedCanvasVersion);
+      if (selectedCanvasId) {
+        await saveInstagramCanvasDraftById({
+          canvasId: selectedCanvasId,
+          draftState: state
+        });
+      } else {
+        await saveInstagramCanvasDraft(state);
+      }
+      queryClient.invalidateQueries({ queryKey: ["instagram-canvas"] });
       queryClient.invalidateQueries({ queryKey: ["instagram-canvas-draft"] });
       toast.success("Draft saved before opening media library");
     } catch (error) {
@@ -697,14 +798,18 @@ export default function InstagramPage() {
     }
   }, [
     canvasMode,
-    draftData?.data.draftState?.version,
     edges,
     nodes,
-    queryClient
+    queryClient,
+    selectedCanvasId,
+    selectedCanvasVersion
   ]);
 
   const validateMutation = useMutation({
-    mutationFn: validateInstagramCanvas,
+    mutationFn: () =>
+      selectedCanvasId
+        ? validateInstagramCanvasById(selectedCanvasId)
+        : validateInstagramCanvas(),
     onSuccess: (data) => {
       setValidationMessages(data.data.validation.errors);
       toast[data.data.validation.valid ? "success" : "error"](
@@ -718,17 +823,22 @@ export default function InstagramPage() {
 
   const publishMutation = useMutation({
     mutationFn: async () => {
-      const state = toCanvasState(
-        nodes,
-        edges,
-        draftData?.data.draftState?.version || 1
-      );
+      const state = toCanvasState(nodes, edges, selectedCanvasVersion);
+      if (selectedCanvasId) {
+        await saveInstagramCanvasDraftById({
+          canvasId: selectedCanvasId,
+          draftState: state
+        });
+        return publishInstagramCanvasById({ canvasId: selectedCanvasId, draftState: state });
+      }
       await saveInstagramCanvasDraft(state);
       return publishInstagramCanvas(state);
     },
     onSuccess: (data) => {
       setValidationMessages(data.data.validation.warnings || []);
       toast.success("Instagram canvas published");
+      queryClient.invalidateQueries({ queryKey: ["instagram-canvases"] });
+      queryClient.invalidateQueries({ queryKey: ["instagram-canvas"] });
       queryClient.invalidateQueries({ queryKey: ["instagram-canvas-draft"] });
       queryClient.invalidateQueries({
         queryKey: ["instagram-canvas-published"]
@@ -740,6 +850,52 @@ export default function InstagramPage() {
       setValidationMessages([message]);
       toast.error(message);
     }
+  });
+
+  const createCanvasMutation = useMutation({
+    mutationFn: () =>
+      createInstagramCanvas({
+        name: `Instagram Canvas ${canvases.length + 1}`
+      }),
+    onSuccess: (data) => {
+      toast.success("Instagram canvas created");
+      setSelectedCanvasId(data.data.canvas._id);
+      setCanvasMode("draft");
+      queryClient.invalidateQueries({ queryKey: ["instagram-canvases"] });
+      if (!canvasOnly) router.push(`/instagram/${data.data.canvas._id}`);
+    },
+    onError: (error) => toast.error(getErrorMessage(error))
+  });
+
+  const activateCanvasMutation = useMutation({
+    mutationFn: activateInstagramCanvas,
+    onSuccess: () => {
+      toast.success("Instagram canvas activated");
+      queryClient.invalidateQueries({ queryKey: ["instagram-canvases"] });
+      queryClient.invalidateQueries({ queryKey: ["instagram-canvas"] });
+    },
+    onError: (error) => toast.error(getErrorMessage(error))
+  });
+
+  const deleteCanvasMutation = useMutation({
+    mutationFn: deleteInstagramCanvas,
+    onSuccess: () => {
+      toast.success("Instagram canvas deleted");
+      setSelectedCanvasId("");
+      queryClient.invalidateQueries({ queryKey: ["instagram-canvases"] });
+    },
+    onError: (error) => toast.error(getErrorMessage(error))
+  });
+
+  const renameCanvasMutation = useMutation({
+    mutationFn: ({ canvasId, name }: { canvasId: string; name: string }) =>
+      updateInstagramCanvas({ canvasId, name }),
+    onSuccess: () => {
+      toast.success("Instagram canvas renamed");
+      queryClient.invalidateQueries({ queryKey: ["instagram-canvases"] });
+      queryClient.invalidateQueries({ queryKey: ["instagram-canvas"] });
+    },
+    onError: (error) => toast.error(getErrorMessage(error))
   });
 
   const saveRuleMutation = useMutation({
@@ -828,6 +984,34 @@ export default function InstagramPage() {
     [canvasMode, selectedNodeId, setNodes]
   );
 
+  const setSelectedNodeAsDefault = useCallback(() => {
+    if (!selectedNode) return;
+    if (canvasMode === "published") {
+      toast.error("Published canvas is read-only. Switch to Draft to edit.");
+      return;
+    }
+    setNodes((current) =>
+      current.map((node) => {
+        const isDefault = node.id === selectedNode.id;
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            triggerType: isDefault ? "default" : node.data.triggerType === "default" ? "manual_start" : node.data.triggerType,
+            triggerKey:
+              isDefault && !node.data.triggerKey
+                ? normalizeKey(node.data.name || node.id)
+                : node.data.triggerKey,
+            metadata: {
+              ...(node.data.metadata || {}),
+              isDefault
+            }
+          }
+        };
+      })
+    );
+  }, [canvasMode, selectedNode, setNodes]);
+
   const updateContent = useCallback(
     (patch: Partial<InstagramCanvasContent>) => {
       updateSelectedNode({
@@ -847,6 +1031,9 @@ export default function InstagramPage() {
     }
     const id = createId("ig_node");
     const meta = blockMeta[blockType];
+    const shouldBeDefault = !nodes.some((node) =>
+      Boolean((node.data.metadata as Record<string, unknown> | undefined)?.isDefault)
+    );
     const node: InstagramFlowNode = {
       id,
       type: "instagramBlock",
@@ -855,12 +1042,15 @@ export default function InstagramPage() {
         name: meta.label,
         triggerType: blockType === "quick_replies" ? "manual_start" : undefined,
         triggerKey:
-          blockType === "quick_replies"
+          shouldBeDefault
+            ? normalizeKey(meta.label)
+            : blockType === "quick_replies"
             ? normalizeKey(`${meta.label} ${nodes.length + 1}`)
             : undefined,
         blockType,
         content: defaultContentForType(blockType),
-        actions: []
+        actions: [],
+        metadata: { isDefault: shouldBeDefault }
       }
     };
     setNodes((current) => [...current, node]);
@@ -881,7 +1071,20 @@ export default function InstagramPage() {
   };
 
   const deleteSelectedNode = () => {
-    if (!selectedNode || selectedNode.data.locked) return;
+    if (!selectedNode) return;
+    if (
+      Boolean(
+        (selectedNode.data.metadata as Record<string, unknown> | undefined)
+          ?.isDefault
+      )
+    ) {
+      toast.error("Choose another block as default before deleting this block.");
+      return;
+    }
+    if (selectedNode.data.locked) {
+      toast.error("System blocks cannot be deleted.");
+      return;
+    }
     setNodes((current) => current.filter((node) => node.id !== selectedNode.id));
     setEdges((current) =>
       current.filter(
@@ -890,6 +1093,45 @@ export default function InstagramPage() {
     );
     setSelectedNodeId(null);
   };
+
+  const handleNodesChange = useCallback(
+    (changes: NodeChange<InstagramFlowNode>[]) => {
+      const lockedNodeIds = new Set(
+        nodes.filter((node) => node.data.locked).map((node) => node.id)
+      );
+      const defaultNodeIds = new Set(
+        nodes
+          .filter((node) =>
+            Boolean(
+              (node.data.metadata as Record<string, unknown> | undefined)
+                ?.isDefault
+            )
+          )
+          .map((node) => node.id)
+      );
+      const defaultRemoval = changes.some(
+        (change) => change.type === "remove" && defaultNodeIds.has(change.id)
+      );
+      const lockedRemoval = changes.some(
+        (change) => change.type === "remove" && lockedNodeIds.has(change.id)
+      );
+
+      if (defaultRemoval) {
+        toast.error("Choose another block as default before deleting this block.");
+      } else if (lockedRemoval) {
+        toast.error("System blocks cannot be deleted.");
+      }
+
+      const allowedChanges = changes.filter(
+        (change) =>
+          change.type !== "remove" ||
+          (!defaultNodeIds.has(change.id) && !lockedNodeIds.has(change.id))
+      );
+      if (!allowedChanges.length) return;
+      onNodesChange(allowedChanges);
+    },
+    [nodes, onNodesChange]
+  );
 
   const onMediaSelected = (asset: MediaAsset) => {
     if (!mediaPickerTarget || !selectedNode) return;
@@ -1001,6 +1243,10 @@ export default function InstagramPage() {
 
     const readOnly = canvasMode === "published";
     const content = selectedNode.data.content;
+    const isDefaultBlock = Boolean(
+      (selectedNode.data.metadata as Record<string, unknown> | undefined)
+        ?.isDefault
+    );
 
     return (
       <div className="space-y-5">
@@ -1015,6 +1261,21 @@ export default function InstagramPage() {
             value={selectedNode.data.name}
             disabled={readOnly}
             onChange={(event) => updateSelectedNode({ name: event.target.value })}
+          />
+        </div>
+        <div className="flex items-center justify-between rounded-xl border p-3">
+          <div>
+            <p className="text-sm font-medium">Default start block</p>
+            <p className="text-xs text-muted-foreground">
+              Only one Instagram block can start this canvas.
+            </p>
+          </div>
+          <Switch
+            checked={isDefaultBlock}
+            disabled={readOnly || isDefaultBlock}
+            onCheckedChange={(checked) => {
+              if (checked) setSelectedNodeAsDefault();
+            }}
           />
         </div>
         <div className="space-y-3">
@@ -1505,7 +1766,7 @@ export default function InstagramPage() {
         <Button
           variant="destructive"
           className="w-full"
-          disabled={readOnly || selectedNode.data.locked}
+          disabled={readOnly}
           onClick={deleteSelectedNode}
         >
           <Trash2 className="mr-2 size-4" />
@@ -1514,6 +1775,194 @@ export default function InstagramPage() {
       </div>
     );
   };
+
+  const renderCanvasList = () => (
+    <div className="min-h-0 flex-1 overflow-y-auto p-5">
+      <div className="mx-auto max-w-7xl space-y-6">
+        <section className="rounded-lg bg-white p-5 shadow-xs">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-sm font-medium text-pink-600">
+                Instagram automation
+              </p>
+              <h2 className="font-heading text-3xl font-semibold">
+                Message Flow
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Manage Instagram canvases. Publish any canvas, but only one can
+                be active for Instagram automation at a time.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="cursor-pointer"
+                onClick={() =>
+                  queryClient.invalidateQueries({
+                    queryKey: ["instagram-canvases"]
+                  })
+                }
+              >
+                <RefreshCcw className="size-4" />
+                Refresh
+              </Button>
+              <Button
+                type="button"
+                className="cursor-pointer bg-pink-600 hover:bg-pink-700"
+                disabled={createCanvasMutation.isPending}
+                onClick={() => createCanvasMutation.mutate()}
+              >
+                {createCanvasMutation.isPending ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Plus className="size-4" />
+                )}
+                Add flow
+              </Button>
+            </div>
+          </div>
+        </section>
+
+        <section className="grid gap-4 lg:grid-cols-3">
+          {isCanvasesLoading ? (
+            <div className="rounded-lg bg-white p-5 text-sm text-muted-foreground shadow-xs lg:col-span-3">
+              Loading Instagram flows...
+            </div>
+          ) : canvases.length ? (
+            canvases.map((canvas) => {
+              const isActive = canvas.status === "active";
+              const nodeCount =
+                canvas.draftState?.nodes?.length ||
+                canvas.publishedState?.nodes?.length ||
+                0;
+              return (
+                <div
+                  key={canvas._id}
+                  className="rounded-lg border bg-white p-5 shadow-xs transition hover:border-pink-200 hover:shadow-md"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <Instagram className="size-4 text-pink-600" />
+                        <h3 className="truncate font-heading text-xl font-semibold">
+                          {canvas.name}
+                        </h3>
+                      </div>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Updated {formatDate(canvas.updatedAt)}
+                      </p>
+                    </div>
+                    <Badge
+                      variant={isActive ? "default" : "secondary"}
+                      className={cn("capitalize", isActive && "bg-pink-600")}
+                    >
+                      {canvas.status}
+                    </Badge>
+                  </div>
+
+                  <div className="mt-4 rounded-md bg-muted/50 p-3 text-sm">
+                    <p className="text-xs text-muted-foreground">Blocks</p>
+                    <p className="mt-1 font-semibold">{nodeCount}</p>
+                  </div>
+
+                  <div className="mt-4 flex items-center justify-between rounded-md border px-3 py-2">
+                    <div>
+                      <p className="text-sm font-medium">Active canvas</p>
+                      <p className="text-xs text-muted-foreground">
+                        Only one flow handles live Instagram messages.
+                      </p>
+                    </div>
+                    <Switch
+                      checked={isActive}
+                      disabled={isActive || activateCanvasMutation.isPending}
+                      onCheckedChange={(checked) => {
+                        if (!checked) return;
+                        if (!canvas.latestPublishedVersionId) {
+                          toast.error(
+                            "Publish this Instagram canvas before activating it."
+                          );
+                          return;
+                        }
+                        activateCanvasMutation.mutate(canvas._id);
+                      }}
+                    />
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      className="cursor-pointer bg-pink-600 hover:bg-pink-700"
+                      onClick={() => router.push(`/instagram/${canvas._id}`)}
+                    >
+                      <Route className="size-4" />
+                      Edit
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="cursor-pointer"
+                      disabled={renameCanvasMutation.isPending}
+                      onClick={() => {
+                        const name = window.prompt(
+                          "Rename Instagram canvas",
+                          canvas.name
+                        );
+                        if (name?.trim()) {
+                          renameCanvasMutation.mutate({
+                            canvasId: canvas._id,
+                            name: name.trim()
+                          });
+                        }
+                      }}
+                    >
+                      Rename
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="cursor-pointer text-destructive hover:text-destructive"
+                      disabled={deleteCanvasMutation.isPending || isActive}
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            `Delete ${canvas.name}? This archives the Instagram canvas.`
+                          )
+                        ) {
+                          deleteCanvasMutation.mutate(canvas._id);
+                        }
+                      }}
+                    >
+                      <Trash2 className="size-4" />
+                      Delete
+                    </Button>
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <div className="flex flex-col items-center justify-center rounded-lg bg-white p-10 text-center shadow-xs lg:col-span-3">
+              <Instagram className="mb-3 size-10 text-pink-600" />
+              <h2 className="font-heading text-2xl font-semibold">
+                No Instagram flows yet
+              </h2>
+              <p className="mt-2 max-w-md text-sm text-muted-foreground">
+                Create a canvas to start building Instagram DM automation.
+              </p>
+              <Button
+                className="mt-4 cursor-pointer bg-pink-600 hover:bg-pink-700"
+                disabled={createCanvasMutation.isPending}
+                onClick={() => createCanvasMutation.mutate()}
+              >
+                <Plus className="size-4" />
+                Add flow
+              </Button>
+            </div>
+          )}
+        </section>
+      </div>
+    </div>
+  );
 
   return (
     <AppLayout hideHeader fullBleed>
@@ -1524,9 +1973,27 @@ export default function InstagramPage() {
               <Instagram className="size-5" />
             </div>
             <div>
-              <h1 className="text-lg font-semibold">Instagram Automation</h1>
+              <div className="flex items-center gap-2">
+                {canvasOnly && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 cursor-pointer px-2"
+                    onClick={() => router.push("/instagram")}
+                  >
+                    <ArrowLeft className="size-4" />
+                    Back
+                  </Button>
+                )}
+                <h1 className="text-lg font-semibold">
+                  {canvasOnly ? selectedCanvas?.name || "Instagram Flow" : "Instagram Automation"}
+                </h1>
+              </div>
               <p className="text-xs text-muted-foreground">
-                DM canvas, media, comment replies, and automation logs.
+                {canvasOnly
+                  ? "Edit draft, review published state, and publish Instagram automation."
+                  : "DM canvas, media, comment replies, and automation logs."}
               </p>
             </div>
           </div>
@@ -1556,24 +2023,28 @@ export default function InstagramPage() {
           </div>
         </div>
 
-        <div className="flex shrink-0 items-center justify-between border-b bg-white px-5 py-2">
-          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as PageTab)}>
-            <TabsList>
-              <TabsTrigger value="canvas">Message Flow</TabsTrigger>
-              <TabsTrigger value="rules">Comment Automation</TabsTrigger>
-              <TabsTrigger value="media">Media</TabsTrigger>
-              <TabsTrigger value="logs">Logs</TabsTrigger>
-            </TabsList>
-          </Tabs>
-          <div className="text-xs text-muted-foreground">
-            Last sync: {formatDate(instagram?.lastHealthCheckAt)}
+        {!canvasOnly && (
+          <div className="flex shrink-0 items-center justify-between border-b bg-white px-5 py-2">
+            <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as PageTab)}>
+              <TabsList>
+                <TabsTrigger value="canvas">Message Flow</TabsTrigger>
+                <TabsTrigger value="rules">Comment Automation</TabsTrigger>
+                <TabsTrigger value="media">Media</TabsTrigger>
+                <TabsTrigger value="logs">Logs</TabsTrigger>
+              </TabsList>
+            </Tabs>
+            <div className="text-xs text-muted-foreground">
+              Last sync: {formatDate(instagram?.lastHealthCheckAt)}
+            </div>
           </div>
-        </div>
+        )}
 
-        {activeTab === "canvas" && (
+        {activeTab === "canvas" && !canvasOnly && renderCanvasList()}
+
+        {activeTab === "canvas" && canvasOnly && (
           <div className="grid min-h-0 flex-1 grid-cols-[280px_minmax(0,1fr)_360px]">
             <aside className="min-h-0 overflow-y-auto border-r bg-white p-4">
-              <div className="mb-4">
+              <div className="mb-4 space-y-3">
                 <Tabs
                   value={canvasMode}
                   onValueChange={(value) => setCanvasMode(value as CanvasMode)}
@@ -1635,7 +2106,7 @@ export default function InstagramPage() {
 	              }}
 	              onDrop={handleCanvasDrop}
 	            >
-              {isDraftLoading ? (
+              {isDraftLoading || isCanvasDetailLoading || isCanvasesLoading ? (
                 <div className="flex h-full items-center justify-center">
                   <Loader2 className="size-6 animate-spin text-pink-500" />
                 </div>
@@ -1645,7 +2116,7 @@ export default function InstagramPage() {
                     nodes={nodes}
                     edges={edges}
                     nodeTypes={nodeTypes}
-                    onNodesChange={canvasMode === "draft" ? onNodesChange : undefined}
+                    onNodesChange={canvasMode === "draft" ? handleNodesChange : undefined}
                     onEdgesChange={canvasMode === "draft" ? onEdgesChange : undefined}
                     onConnect={onConnect}
                     onNodeClick={(_, node) => setSelectedNodeId(node.id)}
@@ -2317,6 +2788,10 @@ function InstagramMediaCard({ item }: { item: InstagramMedia }) {
       </div>
     </div>
   );
+}
+
+export default function InstagramIndexPage() {
+  return <InstagramPage />;
 }
 
 function LogRow({ log }: { log: InstagramAutomationLog }) {

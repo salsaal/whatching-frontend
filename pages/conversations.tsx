@@ -15,7 +15,6 @@ import {
   Search,
   Send,
   ShieldAlert,
-  Smartphone,
   UserCheck,
   X
 } from "lucide-react";
@@ -32,6 +31,7 @@ import {
 } from "react";
 import { AxiosError } from "axios";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { io, Socket } from "socket.io-client";
 import { toast } from "sonner";
 
 import {
@@ -46,15 +46,18 @@ import {
   updateConversationStatus
 } from "@/api/functions/chat";
 import { getTeam } from "@/api/functions/organizations";
+import { updateSubscriber } from "@/api/functions/subscribers";
 import { getAllTemplates } from "@/api/functions/templates";
 import {
   ChatMessage,
   Conversation,
   ConversationChannel,
+  ConversationMessagesResponse,
   ConversationMode,
   ConversationStatus,
   TemplateSendComponent
 } from "@/api/types/chat.type";
+import { FaWhatsapp } from "react-icons/fa";
 import { MediaAsset } from "@/api/types/media.type";
 import {
   MessageTemplate,
@@ -86,6 +89,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import AppLayout from "@/layouts/AppLayout";
 import { cn } from "@/lib/utils";
+import { useAuthStore } from "@/stores/authStore";
 import { useOrganizationStore } from "@/stores/organizationStore";
 
 const statusOptions: Array<{ value: ConversationStatus | "all"; label: string }> =
@@ -109,7 +113,7 @@ const channelOptions: Array<{
   icon: ElementType;
 }> = [
   { value: "all", label: "All", icon: Inbox },
-  { value: "whatsapp", label: "WhatsApp", icon: Smartphone },
+  { value: "whatsapp", label: "WhatsApp", icon: FaWhatsapp },
   { value: "instagram", label: "Instagram", icon: Instagram }
 ];
 
@@ -262,6 +266,40 @@ const getString = (...values: unknown[]) => {
   }
   return "";
 };
+
+const getMessageMetaId = (message: ChatMessage) =>
+  getString(message.metaMessageId, message.payload?.metaMessageId);
+
+const getReplyContext = (message: ChatMessage) => {
+  const payloadContext = asRecord(message.payload?.replyContext);
+  const messageContext = asRecord(message.replyContext);
+  const messageId = getString(
+    messageContext.messageId,
+    payloadContext.messageId,
+    payloadContext.message_id
+  );
+  const metaMessageId = getString(
+    messageContext.metaMessageId,
+    payloadContext.metaMessageId,
+    payloadContext.message_id,
+    payloadContext.id
+  );
+  const previewText = getString(
+    messageContext.previewText,
+    payloadContext.previewText,
+    payloadContext.text,
+    payloadContext.body
+  );
+
+  if (!messageId && !metaMessageId && !previewText) return null;
+  return {
+    messageId: messageId || null,
+    metaMessageId: metaMessageId || null,
+    previewText: previewText || null
+  };
+};
+
+type ReplyContext = NonNullable<ReturnType<typeof getReplyContext>>;
 
 const getMetaMediaUrl = (value: unknown) => {
   const media = asRecord(value);
@@ -478,7 +516,10 @@ const takeoverSourceLabel: Record<string, string> = {
 };
 
 const canReplyToMessage = (message: ChatMessage) =>
-  message.direction === "inbound" && message.status !== "failed";
+  message.direction !== "system" &&
+  message.senderRole !== "system" &&
+  message.status !== "failed" &&
+  Boolean(getMessageMetaId(message));
 
 function ConversationListItem({
   conversation,
@@ -495,37 +536,37 @@ function ConversationListItem({
       type="button"
       onClick={onSelect}
       className={cn(
-        "flex w-full gap-3 border-b p-3 text-left transition hover:bg-muted/50",
+        "flex w-full cursor-pointer gap-2.5 border-b p-2.5 text-left transition hover:bg-muted/50",
         selected && "bg-primary/5"
       )}
     >
-      <Avatar className="size-11">
+      <Avatar className="size-9">
         <AvatarFallback className="bg-primary/10 text-primary">
           {initials(name)}
         </AvatarFallback>
       </Avatar>
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">
-          <p className="truncate font-medium">{name}</p>
+          <p className="truncate text-sm font-medium">{name}</p>
           <span className="shrink-0 text-[11px] text-muted-foreground">
             {formatDateTime(conversation.lastMessageAt || conversation.updatedAt)}
           </span>
         </div>
-        <p className="mt-1 line-clamp-1 text-sm text-muted-foreground">
+        <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
           {conversation.lastMessage || "No messages yet"}
         </p>
-        <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          <Badge className={cn("capitalize", statusClass[conversation.status])}>
+        <div className="mt-1.5 flex flex-wrap items-center gap-1">
+          <Badge className={cn("px-1.5 py-0 text-[10px] capitalize", statusClass[conversation.status])}>
             {conversation.status}
           </Badge>
           <Badge
             variant="secondary"
-            className={cn("capitalize", priorityClass[conversation.priority])}
+            className={cn("px-1.5 py-0 text-[10px] capitalize", priorityClass[conversation.priority])}
           >
             {conversation.priority}
           </Badge>
           {conversation.unreadCount > 0 && (
-            <Badge>{conversation.unreadCount} unread</Badge>
+            <Badge className="px-1.5 py-0 text-[10px]">{conversation.unreadCount}</Badge>
           )}
         </div>
       </div>
@@ -536,11 +577,15 @@ function ConversationListItem({
 function MessageBubble({
   message,
   onPreview,
-  onReplyTo
+  onReplyTo,
+  replyContext,
+  replyPreview
 }: {
   message: ChatMessage;
   onPreview: (preview: MessageMediaPreview) => void;
   onReplyTo: (message: ChatMessage) => void;
+  replyContext?: ReplyContext | null;
+  replyPreview?: ChatMessage | null;
 }) {
   const isOutbound = message.direction === "outbound";
   const isSystem = message.direction === "system" || message.senderRole === "system";
@@ -626,7 +671,7 @@ function MessageBubble({
             ))}
           </div>
         )}
-        {message.replyContext && (
+        {replyContext && (
           <div
             className={cn(
               "mb-2 rounded-lg border-l-2 px-2 py-1 text-xs",
@@ -635,10 +680,21 @@ function MessageBubble({
                 : "border-primary bg-muted text-muted-foreground"
             )}
           >
-            Reply to{" "}
-            {message.replyContext.messageId
-              ? `message ${message.replyContext.messageId.slice(-6)}`
-              : "WhatsApp message"}
+            <p className="font-medium">
+              Reply to {replyPreview ? messageText(replyPreview) : "message"}
+            </p>
+            {replyPreview ? (
+              <p className="mt-0.5 line-clamp-2 opacity-80">
+                {getAttachmentName(replyPreview)}
+              </p>
+            ) : (
+              <p className="mt-0.5 opacity-80">
+                {replyContext.previewText ||
+                  (replyContext.messageId
+                    ? `Message ${replyContext.messageId.slice(-6)}`
+                    : "WhatsApp message")}
+              </p>
+            )}
           </div>
         )}
         {documentPreviews.map((preview) => (
@@ -709,9 +765,17 @@ export default function ConversationsPage() {
   const queryClient = useQueryClient();
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const replyInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const selectedIdRef = useRef("");
+  const socketRef = useRef<Socket | null>(null);
+  const joinedConversationRef = useRef("");
+  const replyContextCacheRef = useRef<Record<string, ReplyContext>>({});
+  const realtimeTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>(
+    {}
+  );
   const activeOrganization = useOrganizationStore(
     (state) => state.activeOrganization
   );
+  const token = useAuthStore((state) => state.token);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<ConversationStatus | "all">("all");
   const [channel, setChannel] = useState<ConversationChannel | "all">("all");
@@ -742,6 +806,8 @@ export default function ConversationsPage() {
   const [templateHeaderMedia, setTemplateHeaderMedia] =
     useState<MediaAsset | null>(null);
   const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const [contactFirstName, setContactFirstName] = useState("");
+  const [contactLastName, setContactLastName] = useState("");
 
   const queryParams = useMemo(
     () => ({
@@ -791,7 +857,7 @@ export default function ConversationsPage() {
     queryKey: ["conversations", activeOrganization?._id, queryParams],
     queryFn: () => getConversations(queryParams),
     enabled: Boolean(activeOrganization?._id),
-    refetchInterval: 15000
+    staleTime: 30_000
   });
 
   const conversations = useMemo(
@@ -810,6 +876,10 @@ export default function ConversationsPage() {
     null;
 
   useEffect(() => {
+    selectedIdRef.current = selectedId;
+  }, [selectedId]);
+
+  useEffect(() => {
     if (!visibleConversations.some((conversation) => conversation._id === selectedId)) {
       setSelectedId(visibleConversations[0]?._id || "");
     }
@@ -819,7 +889,7 @@ export default function ConversationsPage() {
     queryKey: ["conversation-messages", activeOrganization?._id, selectedId],
     queryFn: () => getConversationMessages({ conversationId: selectedId }),
     enabled: Boolean(activeOrganization?._id && selectedId),
-    refetchInterval: 10000
+    staleTime: 15_000
   });
 
   const { data: contextData } = useQuery({
@@ -836,6 +906,149 @@ export default function ConversationsPage() {
       queryClient.invalidateQueries({ queryKey: ["chat-bootstrap"] })
     ]);
   };
+
+  useEffect(() => {
+    const orgId = activeOrganization?._id;
+    const authToken =
+      token ||
+      (typeof window !== "undefined"
+        ? localStorage.getItem("accessToken")
+        : null);
+    const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL;
+    if (!orgId || !authToken || !apiBase) return;
+
+    const socketBase = apiBase.replace(/\/api\/v1\/?$/, "");
+    const socket: Socket = io(socketBase, {
+      auth: { token: authToken },
+      withCredentials: true,
+      transports: ["websocket", "polling"]
+    });
+    socketRef.current = socket;
+
+    const scheduleRealtimeRefresh = (
+      conversationId?: string,
+      options: { messages?: boolean; context?: boolean } = {}
+    ) => {
+      const key = conversationId || "list";
+      if (realtimeTimersRef.current[key]) {
+        clearTimeout(realtimeTimersRef.current[key]);
+      }
+      realtimeTimersRef.current[key] = setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ["conversations"] });
+        queryClient.invalidateQueries({ queryKey: ["chat-bootstrap"] });
+        if (conversationId && conversationId === selectedIdRef.current) {
+          if (options.messages !== false) {
+            queryClient.invalidateQueries({
+              queryKey: ["conversation-messages", orgId, conversationId]
+            });
+          }
+          if (options.context) {
+            queryClient.invalidateQueries({
+              queryKey: ["conversation-context", orgId, conversationId]
+            });
+          }
+        }
+        delete realtimeTimersRef.current[key];
+      }, 300);
+    };
+
+    socket.on("connect", () => {
+      socket.emit("org:join", { orgId });
+      if (selectedIdRef.current) {
+        socket.emit("conversation:join", {
+          orgId,
+          conversationId: selectedIdRef.current
+        });
+        joinedConversationRef.current = selectedIdRef.current;
+      }
+    });
+    socket.on("conversation.updated", (payload: { conversation?: Conversation }) =>
+      scheduleRealtimeRefresh(payload.conversation?._id, {
+        messages: true,
+        context: true
+      })
+    );
+    socket.on("conversation.read", (payload: { conversationId?: string }) =>
+      scheduleRealtimeRefresh(payload.conversationId, {
+        messages: false,
+        context: true
+      })
+    );
+    socket.on("conversation.escalated", (payload: { conversation?: Conversation }) =>
+      scheduleRealtimeRefresh(payload.conversation?._id, { context: true })
+    );
+    socket.on(
+      "conversation.agent_takeover",
+      (payload: { conversation?: Conversation }) =>
+        scheduleRealtimeRefresh(payload.conversation?._id, { context: true })
+    );
+    socket.on("conversation.bot_resumed", (payload: { conversation?: Conversation }) =>
+      scheduleRealtimeRefresh(payload.conversation?._id, { context: true })
+    );
+    socket.on(
+      "message.created",
+      (payload: { conversationId?: string; message?: ChatMessage }) => {
+        const incomingMessage = payload.message;
+        if (payload.conversationId && incomingMessage) {
+          queryClient.setQueryData<ConversationMessagesResponse>(
+            ["conversation-messages", orgId, payload.conversationId],
+            (current) => {
+              if (!current) return current;
+              if (
+                current.data.messages.some(
+                  (message) => message._id === incomingMessage._id
+                )
+              ) {
+                return current;
+              }
+              return {
+                ...current,
+                results: current.results + 1,
+                data: {
+                  ...current.data,
+                  messages: [...current.data.messages, incomingMessage]
+                }
+              };
+            }
+          );
+        }
+        scheduleRealtimeRefresh(payload.conversationId, { messages: true });
+      }
+    );
+    socket.on("message.updated", (payload: { conversationId?: string }) =>
+      scheduleRealtimeRefresh(payload.conversationId, { messages: true })
+    );
+    socket.on("socket.error", (payload: { message?: string }) => {
+      if (payload.message) toast.error(payload.message);
+    });
+
+    return () => {
+      Object.values(realtimeTimersRef.current).forEach(clearTimeout);
+      realtimeTimersRef.current = {};
+      socketRef.current = null;
+      socket.disconnect();
+    };
+  }, [activeOrganization?._id, queryClient, token]);
+
+  useEffect(() => {
+    const orgId = activeOrganization?._id;
+    const socket = socketRef.current;
+    if (!orgId || !socket) return;
+    if (joinedConversationRef.current) {
+      socket.emit("conversation:leave", {
+        orgId,
+        conversationId: joinedConversationRef.current
+      });
+      joinedConversationRef.current = "";
+    }
+    if (selectedId) {
+      socket.emit("conversation:join", { orgId, conversationId: selectedId });
+      joinedConversationRef.current = selectedId;
+      queryClient.invalidateQueries({
+        queryKey: ["conversation-messages", orgId, selectedId]
+      });
+    }
+  }, [activeOrganization?._id, queryClient, selectedId]);
 
   const { mutate: markRead } = useMutation({
     mutationFn: markConversationRead,
@@ -862,6 +1075,18 @@ export default function ConversationsPage() {
       onSuccess: async () => {
         toast.success("Conversation status updated.");
         await invalidateConversations();
+      }
+    });
+
+  const { mutate: updateContactMutate, isPending: isUpdatingContact } =
+    useMutation({
+      mutationFn: updateSubscriber,
+      onSuccess: async () => {
+        toast.success("Contact name updated.");
+        await invalidateConversations();
+      },
+      onError: (error: AxiosError<{ message?: string }>) => {
+        toast.error(error.response?.data?.message || "Contact could not be updated.");
       }
     });
 
@@ -925,11 +1150,27 @@ export default function ConversationsPage() {
     () => messagesData?.data.messages || [],
     [messagesData]
   );
+  const messagesById = useMemo(() => {
+    const byId = new Map<string, ChatMessage>();
+    const byMetaId = new Map<string, ChatMessage>();
+    messages.forEach((message) => {
+      byId.set(message._id, message);
+      const metaId = getMessageMetaId(message);
+      if (metaId) byMetaId.set(metaId, message);
+    });
+    return { byId, byMetaId };
+  }, [messages]);
+  useEffect(() => {
+    messages.forEach((message) => {
+      const replyContext = getReplyContext(message);
+      if (replyContext) replyContextCacheRef.current[message._id] = replyContext;
+    });
+  }, [messages]);
   const contextConversation = contextData?.data.conversation || selectedConversation;
   const replyWindow = contextConversation?.replyWindow;
   const canReply = Boolean(replyWindow?.isOpen && selectedId);
   const isInstagramConversation = contextConversation?.channel === "instagram";
-  const canSendMediaReply = canReply && !isInstagramConversation;
+  const canSendMediaReply = canReply;
   const canSendTemplate = contextConversation?.channel === "whatsapp";
   const summary = conversationsData?.data.summary || bootstrap?.data.sidebar;
   const templateRecipientPhone =
@@ -937,14 +1178,36 @@ export default function ConversationsPage() {
     contextConversation?.subscriberId?.waId ||
     "";
 
+  useEffect(() => {
+    const subscriber = contextData?.data.subscriber || contextConversation?.subscriberId;
+    setContactFirstName(subscriber?.firstName || "");
+    setContactLastName(subscriber?.lastName || "");
+  }, [
+    contextConversation?.subscriberId,
+    contextData?.data.subscriber,
+    selectedId
+  ]);
+
+  const saveContactName = () => {
+    const subscriberId =
+      contextData?.data.subscriber?._id || contextConversation?.subscriberId?._id;
+    if (!subscriberId) {
+      toast.error("Subscriber record is not loaded yet.");
+      return;
+    }
+    updateContactMutate({
+      subscriberId,
+      payload: {
+        firstName: contactFirstName.trim(),
+        lastName: contactLastName.trim()
+      }
+    });
+  };
+
   const submitReply = () => {
     if (!selectedId) return;
     if (!replyText.trim() && !attachment && !selectedMedia) {
       toast.error("Type a reply, attach a file, or choose media.");
-      return;
-    }
-    if (isInstagramConversation && (attachment || selectedMedia)) {
-      toast.error("Instagram conversations currently support text replies only.");
       return;
     }
     sendReply({
@@ -953,7 +1216,7 @@ export default function ConversationsPage() {
         text: replyText.trim(),
         caption: attachment || selectedMedia ? replyText.trim() : undefined,
         mediaId: selectedMedia?._id,
-        attachment: isInstagramConversation ? null : attachment,
+        attachment,
         replyToMessageId: replyTarget?._id
       }
     });
@@ -1304,12 +1567,32 @@ export default function ConversationsPage() {
                   ) : messages.length ? (
                     <div className="space-y-3">
                       {messages.map((message) => (
-	                        <MessageBubble
-	                          key={message._id}
-	                          message={message}
-	                          onPreview={setPreviewMedia}
-	                          onReplyTo={selectReplyTarget}
-	                        />
+                        (() => {
+                          const replyContext =
+                            getReplyContext(message) ||
+                            replyContextCacheRef.current[message._id] ||
+                            null;
+                          return (
+                            <MessageBubble
+                              key={message._id}
+                              message={message}
+                              onPreview={setPreviewMedia}
+                              onReplyTo={selectReplyTarget}
+                              replyContext={replyContext}
+                              replyPreview={
+                                (replyContext?.messageId
+                                  ? messagesById.byId.get(replyContext.messageId)
+                                  : null) ||
+                                (replyContext?.metaMessageId
+                                  ? messagesById.byMetaId.get(
+                                      replyContext.metaMessageId
+                                    )
+                                  : null) ||
+                                null
+                              }
+                            />
+                          );
+                        })()
                       ))}
                       <div ref={messagesEndRef} />
                     </div>
@@ -1348,12 +1631,6 @@ export default function ConversationsPage() {
 	                      {isInstagramConversation
 	                        ? "The 24-hour customer service window is closed for this Instagram conversation."
 	                        : "The 24-hour customer service window is closed. Send an approved template to re-open chat."}
-	                    </div>
-	                  )}
-	                  {isInstagramConversation && canReply && (
-	                    <div className="mb-3 rounded-lg bg-pink-50 p-3 text-sm text-pink-800">
-	                      Instagram replies currently support text only in the
-	                      backend.
 	                    </div>
 	                  )}
                   {(attachment || selectedMedia) && (
@@ -1497,6 +1774,52 @@ export default function ConversationsPage() {
                     {contextConversation.subscriberId?.phoneNumber ||
                       contextConversation.subscriberId?.waId}
                   </p>
+                </div>
+
+                <Separator className="my-4" />
+
+                <div className="space-y-2">
+                  <p className="text-sm font-semibold">Contact name</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label className="text-xs text-muted-foreground">
+                        First name
+                      </Label>
+                      <Input
+                        className="mt-1"
+                        value={contactFirstName}
+                        placeholder="First name"
+                        onChange={(event) =>
+                          setContactFirstName(event.target.value)
+                        }
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">
+                        Last name
+                      </Label>
+                      <Input
+                        className="mt-1"
+                        value={contactLastName}
+                        placeholder="Last name"
+                        onChange={(event) =>
+                          setContactLastName(event.target.value)
+                        }
+                      />
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="w-full cursor-pointer"
+                    disabled={isUpdatingContact}
+                    onClick={saveContactName}
+                  >
+                    {isUpdatingContact && (
+                      <Loader2 className="mr-2 size-3.5 animate-spin" />
+                    )}
+                    Save contact
+                  </Button>
                 </div>
 
                 <Separator className="my-4" />

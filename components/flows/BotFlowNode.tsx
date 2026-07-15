@@ -29,6 +29,7 @@ export interface BotFlowNodeData extends Record<string, unknown> {
   triggerKey: string;
   blockType: BotBlockType;
   actions: BotAction[];
+  metadata?: Record<string, unknown>;
   locked?: boolean;
   invalid?: boolean;
   summary?: string;
@@ -63,6 +64,7 @@ const labelByType: Record<BotBlockType, string> = {
 function BotFlowNode({ id, data, selected }: NodeProps<BotFlowReactNode>) {
   const updateNodeInternals = useUpdateNodeInternals();
   const Icon = iconByType[data.blockType] || Bot;
+  const isDefaultNode = Boolean(data.metadata?.isDefault);
   const outputActions = useMemo(
     () => data.actions.filter((action) => action.type === "go_to_trigger"),
     [data.actions]
@@ -80,10 +82,16 @@ function BotFlowNode({ id, data, selected }: NodeProps<BotFlowReactNode>) {
     <div
       className={cn(
         "relative min-w-72 max-w-80 rounded-xl border bg-white shadow-sm transition",
+        isDefaultNode && "border-2 border-primary shadow-md",
         selected && "border-primary shadow-md ring-2 ring-primary/15",
         data.invalid && "border-destructive ring-2 ring-destructive/15"
       )}
     >
+      {isDefaultNode && (
+        <div className="absolute left-1/2 top-0 z-10 -translate-x-1/2 -translate-y-1/2 rounded-full border border-primary bg-primary px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white shadow-sm">
+          Default
+        </div>
+      )}
       <Handle
         id="in"
         type="target"
@@ -104,11 +112,8 @@ function BotFlowNode({ id, data, selected }: NodeProps<BotFlowReactNode>) {
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             <Badge variant="outline" className="text-[10px]">
-              {data.triggerKey}
-            </Badge>
-            <span className="text-xs text-muted-foreground">
               {labelByType[data.blockType]}
-            </span>
+            </Badge>
           </div>
         </div>
       </div>

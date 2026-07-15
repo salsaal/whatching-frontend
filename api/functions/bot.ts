@@ -3,6 +3,7 @@ import { BOT_ENDPOINTS } from "../endpoints";
 import {
   BotCanvasDraftState,
   BotCanvasResponse,
+  BotCanvasesResponse,
   BotSettingsPatch,
   BotSettingsResponse,
   BotStatusResponse,
@@ -62,6 +63,96 @@ export const publishBotCanvasDraft = async (
 
 export const getBotCanvasPublished = async (): Promise<BotCanvasResponse> => {
   const res = await api.get<BotCanvasResponse>(BOT_ENDPOINTS.CANVAS_PUBLISHED);
+  return res.data;
+};
+
+export const listBotCanvases = async (): Promise<BotCanvasesResponse> => {
+  const res = await api.get<BotCanvasesResponse>(BOT_ENDPOINTS.CANVASES);
+  return res.data;
+};
+
+export const createBotCanvas = async (
+  payload: { name?: string } = {}
+): Promise<BotCanvasResponse> => {
+  const res = await api.post<BotCanvasResponse>(BOT_ENDPOINTS.CANVASES, payload);
+  return res.data;
+};
+
+export const getBotCanvas = async (
+  canvasId: string
+): Promise<BotCanvasResponse> => {
+  const res = await api.get<BotCanvasResponse>(
+    BOT_ENDPOINTS.CANVAS_BY_ID(canvasId)
+  );
+  return res.data;
+};
+
+export const updateBotCanvas = async ({
+  canvasId,
+  name
+}: {
+  canvasId: string;
+  name: string;
+}): Promise<BotCanvasResponse> => {
+  const res = await api.patch<BotCanvasResponse>(
+    BOT_ENDPOINTS.CANVAS_BY_ID(canvasId),
+    { name }
+  );
+  return res.data;
+};
+
+export const saveBotCanvasDraftById = async ({
+  canvasId,
+  draftState
+}: {
+  canvasId: string;
+  draftState: BotCanvasDraftState;
+}): Promise<BotCanvasResponse> => {
+  const res = await api.put<BotCanvasResponse>(
+    BOT_ENDPOINTS.CANVAS_DRAFT_BY_ID(canvasId),
+    { draftState }
+  );
+  return res.data;
+};
+
+export const validateBotCanvasById = async (
+  canvasId: string
+): Promise<ApiResponse> => {
+  const res = await api.post<ApiResponse>(
+    BOT_ENDPOINTS.CANVAS_VALIDATE_BY_ID(canvasId)
+  );
+  return res.data;
+};
+
+export const publishBotCanvasDraftById = async ({
+  canvasId,
+  draftState
+}: {
+  canvasId: string;
+  draftState?: BotCanvasDraftState;
+}): Promise<BotCanvasResponse> => {
+  const res = await api.post<BotCanvasResponse>(
+    BOT_ENDPOINTS.CANVAS_PUBLISH_BY_ID(canvasId),
+    draftState ? { draftState } : undefined
+  );
+  return res.data;
+};
+
+export const activateBotCanvas = async (
+  canvasId: string
+): Promise<BotCanvasResponse> => {
+  const res = await api.post<BotCanvasResponse>(
+    BOT_ENDPOINTS.CANVAS_ACTIVATE_BY_ID(canvasId)
+  );
+  return res.data;
+};
+
+export const archiveBotCanvas = async (
+  canvasId: string
+): Promise<BotCanvasResponse> => {
+  const res = await api.delete<BotCanvasResponse>(
+    BOT_ENDPOINTS.CANVAS_BY_ID(canvasId)
+  );
   return res.data;
 };
 
