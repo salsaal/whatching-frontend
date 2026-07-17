@@ -18,8 +18,8 @@ import {
   addAgent,
   getTeam,
   removeTeamMember
-} from "@/api/functions/organizations";
-import { TeamMember } from "@/api/types/organizations.type";
+} from "@/client-api/functions/organizations";
+import { TeamMember } from "@/client-api/types/organizations.type";
 import {
   AlertDialog,
   AlertDialogAction,

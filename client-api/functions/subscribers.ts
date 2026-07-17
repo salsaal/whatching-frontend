@@ -11,13 +11,19 @@ import {
 } from "../types/subscribers.type";
 
 export const getAllSubscribers = async (
-  params: { channel?: "all" | "whatsapp" | "instagram" } = {}
+  params: {
+    channel?: "all" | "whatsapp" | "instagram";
+    page?: number;
+    limit?: number;
+  } = {}
 ): Promise<SubscribersResponse> => {
   const res = await api.get<SubscribersResponse>(SUBSCRIBER_ENDPOINTS.GET_ALL, {
     params: {
       ...(params.channel && params.channel !== "all"
         ? { channel: params.channel }
-        : {})
+        : {}),
+      ...(params.page ? { page: params.page } : {}),
+      ...(params.limit ? { limit: params.limit } : {})
     }
   });
   return res.data;

@@ -7,7 +7,14 @@ export interface InstagramConfig {
   connectedAt: string | null;
   webhookVerifiedAt: string | null;
   username: string | null;
+  name?: string | null;
+  biography?: string | null;
+  website?: string | null;
   profilePictureUrl: string | null;
+  followersCount?: number | null;
+  followsCount?: number | null;
+  mediaCount?: number | null;
+  lastProfileSyncAt?: string | null;
   tokenExpiresAt: string | null;
   lastHealthCheckAt: string | null;
   activeAlerts: string[];
@@ -26,14 +33,31 @@ export interface ConnectInstagramManualPayload {
   igBusinessAccountId: string;
   accessToken: string;
   username?: string;
+}
+
+export interface ConnectInstagramLoginPayload {
+  code: string;
+  redirectUri: string;
+  pageId?: string;
+  igBusinessAccountId?: string;
+}
+
+export interface InstagramLoginAccount {
+  pageId: string;
+  pageName?: string;
+  igBusinessAccountId: string;
+  username?: string;
+  name?: string;
   profilePictureUrl?: string;
-  tokenExpiresAt?: string;
+  followersCount?: number;
+  mediaCount?: number;
 }
 
 export interface InstagramConnectResponse {
   status: string;
   data: {
     instagram: InstagramConfig;
+    warnings?: Array<{ code: string; message: string }>;
   };
 }
 

@@ -8,7 +8,7 @@ import { useMutation } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import { toast } from "sonner";
 
-import { deleteOrganization } from "@/api/functions/organizations";
+import { deleteOrganization } from "@/client-api/functions/organizations";
 import {
   AlertDialog,
   AlertDialogAction,

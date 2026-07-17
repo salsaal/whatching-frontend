@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import {
   cancelSubscription,
   getBillingHistory
-} from "@/api/functions/organizations";
+} from "@/client-api/functions/organizations";
 import {
   AlertDialog,
   AlertDialogAction,

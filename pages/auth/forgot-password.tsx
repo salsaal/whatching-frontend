@@ -6,7 +6,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { useMutation } from "@tanstack/react-query";
-import { forgotPassword } from "@/api/functions/auth";
+import { forgotPassword } from "@/client-api/functions/auth";
 import { AxiosError } from "axios";
 import AuthLayout from "@/layouts/AuthLayout";
 import { Input } from "@/components/ui/input";

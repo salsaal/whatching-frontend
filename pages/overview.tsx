@@ -18,7 +18,7 @@ import { toast } from "sonner";
 import {
   connectMetaEmbeddedSignup,
   syncMetaIntegration
-} from "@/api/functions/organizations";
+} from "@/client-api/functions/organizations";
 import { Button } from "@/components/ui/button";
 import AppLayout from "@/layouts/AppLayout";
 import { useOrganizationStore } from "@/stores/organizationStore";

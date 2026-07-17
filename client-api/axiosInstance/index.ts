@@ -1,5 +1,5 @@
 import axios from "axios";
-import { AuthUser } from "@/api/types/auth.type";
+import { AuthUser } from "@/client-api/types/auth.type";
 import { useAuthStore } from "@/stores/authStore";
 import { useOrganizationStore } from "@/stores/organizationStore";
 import { AUTH_ENDPOINTS } from "../endpoints";

@@ -23,9 +23,9 @@ import {
   getAllTemplates,
   linkTemplateMedia,
   syncTemplates
-} from "@/api/functions/templates";
-import { MediaAsset } from "@/api/types/media.type";
-import { MessageTemplate } from "@/api/types/templates.type";
+} from "@/client-api/functions/templates";
+import { MediaAsset } from "@/client-api/types/media.type";
+import { MessageTemplate } from "@/client-api/types/templates.type";
 import MediaPickerDialog from "@/components/media/MediaPickerDialog";
 import TemplatesTable from "@/components/templates/TemplatesTable";
 import {

@@ -46,11 +46,12 @@ import {
 } from "lucide-react";
 import { DragEvent, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AxiosError } from "axios";
 import { useRouter } from "next/router";
 import { toast } from "sonner";
 
 import {
-  connectInstagramManual,
+  connectInstagramLogin,
   activateInstagramCanvas,
   createInstagramCanvas,
   deleteInstagramCanvas,
@@ -77,9 +78,9 @@ import {
   updateInstagramCommentRule,
   validateInstagramCanvasById,
   validateInstagramCanvas
-} from "@/api/functions/instagram";
+} from "@/client-api/functions/instagram";
 import {
-  ConnectInstagramManualPayload,
+  ConnectInstagramLoginPayload,
   InstagramActionType,
   InstagramAutomationLog,
   InstagramBlockType,
@@ -90,12 +91,13 @@ import {
   InstagramCommentRule,
   InstagramCommentRulePayload,
   InstagramGenericCard,
+  InstagramLoginAccount,
   InstagramMedia,
   InstagramQuickReply,
   InstagramTemplateButton,
   InstagramTriggerType
-} from "@/api/types/instagram.type";
-import { MediaAsset } from "@/api/types/media.type";
+} from "@/client-api/types/instagram.type";
+import { MediaAsset } from "@/client-api/types/media.type";
 import MediaPickerDialog from "@/components/media/MediaPickerDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -122,7 +124,7 @@ import AppLayout from "@/layouts/AppLayout";
 import { cn } from "@/lib/utils";
 import { useOrganizationStore } from "@/stores/organizationStore";
 
-type PageTab = "canvas" | "rules" | "media" | "logs" | "setup";
+type PageTab = "profile" | "canvas" | "rules" | "media" | "logs" | "setup";
 type CanvasMode = "draft" | "published";
 type MediaPickerTarget =
   | { kind: "node"; type: "IMAGE" | "VIDEO" }
@@ -213,6 +215,37 @@ const visibleTriggerEntries = Object.entries(triggerLabels).filter(
 const blockTypes = Object.keys(blockMeta) as InstagramBlockType[];
 
 const routeActionTypes = new Set<InstagramActionType>(["go_to_node"]);
+const INSTAGRAM_LOGIN_STATE_KEY = "whatching_instagram_login_state";
+const INSTAGRAM_LOGIN_REDIRECT_KEY = "whatching_instagram_login_redirect_uri";
+const instagramLoginScopes = [
+  "instagram_business_basic",
+  "instagram_business_manage_messages",
+  "instagram_business_manage_comments",
+  "instagram_business_content_publish"
+];
+
+const getInstagramRedirectUri = () =>
+  typeof window === "undefined" ? "" : `${window.location.origin}/instagram`;
+
+const createInstagramLoginState = () =>
+  typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`;
+
+const getInstagramLoginUrl = (redirectUri: string, state: string) => {
+  const appId = process.env.NEXT_PUBLIC_INSTAGRAM_APP_ID;
+  if (!appId) return "";
+  const params = new URLSearchParams({
+    client_id: appId,
+    redirect_uri: redirectUri,
+    response_type: "code",
+    scope: instagramLoginScopes.join(","),
+    enable_fb_login: "false",
+    force_reauth: "true",
+    state
+  });
+  return `https://www.instagram.com/oauth/authorize?${params.toString()}`;
+};
 
 const formatDate = (date?: string | null) => {
   if (!date) return "Never";
@@ -610,7 +643,7 @@ export function InstagramPage({
     (state) => state.activeOrganization
   );
   const activeOrgId = activeOrganization?._id;
-  const [activeTab, setActiveTab] = useState<PageTab>("canvas");
+  const [activeTab, setActiveTab] = useState<PageTab>(canvasOnly ? "canvas" : "profile");
   const [selectedCanvasId, setSelectedCanvasId] = useState(forcedCanvasId);
   const [canvasMode, setCanvasMode] = useState<CanvasMode>("draft");
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -625,25 +658,26 @@ export function InstagramPage({
   const [ruleDraft, setRuleDraft] =
     useState<InstagramCommentRulePayload>(emptyRule);
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
-  const [connectionForm, setConnectionForm] =
-    useState<ConnectInstagramManualPayload>({
-      pageId: "",
-      igBusinessAccountId: "",
-      accessToken: "",
-      username: "",
-      profilePictureUrl: "",
-      tokenExpiresAt: ""
-    });
+  const [loginSelection, setLoginSelection] = useState<{
+    code: string;
+    redirectUri: string;
+    accounts: InstagramLoginAccount[];
+  } | null>(null);
+  const [selectedLoginAccount, setSelectedLoginAccount] = useState("");
+  const handledLoginCodeRef = useRef("");
+  const pendingLoginRef = useRef<ConnectInstagramLoginPayload | null>(null);
 
   const { data: statusData, isLoading: isStatusLoading } = useQuery({
     queryKey: ["instagram-status", activeOrgId],
     queryFn: getInstagramStatus,
     enabled: Boolean(activeOrgId)
   });
+  const instagram = statusData?.data.instagram;
+  const isReady = instagram?.status === "ready";
   const { data: canvasesData, isLoading: isCanvasesLoading } = useQuery({
     queryKey: ["instagram-canvases", activeOrgId],
     queryFn: getInstagramCanvases,
-    enabled: Boolean(activeOrgId)
+    enabled: Boolean(activeOrgId && isReady)
   });
   const canvases = canvasesData?.data.canvases || [];
   useEffect(() => {
@@ -658,23 +692,23 @@ export function InstagramPage({
   const { data: canvasDetailData, isLoading: isCanvasDetailLoading } = useQuery({
     queryKey: ["instagram-canvas", activeOrgId, selectedCanvasId],
     queryFn: () => getInstagramCanvas(selectedCanvasId),
-    enabled: Boolean(activeOrgId && selectedCanvasId)
+    enabled: Boolean(activeOrgId && isReady && selectedCanvasId)
   });
   const canvasDetail = canvasDetailData?.data.canvas;
   const { data: draftData, isLoading: isDraftLoading } = useQuery({
     queryKey: ["instagram-canvas-draft", activeOrgId],
     queryFn: getInstagramCanvasDraft,
-    enabled: Boolean(activeOrgId && !selectedCanvasId)
+    enabled: Boolean(activeOrgId && isReady && !selectedCanvasId)
   });
   const { data: publishedData } = useQuery({
     queryKey: ["instagram-canvas-published", activeOrgId],
     queryFn: getInstagramCanvasPublished,
-    enabled: Boolean(activeOrgId && !selectedCanvasId)
+    enabled: Boolean(activeOrgId && isReady && !selectedCanvasId)
   });
   const { data: flowsData } = useQuery({
     queryKey: ["instagram-flows", activeOrgId],
     queryFn: () => getInstagramFlows({ limit: 8 }),
-    enabled: Boolean(activeOrgId)
+    enabled: Boolean(activeOrgId && isReady)
   });
   const { data: mediaData, isLoading: isMediaLoading } = useQuery({
     queryKey: [
@@ -689,17 +723,17 @@ export function InstagramPage({
         search: mediaSearch,
         mediaType: mediaTypeFilter
       }),
-    enabled: Boolean(activeOrgId)
+    enabled: Boolean(activeOrgId && isReady)
   });
   const { data: rulesData, isLoading: isRulesLoading } = useQuery({
     queryKey: ["instagram-comment-rules", activeOrgId],
     queryFn: () => getInstagramCommentRules({ limit: 30 }),
-    enabled: Boolean(activeOrgId)
+    enabled: Boolean(activeOrgId && isReady)
   });
   const { data: logsData } = useQuery({
     queryKey: ["instagram-automation-logs", activeOrgId],
     queryFn: () => getInstagramAutomationLogs({ limit: 30 }),
-    enabled: Boolean(activeOrgId)
+    enabled: Boolean(activeOrgId && isReady)
   });
 
   const activeCanvasState =
@@ -710,13 +744,27 @@ export function InstagramPage({
     () => nodes.find((node) => node.id === selectedNodeId) || null,
     [nodes, selectedNodeId]
   );
-  const instagram = statusData?.data.instagram;
-  const isReady = instagram?.status === "ready";
   const rules = rulesData?.data.rules || [];
   const media = mediaData?.data.media || [];
   const logs = logsData?.data.logs || [];
   const selectedCanvasVersion =
     canvasDetail?.draftState?.version || draftData?.data.draftState?.version || 1;
+
+  useEffect(() => {
+    if (!canvasOnly && !isReady && activeTab !== "profile") {
+      setActiveTab("profile");
+    }
+  }, [activeTab, canvasOnly, isReady]);
+
+  useEffect(() => {
+    if (!isReady) return;
+    setIsConnectOpen(false);
+    setLoginSelection(null);
+    setSelectedLoginAccount("");
+    pendingLoginRef.current = null;
+    sessionStorage.removeItem(INSTAGRAM_LOGIN_STATE_KEY);
+    sessionStorage.removeItem(INSTAGRAM_LOGIN_REDIRECT_KEY);
+  }, [isReady]);
 
   useEffect(() => {
     setNodes(toFlowNodes(activeCanvasState));
@@ -725,14 +773,116 @@ export function InstagramPage({
   }, [activeCanvasState, setEdges, setNodes]);
 
   const connectMutation = useMutation({
-    mutationFn: connectInstagramManual,
-    onSuccess: () => {
+    mutationFn: connectInstagramLogin,
+    onSuccess: (response) => {
       toast.success("Instagram connected");
       setIsConnectOpen(false);
+      setLoginSelection(null);
+      setSelectedLoginAccount("");
+      pendingLoginRef.current = null;
+      sessionStorage.removeItem(INSTAGRAM_LOGIN_STATE_KEY);
+      sessionStorage.removeItem(INSTAGRAM_LOGIN_REDIRECT_KEY);
+      response.data.warnings?.forEach((warning) => toast.warning(warning.message));
       queryClient.invalidateQueries({ queryKey: ["instagram-status"] });
     },
-    onError: (error) => toast.error(getErrorMessage(error))
+    onError: (error) => {
+      const axiosError = error as AxiosError<{
+        message?: string;
+        data?: {
+          requiresSelection?: boolean;
+          accounts?: InstagramLoginAccount[];
+        };
+      }>;
+      const selection = axiosError.response?.data?.data;
+      if (axiosError.response?.status === 409 && selection?.requiresSelection) {
+        setLoginSelection((current) => ({
+          code: current?.code || pendingLoginRef.current?.code || "",
+          redirectUri:
+            current?.redirectUri ||
+            pendingLoginRef.current?.redirectUri ||
+            getInstagramRedirectUri(),
+          accounts: selection.accounts || []
+        }));
+        setSelectedLoginAccount(selection.accounts?.[0]?.igBusinessAccountId || "");
+        setIsConnectOpen(true);
+        toast.error("Select the Instagram account to connect.");
+        return;
+      }
+      toast.error(getErrorMessage(error));
+    }
   });
+
+  const startInstagramLogin = () => {
+    const redirectUri = getInstagramRedirectUri();
+    const state = createInstagramLoginState();
+    const loginUrl = getInstagramLoginUrl(redirectUri, state);
+
+    if (!loginUrl) {
+      toast.error("Add NEXT_PUBLIC_INSTAGRAM_APP_ID to enable Instagram login.");
+      return;
+    }
+
+    sessionStorage.setItem(INSTAGRAM_LOGIN_STATE_KEY, state);
+    sessionStorage.setItem(INSTAGRAM_LOGIN_REDIRECT_KEY, redirectUri);
+    window.location.assign(loginUrl);
+  };
+
+  const connectSelectedLoginAccount = () => {
+    if (!loginSelection || !selectedLoginAccount) {
+      toast.error("Select an Instagram account first.");
+      return;
+    }
+    const account = loginSelection.accounts.find(
+      (item) => item.igBusinessAccountId === selectedLoginAccount
+    );
+    if (!account) {
+      toast.error("Selected Instagram account was not found.");
+      return;
+    }
+    const payload = {
+      code: loginSelection.code,
+      redirectUri: loginSelection.redirectUri,
+      pageId: account.pageId,
+      igBusinessAccountId: account.igBusinessAccountId
+    };
+    pendingLoginRef.current = payload;
+    connectMutation.mutate(payload);
+  };
+
+  useEffect(() => {
+    if (!router.isReady || !activeOrgId) return;
+    const code = typeof router.query.code === "string" ? router.query.code : "";
+    const state = typeof router.query.state === "string" ? router.query.state : "";
+    const error = typeof router.query.error === "string" ? router.query.error : "";
+
+    if (error) {
+      toast.error(
+        typeof router.query.error_description === "string"
+          ? router.query.error_description.replaceAll("+", " ")
+          : "Instagram login was cancelled."
+      );
+      router.replace("/instagram", undefined, { shallow: true });
+      return;
+    }
+
+    if (!code || handledLoginCodeRef.current === code) return;
+    const expectedState = sessionStorage.getItem(INSTAGRAM_LOGIN_STATE_KEY) || "";
+    const redirectUri =
+      sessionStorage.getItem(INSTAGRAM_LOGIN_REDIRECT_KEY) || getInstagramRedirectUri();
+
+    if (expectedState && state && expectedState !== state) {
+      toast.error("Instagram login state did not match. Please try again.");
+      router.replace("/instagram", undefined, { shallow: true });
+      return;
+    }
+
+    handledLoginCodeRef.current = code;
+    const payload = { code, redirectUri };
+    pendingLoginRef.current = payload;
+    setLoginSelection({ ...payload, accounts: [] });
+    connectMutation.mutate(payload);
+    router.replace("/instagram", undefined, { shallow: true });
+  }, [activeOrgId, connectMutation, router]);
 
   const syncStatusMutation = useMutation({
     mutationFn: syncInstagramStatus,
@@ -1964,6 +2114,145 @@ export function InstagramPage({
     </div>
   );
 
+  const renderProfile = () => (
+    <div className="min-h-0 flex-1 overflow-y-auto p-5">
+      <div className="mx-auto max-w-6xl space-y-5">
+        {!isReady ? (
+          <section className="rounded-xl border border-pink-100 bg-white p-6 shadow-xs">
+            <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+              <div className="flex items-start gap-4">
+                <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-pink-50 text-pink-600">
+                  <Instagram className="size-7" />
+                </div>
+                <div>
+                  <h2 className="font-heading text-2xl font-semibold">
+                    Connect Instagram first
+                  </h2>
+                  <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+                    Connect an Instagram professional account before using message
+                    flows, comment automation, media sync, and automation logs.
+                    We use Instagram Business Login and send only the returned
+                    authorization code to the backend for token exchange.
+                  </p>
+                </div>
+              </div>
+              <Button
+                className="cursor-pointer bg-pink-600 hover:bg-pink-700"
+                onClick={() => setIsConnectOpen(true)}
+              >
+                <Instagram className="mr-2 size-4" />
+                Connect Instagram
+              </Button>
+            </div>
+          </section>
+        ) : (
+          <>
+        <section className="overflow-hidden rounded-xl bg-white shadow-xs">
+          <div className="h-28 bg-gradient-to-r from-pink-500 via-rose-500 to-orange-400" />
+          <div className="flex flex-col gap-4 px-5 pb-5 sm:flex-row sm:items-end sm:justify-between">
+            <div className="-mt-10 flex items-end gap-4">
+              <div className="flex size-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-4 border-white bg-pink-50 text-pink-600 shadow-sm">
+                {instagram?.profilePictureUrl ? (
+                  <img
+                    src={instagram.profilePictureUrl}
+                    alt={instagram.username || "Instagram profile"}
+                    className="size-full object-cover"
+                  />
+                ) : (
+                  <Instagram className="size-10" />
+                )}
+              </div>
+              <div className="pb-1">
+                <h2 className="font-heading text-2xl font-semibold">
+                  {instagram?.name || instagram?.username || "Instagram profile"}
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  @{instagram?.username || "not_connected"}
+                </p>
+              </div>
+            </div>
+            <Badge
+              variant={isReady ? "default" : "outline"}
+              className={cn(isReady && "bg-emerald-600")}
+            >
+              {isReady ? "Ready" : "Not connected"}
+            </Badge>
+          </div>
+        </section>
+
+        <section className="grid gap-4 md:grid-cols-3">
+          {[
+            ["Followers", instagram?.followersCount ?? 0],
+            ["Following", instagram?.followsCount ?? 0],
+            ["Media", instagram?.mediaCount ?? 0]
+          ].map(([label, value]) => (
+            <div key={String(label)} className="rounded-lg bg-white p-4 shadow-xs">
+              <p className="text-sm text-muted-foreground">{String(label)}</p>
+              <p className="mt-2 font-heading text-3xl font-semibold">
+                {String(value)}
+              </p>
+            </div>
+          ))}
+        </section>
+
+        <section className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
+          <div className="rounded-lg bg-white p-5 shadow-xs">
+            <h3 className="font-semibold">Profile details</h3>
+            <div className="mt-4 space-y-4 text-sm">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                  Bio
+                </p>
+                <p className="mt-1 whitespace-pre-wrap">
+                  {instagram?.biography || "No biography synced yet."}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                  Website
+                </p>
+                {instagram?.website ? (
+                  <a
+                    href={instagram.website}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-1 inline-flex items-center gap-1 text-pink-600"
+                  >
+                    {instagram.website}
+                    <ExternalLink className="size-3.5" />
+                  </a>
+                ) : (
+                  <p className="mt-1 text-muted-foreground">Not available</p>
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="rounded-lg bg-white p-5 shadow-xs">
+            <h3 className="font-semibold">Connection</h3>
+            <div className="mt-4 space-y-3 text-sm">
+              {[
+                ["Page ID", instagram?.pageId],
+                ["IG business account", instagram?.igBusinessAccountId],
+                ["Connected", formatDate(instagram?.connectedAt)],
+                ["Profile sync", formatDate(instagram?.lastProfileSyncAt)],
+                ["Health check", formatDate(instagram?.lastHealthCheckAt)]
+              ].map(([label, value]) => (
+                <div key={String(label)} className="flex justify-between gap-4">
+                  <span className="text-muted-foreground">{String(label)}</span>
+                  <span className="max-w-[55%] truncate text-right font-medium">
+                    {String(value || "-")}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+          </>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <AppLayout hideHeader fullBleed>
       <div className="flex h-[calc(100vh-1px)] min-h-0 flex-col bg-slate-50">
@@ -2011,26 +2300,37 @@ export function InstagramPage({
             <Button
               variant="outline"
               onClick={() => syncStatusMutation.mutate()}
-              disabled={syncStatusMutation.isPending}
+              disabled={!isReady || syncStatusMutation.isPending}
             >
               {syncStatusMutation.isPending ? (
                 <Loader2 className="mr-2 size-4 animate-spin" />
               ) : (
                 <RefreshCcw className="mr-2 size-4" />
               )}
-              Sync
+              Refresh profile
             </Button>
           </div>
         </div>
 
         {!canvasOnly && (
           <div className="flex shrink-0 items-center justify-between border-b bg-white px-5 py-2">
-            <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as PageTab)}>
+            <Tabs
+              value={activeTab}
+              onValueChange={(value) => {
+                if (value !== "profile" && !isReady) {
+                  setActiveTab("profile");
+                  toast.error("Connect Instagram first.");
+                  return;
+                }
+                setActiveTab(value as PageTab);
+              }}
+            >
               <TabsList>
-                <TabsTrigger value="canvas">Message Flow</TabsTrigger>
-                <TabsTrigger value="rules">Comment Automation</TabsTrigger>
-                <TabsTrigger value="media">Media</TabsTrigger>
-                <TabsTrigger value="logs">Logs</TabsTrigger>
+                <TabsTrigger value="profile">Profile</TabsTrigger>
+                <TabsTrigger value="canvas" disabled={!isReady}>Message Flow</TabsTrigger>
+                <TabsTrigger value="rules" disabled={!isReady}>Comment Automation</TabsTrigger>
+                <TabsTrigger value="media" disabled={!isReady}>Media</TabsTrigger>
+                <TabsTrigger value="logs" disabled={!isReady}>Logs</TabsTrigger>
               </TabsList>
             </Tabs>
             <div className="text-xs text-muted-foreground">
@@ -2039,9 +2339,12 @@ export function InstagramPage({
           </div>
         )}
 
-        {activeTab === "canvas" && !canvasOnly && renderCanvasList()}
+        {activeTab === "profile" && !canvasOnly && renderProfile()}
+        {canvasOnly && !isReady && renderProfile()}
 
-        {activeTab === "canvas" && canvasOnly && (
+        {activeTab === "canvas" && !canvasOnly && isReady && renderCanvasList()}
+
+        {activeTab === "canvas" && canvasOnly && isReady && (
           <div className="grid min-h-0 flex-1 grid-cols-[280px_minmax(0,1fr)_360px]">
             <aside className="min-h-0 overflow-y-auto border-r bg-white p-4">
               <div className="mb-4 space-y-3">
@@ -2193,7 +2496,7 @@ export function InstagramPage({
           </div>
         )}
 
-        {activeTab === "rules" && (
+        {activeTab === "rules" && isReady && (
           <div className="grid min-h-0 flex-1 grid-cols-[420px_minmax(0,1fr)] gap-0">
             <aside className="min-h-0 overflow-y-auto border-r bg-white p-5">
               <h2 className="text-base font-semibold">
@@ -2518,7 +2821,7 @@ export function InstagramPage({
           </div>
         )}
 
-        {activeTab === "media" && (
+        {activeTab === "media" && isReady && (
           <div className="min-h-0 flex-1 overflow-y-auto p-5">
             <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -2576,7 +2879,7 @@ export function InstagramPage({
           </div>
         )}
 
-        {activeTab === "logs" && (
+        {activeTab === "logs" && isReady && (
           <div className="min-h-0 flex-1 overflow-y-auto p-5">
             <div className="rounded-xl border bg-white">
               <div className="border-b p-4">
@@ -2599,14 +2902,14 @@ export function InstagramPage({
           </div>
         )}
 
-        {activeTab === "setup" && (
+        {activeTab === "setup" && isReady && (
           <div className="min-h-0 flex-1 overflow-y-auto p-5">
             <div className="grid gap-4 lg:grid-cols-3">
               <div className="rounded-xl border bg-white p-5 lg:col-span-2">
                 <h2 className="text-base font-semibold">Backend-supported features</h2>
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
                   {[
-                    "Manual Instagram business connection",
+                    "Instagram Business Login connection",
                     "Instagram media sync and search",
                     "Draft and published DM canvas",
                     "Text, image, video, quick replies",
@@ -2675,48 +2978,83 @@ export function InstagramPage({
       <Dialog open={isConnectOpen} onOpenChange={setIsConnectOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Connect Instagram manually</DialogTitle>
+            <DialogTitle>Connect Instagram Business</DialogTitle>
             <DialogDescription>
-              This matches the backend /organizations/instagram/connect-manual
-              route. Tokens are sent to the backend and stored encrypted there.
+              Continue with Instagram Business Login. The frontend sends the
+              returned authorization code to the backend; token exchange and
+              storage happen server-side.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4">
-            {[
-              ["pageId", "Facebook Page ID"],
-              ["igBusinessAccountId", "Instagram business account ID"],
-              ["accessToken", "Instagram/Page access token"],
-              ["username", "Username"],
-              ["profilePictureUrl", "Profile picture URL"],
-              ["tokenExpiresAt", "Token expiry ISO datetime"]
-            ].map(([key, label]) => (
-              <div key={key} className="space-y-2">
-                <Label>{label}</Label>
-                <Input
-                  value={String(
-                    connectionForm[key as keyof ConnectInstagramManualPayload] ||
-                      ""
-                  )}
-                  type={key === "accessToken" ? "password" : "text"}
-                  onChange={(event) =>
-                    setConnectionForm((form) => ({
-                      ...form,
-                      [key]: event.target.value
-                    }))
-                  }
-                />
+          <div className="space-y-4">
+            <div className="rounded-xl border bg-pink-50/50 p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white text-pink-600">
+                  <Instagram className="size-5" />
+                </div>
+                <div>
+                  <p className="font-medium">Permissions requested</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Basic profile, messages, comments, and content access for
+                    the Instagram professional account selected by the business.
+                  </p>
+                </div>
               </div>
-            ))}
+            </div>
+
+            {loginSelection?.accounts.length ? (
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <Label>Choose Instagram account</Label>
+                  <Select
+                    value={selectedLoginAccount}
+                    onValueChange={setSelectedLoginAccount}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select account" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {loginSelection.accounts.map((account) => (
+                        <SelectItem
+                          key={account.igBusinessAccountId}
+                          value={account.igBusinessAccountId}
+                        >
+                          @{account.username || account.igBusinessAccountId}
+                          {account.pageName ? ` · ${account.pageName}` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button
+                  className="w-full cursor-pointer bg-pink-600 hover:bg-pink-700"
+                  onClick={connectSelectedLoginAccount}
+                  disabled={connectMutation.isPending}
+                >
+                  {connectMutation.isPending && (
+                    <Loader2 className="mr-2 size-4 animate-spin" />
+                  )}
+                  Connect selected account
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full cursor-pointer"
+                  onClick={startInstagramLogin}
+                >
+                  Restart Instagram login
+                </Button>
+              </div>
+            ) : (
             <Button
-              className="bg-pink-600 hover:bg-pink-700"
-              onClick={() => connectMutation.mutate(connectionForm)}
+              className="w-full cursor-pointer bg-pink-600 hover:bg-pink-700"
+              onClick={startInstagramLogin}
               disabled={connectMutation.isPending}
             >
               {connectMutation.isPending && (
                 <Loader2 className="mr-2 size-4 animate-spin" />
               )}
-              Save connection
+              Continue with Instagram
             </Button>
+            )}
           </div>
         </DialogContent>
       </Dialog>

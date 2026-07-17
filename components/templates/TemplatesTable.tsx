@@ -1,6 +1,6 @@
 import { Edit3, ImagePlus, Loader2, Trash2 } from "lucide-react";
 
-import { MessageTemplate } from "@/api/types/templates.type";
+import { MessageTemplate } from "@/client-api/types/templates.type";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {

@@ -2,7 +2,7 @@ import { Upload } from "lucide-react";
 import { useState } from "react";
 import * as XLSX from "xlsx";
 
-import { SubscriberPayload } from "@/api/types/subscribers.type";
+import { SubscriberPayload } from "@/client-api/types/subscribers.type";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,

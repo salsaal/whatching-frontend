@@ -20,7 +20,7 @@ import { toast } from "sonner";
 import {
   getMyOrganizations,
   setupOrganization
-} from "@/api/functions/organizations";
+} from "@/client-api/functions/organizations";
 import { Button } from "@/components/ui/button";
 import {
   Card,

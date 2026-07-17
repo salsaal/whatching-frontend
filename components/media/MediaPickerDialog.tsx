@@ -6,8 +6,8 @@ import { useRouter } from "next/router";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
-import { getAllMedia } from "@/api/functions/media";
-import { MediaAsset, MediaFileType } from "@/api/types/media.type";
+import { getAllMedia } from "@/client-api/functions/media";
+import { MediaAsset, MediaFileType } from "@/client-api/types/media.type";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,

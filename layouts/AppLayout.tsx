@@ -29,7 +29,7 @@ import {
   getIntegrationStatus,
   getOrganization,
   purchaseSubscription
-} from "@/api/functions/organizations";
+} from "@/client-api/functions/organizations";
 import {
   AlertDialog,
   AlertDialogAction,

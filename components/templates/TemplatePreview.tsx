@@ -13,7 +13,7 @@ import {
   TemplateButton,
   TemplateCreationType,
   TemplateHeaderFormat
-} from "@/api/types/templates.type";
+} from "@/client-api/types/templates.type";
 import { cn } from "@/lib/utils";
 
 interface TemplatePreviewProps {

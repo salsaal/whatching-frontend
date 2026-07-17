@@ -20,6 +20,7 @@ export type MessageType =
   | "template"
   | "interactive"
   | "location"
+  | "contacts"
   | "system"
   | "unknown";
 
@@ -37,6 +38,9 @@ export interface ConversationSubscriber {
   waId?: string;
   firstName?: string;
   lastName?: string;
+  instagramUserId?: string;
+  instagramUsername?: string;
+  instagramProfilePictureUrl?: string;
   tags?: string[];
   metadata?: Record<string, unknown>;
   isOptedIn?: boolean;

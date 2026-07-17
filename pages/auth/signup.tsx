@@ -22,7 +22,7 @@ import PhoneNumberInput, {
   buildInternationalPhoneNumber
 } from "@/components/ui/phone-number-input";
 import { useMutation } from "@tanstack/react-query";
-import { resendVerification, signupUser } from "@/api/functions/auth";
+import { resendVerification, signupUser } from "@/client-api/functions/auth";
 import Link from "next/link";
 import { AxiosError } from "axios";
 const signupSchema = z

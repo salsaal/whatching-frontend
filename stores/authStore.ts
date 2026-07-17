@@ -1,4 +1,4 @@
-import { AuthUser } from "@/api/types/auth.type";
+import { AuthUser } from "@/client-api/types/auth.type";
 import { useOrganizationStore } from "@/stores/organizationStore";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";

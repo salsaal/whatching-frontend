@@ -8,6 +8,9 @@ export type BotBlockType =
   | "document"
   | "video"
   | "location"
+  | "location_request"
+  | "address_request"
+  | "contacts"
   | "product_carousel"
   | "generic_carousel";
 

@@ -148,6 +148,7 @@ const INSTAGRAM_BASE = `${ORGANIZATIONS_BASE}/instagram`;
 export const INSTAGRAM_ENDPOINTS = {
   STATUS: `${INSTAGRAM_BASE}/status`,
   CONNECT_MANUAL: `${INSTAGRAM_BASE}/connect-manual`,
+  CONNECT_LOGIN: `${INSTAGRAM_BASE}/connect-login`,
   SYNC: `${INSTAGRAM_BASE}/sync`,
   DISCONNECT: `${INSTAGRAM_BASE}/disconnect`,
   MEDIA: `${INSTAGRAM_BASE}/media`,

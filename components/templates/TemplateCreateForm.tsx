@@ -23,8 +23,8 @@ import {
   submitDraftTemplate,
   updateApprovedTemplate,
   updateDraftTemplate
-} from "@/api/functions/templates";
-import { MediaAsset } from "@/api/types/media.type";
+} from "@/client-api/functions/templates";
+import { MediaAsset } from "@/client-api/types/media.type";
 import {
   CreateTemplatePayload,
   MessageTemplate,
@@ -34,7 +34,7 @@ import {
   TemplateComponent,
   TemplateCreationType,
   TemplateHeaderFormat
-} from "@/api/types/templates.type";
+} from "@/client-api/types/templates.type";
 import MediaPickerDialog from "@/components/media/MediaPickerDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

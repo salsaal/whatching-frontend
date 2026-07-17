@@ -16,8 +16,8 @@ import {
   getTags,
   importSubscribers,
   updateSubscriber
-} from "@/api/functions/subscribers";
-import { Subscriber, SubscriberPayload } from "@/api/types/subscribers.type";
+} from "@/client-api/functions/subscribers";
+import { Subscriber, SubscriberPayload } from "@/client-api/types/subscribers.type";
 import ImportSubscribersModal from "@/components/subscribers/ImportSubscribersModal";
 import SubscriberModal from "@/components/subscribers/SubscriberModal";
 import {
@@ -87,6 +87,21 @@ export default function ContactsPage() {
     queryFn: () => getAllSubscribers({ channel }),
     refetchOnMount: "always"
   });
+  const { data: allCountData } = useQuery({
+    queryKey: ["subscribers-count", "all"],
+    queryFn: () => getAllSubscribers({ channel: "all", limit: 1 }),
+    refetchOnMount: "always"
+  });
+  const { data: whatsappCountData } = useQuery({
+    queryKey: ["subscribers-count", "whatsapp"],
+    queryFn: () => getAllSubscribers({ channel: "whatsapp", limit: 1 }),
+    refetchOnMount: "always"
+  });
+  const { data: instagramCountData } = useQuery({
+    queryKey: ["subscribers-count", "instagram"],
+    queryFn: () => getAllSubscribers({ channel: "instagram", limit: 1 }),
+    refetchOnMount: "always"
+  });
 
   const {
     data: tagsData,
@@ -102,7 +117,11 @@ export default function ContactsPage() {
     () => data?.data?.subscribers || [],
     [data?.data?.subscribers]
   );
-  const summary = data?.data?.summary;
+  const channelCounts = {
+    all: allCountData?.pagination.total,
+    whatsapp: whatsappCountData?.pagination.total,
+    instagram: instagramCountData?.pagination.total
+  };
   const availableTags = useMemo(
     () => tagsData?.data.tags || [],
     [tagsData?.data.tags]
@@ -215,6 +234,10 @@ export default function ContactsPage() {
         } catch {
           // Fall through to the original error message.
         }
+      }
+      if (trimmedTag) {
+        refetchTags();
+        return;
       }
       toast.error(error.response?.data?.message || "Unable to save tag.");
     }
@@ -342,12 +365,7 @@ export default function ContactsPage() {
             <div className="grid w-full grid-cols-3 gap-1 rounded-xl bg-muted p-1">
               {contactChannelOptions.map((option) => {
                 const Icon = option.icon;
-                const count =
-                  option.value === "whatsapp"
-                    ? summary?.whatsapp
-                    : option.value === "instagram"
-                      ? summary?.instagram
-                      : summary?.total;
+                const count = channelCounts[option.value];
                 return (
                   <button
                     key={option.value}
@@ -461,7 +479,7 @@ export default function ContactsPage() {
                     <th className="p-4">Name</th>
                     <th className="p-4">Contact</th>
                     <th className="p-4">Tags</th>
-                    <th className="p-4">Opt-in</th>
+                    {channel !== "instagram" && <th className="p-4">Opt-in</th>}
                     <th className="p-4">Last interaction</th>
                     <th className="p-4 text-right">Action</th>
                   </tr>
@@ -515,9 +533,15 @@ export default function ContactsPage() {
                           )}
                         </div>
                       </td>
-                      <td className="p-4">
-                        {subscriber.isOptedIn ? "Yes" : "No"}
-                      </td>
+                      {channel !== "instagram" && (
+                        <td className="p-4">
+                          {subscriber.instagramUserId && !subscriber.phoneNumber
+                            ? "-"
+                            : subscriber.isOptedIn
+                              ? "Yes"
+                              : "No"}
+                        </td>
+                      )}
                       <td className="p-4">
                         {formatDate(subscriber.lastInteraction)}
                       </td>

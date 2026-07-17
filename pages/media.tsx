@@ -15,8 +15,8 @@ import {
   bulkDeleteMedia,
   getAllMedia,
   uploadMedia
-} from "@/api/functions/media";
-import { MediaAsset, MediaFileType } from "@/api/types/media.type";
+} from "@/client-api/functions/media";
+import { MediaAsset, MediaFileType } from "@/client-api/types/media.type";
 import {
   AlertDialog,
   AlertDialogAction,

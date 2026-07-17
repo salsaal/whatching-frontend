@@ -4,11 +4,14 @@ import {
   Bot,
   CheckCheck,
   Clock3,
+  ContactRound,
   FileText,
+  Globe,
   ImageIcon,
   Inbox,
   Instagram,
   Loader2,
+  MapPin,
   MessageCircle,
   MessageSquareReply,
   Paperclip,
@@ -44,10 +47,10 @@ import {
   sendConversationReply,
   sendTemplateMessage,
   updateConversationStatus
-} from "@/api/functions/chat";
-import { getTeam } from "@/api/functions/organizations";
-import { updateSubscriber } from "@/api/functions/subscribers";
-import { getAllTemplates } from "@/api/functions/templates";
+} from "@/client-api/functions/chat";
+import { getTeam } from "@/client-api/functions/organizations";
+import { updateSubscriber } from "@/client-api/functions/subscribers";
+import { getAllTemplates } from "@/client-api/functions/templates";
 import {
   ChatMessage,
   Conversation,
@@ -56,13 +59,13 @@ import {
   ConversationMode,
   ConversationStatus,
   TemplateSendComponent
-} from "@/api/types/chat.type";
+} from "@/client-api/types/chat.type";
 import { FaWhatsapp } from "react-icons/fa";
-import { MediaAsset } from "@/api/types/media.type";
+import { MediaAsset } from "@/client-api/types/media.type";
 import {
   MessageTemplate,
   TemplateComponent
-} from "@/api/types/templates.type";
+} from "@/client-api/types/templates.type";
 import MediaPickerDialog from "@/components/media/MediaPickerDialog";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -142,6 +145,22 @@ const subscriberName = (conversation?: Conversation | null) => {
     .join(" ")
     .trim();
   return name || subscriber?.phoneNumber || subscriber?.waId || "Customer";
+};
+
+const subscriberHandle = (conversation?: Conversation | null) => {
+  const subscriber = conversation?.subscriberId;
+  if (!subscriber) return "";
+  if (conversation?.channel === "instagram") {
+    const username = getString(
+      subscriber.instagramUsername,
+      subscriber.metadata?.instagramUsername,
+      subscriber.metadata?.username,
+      subscriber.metadata?.igUsername
+    );
+    if (username) return username.startsWith("@") ? username : `@${username}`;
+    return getString(subscriber.instagramUserId, subscriber.metadata?.instagramUserId, "Instagram user");
+  }
+  return getString(subscriber.phoneNumber, subscriber.waId, conversation?.channel);
 };
 
 type MessageMediaPreview = {
@@ -267,6 +286,9 @@ const getString = (...values: unknown[]) => {
   return "";
 };
 
+const toExternalUrl = (value: string) =>
+  /^https?:\/\//i.test(value) ? value : `https://${value}`;
+
 const getMessageMetaId = (message: ChatMessage) =>
   getString(message.metaMessageId, message.payload?.metaMessageId);
 
@@ -320,6 +342,38 @@ const getMetaMediaName = (value: unknown, fallback: string) => {
   return getString(media.filename, media.name, media.id, fallback);
 };
 
+const getMessageLocation = (message: ChatMessage) => {
+  const payload = message.payload || {};
+  const candidates = [
+    payload.location,
+    asRecord(payload.message).location,
+    asRecord(payload.whatsapp).location,
+    payload.locationMessage,
+    payload
+  ];
+
+  for (const candidate of candidates) {
+    const location = asRecord(candidate);
+    const rawLatitude = location.latitude ?? location.lat;
+    const rawLongitude = location.longitude ?? location.lng ?? location.lon;
+    const latitude =
+      typeof rawLatitude === "number" ? rawLatitude : Number(rawLatitude);
+    const longitude =
+      typeof rawLongitude === "number" ? rawLongitude : Number(rawLongitude);
+
+    if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+      return {
+        latitude,
+        longitude,
+        name: getString(location.name),
+        address: getString(location.address)
+      };
+    }
+  }
+
+  return null;
+};
+
 const messageText = (message: ChatMessage) => {
   if (message.systemEvent?.message) return message.systemEvent.message;
   const payload = message.payload || {};
@@ -368,8 +422,50 @@ const messageText = (message: ChatMessage) => {
   if (message.type === "video") return "Video";
   if (message.type === "audio") return "Audio";
   if (message.type === "document") return message.attachment?.filename || "Document";
-  if (payload.location) return "Shared a location";
+  if (message.type === "contacts") {
+    const contacts = Array.isArray(payload.contacts)
+      ? (payload.contacts as Array<Record<string, unknown>>)
+      : payload.contact
+        ? [payload.contact as Record<string, unknown>]
+        : [];
+    const first = contacts[0];
+    const name = asRecord(first?.name).formatted_name || asRecord(first?.name).first_name;
+    return name ? `Contact: ${String(name)}` : "Contact card";
+  }
+  if (getMessageLocation(message) || message.type === "location") {
+    return "Shared a location";
+  }
   return String(message.displayType || message.type || "Message");
+};
+
+const getMessageContacts = (message: ChatMessage) => {
+  const payload = message.payload || {};
+  const contacts = Array.isArray(payload.contacts)
+    ? (payload.contacts as Array<Record<string, unknown>>)
+    : payload.contact
+      ? [payload.contact as Record<string, unknown>]
+      : [];
+
+  return contacts.map((contact, index) => {
+    const name = asRecord(contact.name);
+    const phones = Array.isArray(contact.phones)
+      ? (contact.phones as Array<Record<string, unknown>>)
+      : [];
+    const emails = Array.isArray(contact.emails)
+      ? (contact.emails as Array<Record<string, unknown>>)
+      : [];
+    const urls = Array.isArray(contact.urls)
+      ? (contact.urls as Array<Record<string, unknown>>)
+      : [];
+    const org = asRecord(contact.org);
+    return {
+      key: `${String(name.formatted_name || name.first_name || "contact")}-${index}`,
+      name: getString(name.formatted_name, name.first_name, name.last_name, "Contact"),
+      phone: getString(phones[0]?.phone, phones[0]?.wa_id),
+      email: getString(emails[0]?.email),
+      website: getString(urls[0]?.url, urls[0]?.href, org.website)
+    };
+  });
 };
 
 const getMessageMedia = (message: ChatMessage): MessageMediaPreview[] => {
@@ -597,6 +693,8 @@ function MessageBubble({
   const documentPreviews = mediaPreviews.filter(
     (item) => item.type === "document"
   );
+  const contacts = getMessageContacts(message);
+  const location = getMessageLocation(message);
   const interactiveActions = getInteractiveActions(message);
   if (isSystem) {
     return (
@@ -709,7 +807,67 @@ function MessageBubble({
             <span className="truncate">{preview.name || attachmentName}</span>
           </a>
         ))}
-        <p className="whitespace-pre-wrap break-words">{messageText(message)}</p>
+        {location && (
+          <a
+            href={`https://www.google.com/maps/search/?api=1&query=${location.latitude},${location.longitude}`}
+            target="_blank"
+            rel="noreferrer"
+            className="mb-2 flex items-start gap-3 rounded-lg bg-black/5 p-2"
+          >
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-white/80">
+              <MapPin className="size-4 text-primary" />
+            </div>
+            <div className="min-w-0">
+              <p className="truncate font-medium">
+                {location.name || "Shared location"}
+              </p>
+              <p className="truncate text-xs opacity-75">
+                {location.address ||
+                  `${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`}
+              </p>
+            </div>
+          </a>
+        )}
+        {contacts.length > 0 && (
+          <div className="mb-2 space-y-2">
+            {contacts.map((contact) => (
+              <div
+                key={contact.key}
+                className="flex items-center gap-3 rounded-lg bg-black/5 p-2"
+              >
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-white/80">
+                  <ContactRound className="size-4 text-primary" />
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate font-medium">{contact.name}</p>
+                  {contact.phone && (
+                    <p className="truncate text-xs opacity-75">{contact.phone}</p>
+                  )}
+                  {contact.email && (
+                    <p className="truncate text-xs opacity-75">{contact.email}</p>
+                  )}
+                  {contact.website && (
+                    <a
+                      href={toExternalUrl(contact.website)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className={cn(
+                        "mt-1 inline-flex max-w-full items-center gap-1 truncate text-xs font-medium underline-offset-2 hover:underline",
+                        isOutbound ? "text-primary-foreground" : "text-primary"
+                      )}
+                    >
+                      <Globe className="size-3 shrink-0" />
+                      <span className="truncate">{contact.website}</span>
+                    </a>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {contacts.length === 0 && !location && (
+          <p className="whitespace-pre-wrap break-words">{messageText(message)}</p>
+        )}
         {interactiveActions.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1.5">
             {interactiveActions.map((action) => (
@@ -1540,9 +1698,7 @@ export default function ConversationsPage() {
                         {subscriberName(contextConversation)}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {contextConversation.subscriberId?.phoneNumber ||
-                          contextConversation.subscriberId?.waId ||
-                          contextConversation.channel}
+                        {subscriberHandle(contextConversation)}
                       </p>
                     </div>
                   </div>

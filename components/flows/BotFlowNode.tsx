@@ -10,7 +10,9 @@ import {
   Bot,
   Boxes,
   FileText,
+  ContactRound,
   ImageIcon,
+  LocateFixed,
   List,
   Lock,
   MapPin,
@@ -20,7 +22,7 @@ import {
   Video
 } from "lucide-react";
 
-import { BotAction, BotBlockType } from "@/api/types/bot.type";
+import { BotAction, BotBlockType } from "@/client-api/types/bot.type";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
@@ -45,6 +47,9 @@ const iconByType: Record<BotBlockType, React.ElementType> = {
   document: FileText,
   video: Video,
   location: MapPin,
+  location_request: LocateFixed,
+  address_request: MapPin,
+  contacts: ContactRound,
   product_carousel: Package,
   generic_carousel: Boxes
 };
@@ -57,6 +62,9 @@ const labelByType: Record<BotBlockType, string> = {
   document: "Document",
   video: "Video",
   location: "Location",
+  location_request: "Location Request",
+  address_request: "Address Request",
+  contacts: "Contacts",
   product_carousel: "Product Carousel",
   generic_carousel: "Generic Carousel"
 };

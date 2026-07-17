@@ -17,8 +17,8 @@ import { useMemo } from "react";
 import { useRouter } from "next/router";
 import { useQuery } from "@tanstack/react-query";
 
-import { getBroadcastById } from "@/api/functions/broadcasts";
-import { BroadcastStats } from "@/api/types/broadcasts.type";
+import { getBroadcastById } from "@/client-api/functions/broadcasts";
+import { BroadcastStats } from "@/client-api/types/broadcasts.type";
 import { Button } from "@/components/ui/button";
 import {
   Card,

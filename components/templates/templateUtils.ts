@@ -3,7 +3,7 @@ import {
   TemplateDraft,
   TemplateButton,
   TemplateComponent
-} from "@/api/types/templates.type";
+} from "@/client-api/types/templates.type";
 
 export const templateStatuses = [
   "ALL",

@@ -8,7 +8,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import AuthLayout from "@/layouts/AuthLayout";
 import { Button } from "@/components/ui/button";
-import { verifyEmail, resendVerification } from "@/api/functions/auth";
+import { verifyEmail, resendVerification } from "@/client-api/functions/auth";
 import { useAuthStore } from "@/stores/authStore";
 import { AxiosError } from "axios";
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { Subscriber, SubscriberPayload } from "@/api/types/subscribers.type";
+import { Subscriber, SubscriberPayload } from "@/client-api/types/subscribers.type";
 import { Button } from "@/components/ui/button";
 import PhoneNumberInput, {
   buildInternationalPhoneNumber

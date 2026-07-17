@@ -1,6 +1,7 @@
 import api from "../axiosInstance";
 import { INSTAGRAM_ENDPOINTS } from "../endpoints";
 import {
+  ConnectInstagramLoginPayload,
   ConnectInstagramManualPayload,
   InstagramAutomationLogsResponse,
   InstagramCanvasDetailResponse,
@@ -41,6 +42,16 @@ export const connectInstagramManual = async (
 ): Promise<InstagramConnectResponse> => {
   const res = await api.patch<InstagramConnectResponse>(
     INSTAGRAM_ENDPOINTS.CONNECT_MANUAL,
+    payload
+  );
+  return res.data;
+};
+
+export const connectInstagramLogin = async (
+  payload: ConnectInstagramLoginPayload
+): Promise<InstagramConnectResponse> => {
+  const res = await api.post<InstagramConnectResponse>(
+    INSTAGRAM_ENDPOINTS.CONNECT_LOGIN,
     payload
   );
   return res.data;

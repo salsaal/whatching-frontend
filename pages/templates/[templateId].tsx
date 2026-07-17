@@ -7,7 +7,7 @@ import { useRouter } from "next/router";
 import {
   getDraftTemplateById,
   getTemplateById
-} from "@/api/functions/templates";
+} from "@/client-api/functions/templates";
 import TemplateCreateForm from "@/components/templates/TemplateCreateForm";
 import { mapDraftToTemplate } from "@/components/templates/templateUtils";
 import AppLayout from "@/layouts/AppLayout";

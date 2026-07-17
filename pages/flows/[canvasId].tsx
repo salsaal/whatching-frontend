@@ -17,10 +17,12 @@ import {
 import {
   ArrowLeft,
   Bot,
+  ContactRound,
   FileUp,
   ImageIcon,
   Layers3,
   List,
+  LocateFixed,
   Loader2,
   Lock,
   MapPin,
@@ -53,7 +55,7 @@ import {
   saveBotCanvasDraftById,
   updateBotSettings,
   validateBotCanvasById
-} from "@/api/functions/bot";
+} from "@/client-api/functions/bot";
 import {
   BotAction,
   BotActionType,
@@ -63,8 +65,8 @@ import {
   BotCanvasNode,
   BotCanvasNodeContent,
   BotSettings
-} from "@/api/types/bot.type";
-import { MediaAsset } from "@/api/types/media.type";
+} from "@/client-api/types/bot.type";
+import { MediaAsset } from "@/client-api/types/media.type";
 import BotFlowNode, {
   BotFlowNodeData,
   BotFlowReactNode
@@ -178,6 +180,24 @@ const blockTypes: Array<{
     label: "Location",
     description: "Share map coordinates",
     icon: MapPin
+  },
+  {
+    type: "location_request",
+    label: "Location Request",
+    description: "Ask customer to share location",
+    icon: LocateFixed
+  },
+  {
+    type: "address_request",
+    label: "Address Request",
+    description: "Collect an India address",
+    icon: MapPin
+  },
+  {
+    type: "contacts",
+    label: "Contacts",
+    description: "Share contact cards",
+    icon: ContactRound
   },
   {
     type: "product_carousel",
@@ -347,6 +367,48 @@ const defaultContent = (blockType: BotBlockType): BotCanvasNodeContent => {
       longitude: 0,
       name: "",
       address: ""
+    };
+  }
+  if (blockType === "location_request") {
+    return {
+      bodyText: "Please share your current location."
+    };
+  }
+  if (blockType === "address_request") {
+    return {
+      bodyText: "Please share your delivery address.",
+      country: "IN"
+    };
+  }
+  if (blockType === "contacts") {
+    return {
+      contacts: [
+        {
+          name: {
+            formatted_name: "Support Team",
+            first_name: "Support"
+          },
+          phones: [
+            {
+              phone: "",
+              type: "WORK",
+              wa_id: ""
+            }
+          ],
+          emails: [
+            {
+              email: "",
+              type: "WORK"
+            }
+          ],
+          urls: [
+            {
+              url: "",
+              type: "WORK"
+            }
+          ]
+        }
+      ]
     };
   }
   if (blockType === "product_carousel") {
@@ -519,6 +581,22 @@ const summarizeNode = (
   }
   if (blockType === "location") {
     return `${content.name || content.locationName || "Location"} (${content.latitude ?? 0}, ${content.longitude ?? 0})`;
+  }
+  if (blockType === "location_request") {
+    return String(content.bodyText || "Ask customer to share location.");
+  }
+  if (blockType === "address_request") {
+    return String(content.bodyText || "Ask customer to share address.");
+  }
+  if (blockType === "contacts") {
+    const contacts = Array.isArray(content.contacts)
+      ? (content.contacts as Array<Record<string, unknown>>)
+      : [];
+    const first = contacts[0] as { name?: Record<string, unknown> } | undefined;
+    const name = String(
+      first?.name?.formatted_name || first?.name?.first_name || "Contact card"
+    );
+    return `Contact: ${name}`;
   }
   return content.catalogId
     ? `Catalog: ${content.catalogId}`
@@ -1083,6 +1161,36 @@ const localValidate = (nodes: BuilderNode[], edges: Edge[]) => {
       (content.latitude === undefined || content.longitude === undefined)
     ) {
       invalidIds.add(node.id);
+    }
+    if (
+      node.data.blockType === "location_request" &&
+      !String(content.bodyText || "").trim()
+    ) {
+      invalidIds.add(node.id);
+      messages.push(`${title}: location request message is required.`);
+    }
+    if (node.data.blockType === "address_request") {
+      if (!String(content.bodyText || "").trim()) {
+        invalidIds.add(node.id);
+        messages.push(`${title}: address request message is required.`);
+      }
+      if (String(content.country || "IN").trim().toUpperCase() !== "IN") {
+        invalidIds.add(node.id);
+        messages.push(`${title}: address request supports country IN only.`);
+      }
+    }
+    if (node.data.blockType === "contacts") {
+      const contacts = Array.isArray(content.contacts)
+        ? (content.contacts as Array<Record<string, unknown>>)
+        : [];
+      const hasNamedContact = contacts.some((contact) => {
+        const name = contact.name as Record<string, unknown> | undefined;
+        return String(name?.formatted_name || "").trim();
+      });
+      if (!hasNamedContact) {
+        invalidIds.add(node.id);
+        messages.push(`${title}: add at least one contact with a formatted name.`);
+      }
     }
     if (
       node.data.blockType === "product_carousel" &&
@@ -2568,6 +2676,180 @@ function PropertiesPanel({
                 onChange={(event) =>
                   updateContent({ address: event.target.value })
                 }
+              />
+            </Field>
+          </div>
+        )}
+
+        {(node.data.blockType === "location_request" ||
+          node.data.blockType === "address_request") && (
+          <div className="grid gap-3">
+            <Field
+              label={
+                node.data.blockType === "location_request"
+                  ? "Location request message"
+                  : "Address request message"
+              }
+            >
+              <Textarea
+                className="min-h-28"
+                value={String(content.bodyText || "")}
+                disabled={readOnly}
+                maxLength={1024}
+                onChange={(event) =>
+                  updateContent({ bodyText: event.target.value })
+                }
+              />
+            </Field>
+            {node.data.blockType === "address_request" && (
+              <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">
+                Meta address request messages currently support India only.
+                This block will publish with <span className="font-semibold">country: IN</span>.
+              </div>
+            )}
+          </div>
+        )}
+
+        {node.data.blockType === "contacts" && (
+          <div className="space-y-3 rounded-lg border p-3">
+            <div>
+              <p className="text-sm font-semibold">Contact card</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Backend requires at least one contact with name.formatted_name.
+              </p>
+            </div>
+            <Field label="Formatted name">
+              <Input
+                value={String(
+                  ((content.contacts as Array<Record<string, unknown>> | undefined)?.[0]
+                    ?.name as Record<string, unknown> | undefined)?.formatted_name ||
+                    ""
+                )}
+                disabled={readOnly}
+                onChange={(event) => {
+                  const currentContact =
+                    ((content.contacts as Array<Record<string, unknown>> | undefined)?.[0] as
+                      | Record<string, unknown>
+                      | undefined) || {};
+                  const currentName =
+                    (currentContact.name as Record<string, unknown> | undefined) || {};
+                  updateContent({
+                    contacts: [
+                      {
+                        ...currentContact,
+                        name: {
+                          ...currentName,
+                          formatted_name: event.target.value,
+                          first_name:
+                            String(currentName.first_name || "").trim() ||
+                            event.target.value.split(" ")[0] ||
+                            event.target.value
+                        }
+                      }
+                    ]
+                  });
+                }}
+              />
+            </Field>
+            <Field label="Phone number">
+              <Input
+                value={String(
+                  (((content.contacts as Array<Record<string, unknown>> | undefined)?.[0]
+                    ?.phones as Array<Record<string, unknown>> | undefined)?.[0]
+                    ?.phone as string | undefined) || ""
+                )}
+                disabled={readOnly}
+                placeholder="+91..."
+                onChange={(event) => {
+                  const currentContact =
+                    ((content.contacts as Array<Record<string, unknown>> | undefined)?.[0] as
+                      | Record<string, unknown>
+                      | undefined) || {};
+                  const currentPhones =
+                    (currentContact.phones as Array<Record<string, unknown>> | undefined) || [];
+                  updateContent({
+                    contacts: [
+                      {
+                        ...currentContact,
+                        phones: [
+                          {
+                            ...(currentPhones[0] || {}),
+                            phone: event.target.value,
+                            type: "WORK"
+                          }
+                        ]
+                      }
+                    ]
+                  });
+                }}
+              />
+            </Field>
+            <Field label="Email (optional)">
+              <Input
+                type="email"
+                value={String(
+                  (((content.contacts as Array<Record<string, unknown>> | undefined)?.[0]
+                    ?.emails as Array<Record<string, unknown>> | undefined)?.[0]
+                    ?.email as string | undefined) || ""
+                )}
+                disabled={readOnly}
+                placeholder="support@example.com"
+                onChange={(event) => {
+                  const currentContact =
+                    ((content.contacts as Array<Record<string, unknown>> | undefined)?.[0] as
+                      | Record<string, unknown>
+                      | undefined) || {};
+                  const currentEmails =
+                    (currentContact.emails as Array<Record<string, unknown>> | undefined) || [];
+                  updateContent({
+                    contacts: [
+                      {
+                        ...currentContact,
+                        emails: [
+                          {
+                            ...(currentEmails[0] || {}),
+                            email: event.target.value,
+                            type: "WORK"
+                          }
+                        ]
+                      }
+                    ]
+                  });
+                }}
+              />
+            </Field>
+            <Field label="Website (optional)">
+              <Input
+                type="url"
+                value={String(
+                  (((content.contacts as Array<Record<string, unknown>> | undefined)?.[0]
+                    ?.urls as Array<Record<string, unknown>> | undefined)?.[0]
+                    ?.url as string | undefined) || ""
+                )}
+                disabled={readOnly}
+                placeholder="https://example.com"
+                onChange={(event) => {
+                  const currentContact =
+                    ((content.contacts as Array<Record<string, unknown>> | undefined)?.[0] as
+                      | Record<string, unknown>
+                      | undefined) || {};
+                  const currentUrls =
+                    (currentContact.urls as Array<Record<string, unknown>> | undefined) || [];
+                  updateContent({
+                    contacts: [
+                      {
+                        ...currentContact,
+                        urls: [
+                          {
+                            ...(currentUrls[0] || {}),
+                            url: event.target.value,
+                            type: "WORK"
+                          }
+                        ]
+                      }
+                    ]
+                  });
+                }}
               />
             </Field>
           </div>

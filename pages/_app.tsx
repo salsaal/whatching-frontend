@@ -13,7 +13,7 @@ import React from "react";
 import { toast, Toaster } from "sonner";
 import "@/styles/globals.css";
 import "@xyflow/react/dist/style.css";
-import { ApiResponse } from "@/api/types/api";
+import { ApiResponse } from "@/client-api/types/api";
 import RouteGuard from "@/components/auth/RouteGuard";
 import { NuqsAdapter } from "nuqs/adapters/next/pages";
 

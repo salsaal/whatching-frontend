@@ -22,11 +22,11 @@ import {
   getAllBroadcasts,
   getBroadcastById,
   startBroadcast
-} from "@/api/functions/broadcasts";
-import { getAllSubscribers, getTags } from "@/api/functions/subscribers";
-import { getAllTemplates } from "@/api/functions/templates";
-import { Broadcast, BroadcastAudience } from "@/api/types/broadcasts.type";
-import { MessageTemplate } from "@/api/types/templates.type";
+} from "@/client-api/functions/broadcasts";
+import { getAllSubscribers, getTags } from "@/client-api/functions/subscribers";
+import { getAllTemplates } from "@/client-api/functions/templates";
+import { Broadcast, BroadcastAudience } from "@/client-api/types/broadcasts.type";
+import { MessageTemplate } from "@/client-api/types/templates.type";
 import {
   extractVariables,
   getBodyComponent

@@ -25,10 +25,12 @@ import {
   archiveBotCanvas,
   createBotCanvas,
   getBotCanvas,
+  getBotSettings,
   listBotCanvases,
-  updateBotCanvas
-} from "@/api/functions/bot";
-import { BotCanvasRecord } from "@/api/types/bot.type";
+  updateBotCanvas,
+  updateBotSettings
+} from "@/client-api/functions/bot";
+import { BotCanvasRecord } from "@/client-api/types/bot.type";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -85,6 +87,11 @@ export default function FlowsPage() {
     queryFn: listBotCanvases,
     enabled: Boolean(activeOrganization?._id),
     refetchOnMount: "always"
+  });
+  const { data: settingsData, isLoading: isSettingsLoading } = useQuery({
+    queryKey: ["bot-settings", activeOrganization?._id],
+    queryFn: getBotSettings,
+    enabled: Boolean(activeOrganization?._id)
   });
 
   const canvases = [...(data?.data?.canvases || [])].sort((a, b) => {
@@ -156,6 +163,17 @@ export default function FlowsPage() {
     },
     onError: handleError
   });
+  const { mutate: updateSettingsMutate, isPending: isUpdatingSettings } =
+    useMutation({
+      mutationFn: updateBotSettings,
+      onSuccess: async () => {
+        toast.success("Automation settings updated.");
+        await queryClient.invalidateQueries({
+          queryKey: ["bot-settings", activeOrganization?._id]
+        });
+      },
+      onError: handleError
+    });
 
   return (
     <AppLayout>
@@ -205,6 +223,39 @@ export default function FlowsPage() {
                 Add flow
               </Button>
             </div>
+          </div>
+        </section>
+
+        <section className="grid gap-3 md:grid-cols-2">
+          <div className="flex items-center justify-between rounded-lg bg-white p-4 shadow-xs">
+            <div>
+              <p className="text-sm font-semibold">Active bot</p>
+              <p className="text-xs text-muted-foreground">
+                Enable WhatsApp automation for the active published canvas.
+              </p>
+            </div>
+            <Switch
+              checked={Boolean(settingsData?.data?.settings.isBotEnabled)}
+              disabled={isSettingsLoading || isUpdatingSettings}
+              onCheckedChange={(checked) =>
+                updateSettingsMutate({ isBotEnabled: checked })
+              }
+            />
+          </div>
+          <div className="flex items-center justify-between rounded-lg bg-white p-4 shadow-xs">
+            <div>
+              <p className="text-sm font-semibold">AI response</p>
+              <p className="text-xs text-muted-foreground">
+                Let AI answer when no interactive flow route matches.
+              </p>
+            </div>
+            <Switch
+              checked={Boolean(settingsData?.data?.settings.isAiEnabled)}
+              disabled={isSettingsLoading || isUpdatingSettings}
+              onCheckedChange={(checked) =>
+                updateSettingsMutate({ isAiEnabled: checked })
+              }
+            />
           </div>
         </section>
 

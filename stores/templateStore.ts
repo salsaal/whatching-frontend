@@ -1,4 +1,4 @@
-import { MessageTemplate } from "@/api/types/templates.type";
+import { MessageTemplate } from "@/client-api/types/templates.type";
 import { create } from "zustand";
 
 interface TemplateState {
