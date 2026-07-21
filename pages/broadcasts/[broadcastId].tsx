@@ -117,8 +117,16 @@ const getTimelineRows = (broadcast: {
   startedAt?: string | null;
   completedAt?: string | null;
 }) => [
-  { label: "Created", value: formatDate(broadcast.createdAt), icon: CalendarClock },
-  { label: "Scheduled", value: formatDate(broadcast.scheduledAt), icon: Clock3 },
+  {
+    label: "Created",
+    value: formatDate(broadcast.createdAt),
+    icon: CalendarClock
+  },
+  {
+    label: "Scheduled",
+    value: formatDate(broadcast.scheduledAt),
+    icon: Clock3
+  },
   { label: "Started", value: formatDate(broadcast.startedAt), icon: Send },
   {
     label: "Completed",
@@ -328,22 +336,22 @@ export default function BroadcastMetricsPage() {
                     const Icon = row.icon;
 
                     return (
-                    <div
-                      key={row.label}
-                      className="flex items-start gap-3 rounded-sm border p-3"
-                    >
-                      <span className="flex size-9 shrink-0 items-center justify-center rounded-sm bg-primary/10">
-                        <Icon className="size-4 text-primary" />
-                      </span>
-                      <div>
-                        <p className="text-xs text-muted-foreground">
-                          {row.label}
-                        </p>
-                        <p className="mt-1 text-sm font-medium">
-                          {row.value}
-                        </p>
+                      <div
+                        key={row.label}
+                        className="flex items-start gap-3 rounded-sm border p-3"
+                      >
+                        <span className="flex size-9 shrink-0 items-center justify-center rounded-sm bg-primary/10">
+                          <Icon className="size-4 text-primary" />
+                        </span>
+                        <div>
+                          <p className="text-xs text-muted-foreground">
+                            {row.label}
+                          </p>
+                          <p className="mt-1 text-sm font-medium">
+                            {row.value}
+                          </p>
+                        </div>
                       </div>
-                    </div>
                     );
                   })}
                   {broadcast.lastError && (
@@ -361,8 +369,7 @@ export default function BroadcastMetricsPage() {
                   Recipients
                 </CardTitle>
                 <CardDescription>
-                  {data?.data.recipientsPagination?.total ??
-                    recipients.length}{" "}
+                  {data?.data.recipientsPagination?.total ?? recipients.length}{" "}
                   recipients returned for this broadcast.
                 </CardDescription>
               </CardHeader>

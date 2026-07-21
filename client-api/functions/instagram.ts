@@ -155,10 +155,10 @@ export const getInstagramCanvases =
 export const createInstagramCanvas = async (
   payload: { name?: string } = {}
 ): Promise<{ status: string; data: { canvas: InstagramCanvasRecord } }> => {
-  const res = await api.post<{ status: string; data: { canvas: InstagramCanvasRecord } }>(
-    INSTAGRAM_ENDPOINTS.CANVASES,
-    payload
-  );
+  const res = await api.post<{
+    status: string;
+    data: { canvas: InstagramCanvasRecord };
+  }>(INSTAGRAM_ENDPOINTS.CANVASES, payload);
   return res.data;
 };
 
@@ -178,10 +178,10 @@ export const updateInstagramCanvas = async ({
   canvasId: string;
   name: string;
 }): Promise<{ status: string; data: { canvas: InstagramCanvasRecord } }> => {
-  const res = await api.patch<{ status: string; data: { canvas: InstagramCanvasRecord } }>(
-    INSTAGRAM_ENDPOINTS.CANVAS_BY_ID(canvasId),
-    { name }
-  );
+  const res = await api.patch<{
+    status: string;
+    data: { canvas: InstagramCanvasRecord };
+  }>(INSTAGRAM_ENDPOINTS.CANVAS_BY_ID(canvasId), { name });
   return res.data;
 };
 
@@ -225,28 +225,34 @@ export const publishInstagramCanvasById = async ({
 export const activateInstagramCanvas = async (
   canvasId: string
 ): Promise<{ status: string; data: { canvas: InstagramCanvasRecord } }> => {
-  const res = await api.post<{ status: string; data: { canvas: InstagramCanvasRecord } }>(
-    INSTAGRAM_ENDPOINTS.CANVAS_ACTIVATE_BY_ID(canvasId)
-  );
+  const res = await api.post<{
+    status: string;
+    data: { canvas: InstagramCanvasRecord };
+  }>(INSTAGRAM_ENDPOINTS.CANVAS_ACTIVATE_BY_ID(canvasId));
   return res.data;
 };
 
 export const deleteInstagramCanvas = async (
   canvasId: string
 ): Promise<{ status: string; data: { canvas: InstagramCanvasRecord } }> => {
-  const res = await api.delete<{ status: string; data: { canvas: InstagramCanvasRecord } }>(
-    INSTAGRAM_ENDPOINTS.CANVAS_BY_ID(canvasId)
-  );
+  const res = await api.delete<{
+    status: string;
+    data: { canvas: InstagramCanvasRecord };
+  }>(INSTAGRAM_ENDPOINTS.CANVAS_BY_ID(canvasId));
   return res.data;
 };
 
 export const getInstagramFlows = async (
-  params: { page?: number; limit?: number; status?: string; triggerType?: string } = {}
+  params: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    triggerType?: string;
+  } = {}
 ): Promise<InstagramFlowsResponse> => {
-  const res = await api.get<InstagramFlowsResponse>(
-    INSTAGRAM_ENDPOINTS.FLOWS,
-    { params: compactParams(params) }
-  );
+  const res = await api.get<InstagramFlowsResponse>(INSTAGRAM_ENDPOINTS.FLOWS, {
+    params: compactParams(params)
+  });
   return res.data;
 };
 
@@ -312,7 +318,12 @@ export const deleteInstagramCommentRule = async (
 };
 
 export const getInstagramAutomationLogs = async (
-  params: { page?: number; limit?: number; ruleId?: string; status?: string } = {}
+  params: {
+    page?: number;
+    limit?: number;
+    ruleId?: string;
+    status?: string;
+  } = {}
 ): Promise<InstagramAutomationLogsResponse> => {
   const res = await api.get<InstagramAutomationLogsResponse>(
     INSTAGRAM_ENDPOINTS.AUTOMATION_LOGS,

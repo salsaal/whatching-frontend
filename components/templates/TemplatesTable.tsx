@@ -117,6 +117,7 @@ export default function TemplatesTable({
                     variant="ghost"
                     size="icon"
                     className="size-9 text-muted-foreground"
+                    tooltip="Edit this template"
                     disabled={template.status.toUpperCase() === "PENDING"}
                     onClick={(event) => {
                       event.stopPropagation();
@@ -131,6 +132,7 @@ export default function TemplatesTable({
                         variant="ghost"
                         size="icon"
                         className="size-9 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        tooltip="Link the required header media"
                         onClick={(event) => {
                           event.stopPropagation();
                           onLinkMedia?.(template);
@@ -143,6 +145,7 @@ export default function TemplatesTable({
                     variant="ghost"
                     size="icon"
                     className="size-9 text-muted-foreground hover:text-destructive"
+                    tooltip="Delete this template"
                     disabled={deletingId === template.templateId}
                     onClick={(event) => {
                       event.stopPropagation();

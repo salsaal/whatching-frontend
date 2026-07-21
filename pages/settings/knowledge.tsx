@@ -2,7 +2,14 @@
 
 import { ChangeEvent, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Brain, FileText, Loader2, RefreshCcw, Trash2, UploadCloud } from "lucide-react";
+import {
+  Brain,
+  FileText,
+  Loader2,
+  RefreshCcw,
+  Trash2,
+  UploadCloud
+} from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -16,6 +23,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { ListLoadingSkeleton } from "@/components/ui/loading-skeletons";
 import { Textarea } from "@/components/ui/textarea";
 import AppLayout from "@/layouts/AppLayout";
 import { useOrganizationStore } from "@/stores/organizationStore";
@@ -127,7 +135,9 @@ export default function KnowledgeSettingsPage() {
               />
               <Button
                 className="w-full cursor-pointer"
-                disabled={isCreating || !form.title.trim() || !form.content.trim()}
+                disabled={
+                  isCreating || !form.title.trim() || !form.content.trim()
+                }
                 onClick={() =>
                   createText({
                     type: "text",
@@ -164,11 +174,7 @@ export default function KnowledgeSettingsPage() {
 
           <div className="space-y-3">
             {isLoading ? (
-              <Card className="rounded-lg">
-                <CardContent className="p-5 text-sm text-muted-foreground">
-                  Loading knowledge sources...
-                </CardContent>
-              </Card>
+              <ListLoadingSkeleton rows={5} />
             ) : sources.length ? (
               sources.map((source) => (
                 <Card key={source._id} className="rounded-lg">
@@ -192,6 +198,7 @@ export default function KnowledgeSettingsPage() {
                       size="icon"
                       variant="outline"
                       className="cursor-pointer"
+                      tooltip="Re-ingest this knowledge source"
                       onClick={() => reingestSource(source._id)}
                     >
                       <RefreshCcw className="size-4" />
@@ -200,6 +207,7 @@ export default function KnowledgeSettingsPage() {
                       size="icon"
                       variant="outline"
                       className="cursor-pointer text-destructive hover:text-destructive"
+                      tooltip="Delete this knowledge source"
                       onClick={() => deleteSource(source._id)}
                     >
                       <Trash2 className="size-4" />

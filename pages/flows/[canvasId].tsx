@@ -11,6 +11,7 @@ import {
   ReactFlow,
   ReactFlowInstance,
   ReactFlowProvider,
+  ViewportPortal,
   useEdgesState,
   useNodesState
 } from "@xyflow/react";
@@ -18,6 +19,7 @@ import {
   ArrowLeft,
   Bot,
   ContactRound,
+  Eye,
   FileUp,
   ImageIcon,
   Layers3,
@@ -34,17 +36,12 @@ import {
   Send,
   Trash2,
   Video,
+  Workflow,
   XCircle
 } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/router";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import {
@@ -71,11 +68,14 @@ import BotFlowNode, {
   BotFlowNodeData,
   BotFlowReactNode
 } from "@/components/flows/BotFlowNode";
+import FlowDiagramPreviewDialog from "@/components/flows/FlowDiagramPreviewDialog";
+import { WhatsAppFlowBlockPreview } from "@/components/flows/FlowBlockPreview";
 import MediaPickerDialog from "@/components/media/MediaPickerDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { CanvasLoadingSkeleton } from "@/components/ui/loading-skeletons";
 import {
   Select,
   SelectContent,
@@ -287,9 +287,13 @@ const getListSections = (content: BotCanvasNodeContent): ListSection[] => {
     title: String(section.title || `Section ${sectionIndex + 1}`),
     rows: Array.isArray(section.rows)
       ? section.rows.map((row, rowIndex) => {
-          const label = String(row.title || row.label || `Option ${rowIndex + 1}`);
+          const label = String(
+            row.title || row.label || `Option ${rowIndex + 1}`
+          );
           const id = String(
-            row.id || row.replyId || slugifyTrigger(label || `ITEM_${rowIndex + 1}`)
+            row.id ||
+              row.replyId ||
+              slugifyTrigger(label || `ITEM_${rowIndex + 1}`)
           );
           return {
             ...row,
@@ -310,7 +314,8 @@ const getListSections = (content: BotCanvasNodeContent): ListSection[] => {
 
 const getListRowCount = (sections: ListSection[]) =>
   sections.reduce(
-    (count, section) => count + (Array.isArray(section.rows) ? section.rows.length : 0),
+    (count, section) =>
+      count + (Array.isArray(section.rows) ? section.rows.length : 0),
     0
   );
 
@@ -328,7 +333,9 @@ const buildListActionsFromSections = (
       const title = String(row.title || row.label || `Option ${rowIndex + 1}`);
       const replyId = String(row.replyId || row.id || slugifyTrigger(title));
       const existing = existingByReplyId.get(replyId);
-      const type = ((row.type || existing?.type || "go_to_trigger") as BotActionType);
+      const type = (row.type ||
+        existing?.type ||
+        "go_to_trigger") as BotActionType;
       return {
         actionId: existing?.actionId || newId("list_row"),
         type,
@@ -680,9 +687,9 @@ const createNode = (
       ? getContentActions(blockType, content)
       : blockType === "list"
         ? getContentActions(blockType, content)
-      : isRoutingBlock(blockType)
-        ? [makeAction("Option 1")]
-        : []);
+        : isRoutingBlock(blockType)
+          ? [makeAction("Option 1")]
+          : []);
   return toReactNode({
     id: overrides?.id || newId("node"),
     triggerKey: overrides?.triggerKey || slugifyTrigger(label),
@@ -761,7 +768,11 @@ const complianceNode = () =>
 
 const ensureRequiredNodes = (nodes: BuilderNode[]) => {
   const byTrigger = new Set(nodes.map((node) => node.data.triggerKey));
-  if (!byTrigger.has("DEFAULT") && !byTrigger.has("OPT_IN") && !byTrigger.has("OPT_OUT")) {
+  if (
+    !byTrigger.has("DEFAULT") &&
+    !byTrigger.has("OPT_IN") &&
+    !byTrigger.has("OPT_OUT")
+  ) {
     return [...nodes, ...defaultCanvasNodes()];
   }
   const required: BuilderNode[] = [];
@@ -808,8 +819,7 @@ const applyDefaultMarker = (
     defaultTriggerKey ||
     nodes.find(
       (node) =>
-        node.data.triggerKey !== "OPT_IN" &&
-        node.data.triggerKey !== "OPT_OUT"
+        node.data.triggerKey !== "OPT_IN" && node.data.triggerKey !== "OPT_OUT"
     )?.data.triggerKey ||
     "DEFAULT";
 
@@ -871,7 +881,9 @@ const getSelectedMediaId = (
   return String(node.data.content.mediaId || "");
 };
 
-const getMediaPreviewUrl = (content: BotCanvasNodeContent | GenericCarouselCard) =>
+const getMediaPreviewUrl = (
+  content: BotCanvasNodeContent | GenericCarouselCard
+) =>
   String(
     content.mediaUrl ||
       (content.media &&
@@ -898,7 +910,11 @@ function MediaPreview({
   return (
     <div className="mt-3 overflow-hidden rounded-lg border bg-muted/30">
       {mediaType === "video" ? (
-        <video src={url} controls className="aspect-video w-full object-cover" />
+        <video
+          src={url}
+          controls
+          className="aspect-video w-full object-cover"
+        />
       ) : mediaType === "image" ? (
         <img
           src={url}
@@ -909,7 +925,9 @@ function MediaPreview({
         <div className="flex min-h-24 items-center gap-3 p-3 text-sm">
           <FileUp className="size-8 shrink-0 text-primary" />
           <div className="min-w-0">
-            <p className="truncate font-medium">{label || "Selected document"}</p>
+            <p className="truncate font-medium">
+              {label || "Selected document"}
+            </p>
             {url && (
               <p className="truncate text-xs text-muted-foreground">{url}</p>
             )}
@@ -921,15 +939,11 @@ function MediaPreview({
 }
 
 const getDraftStateFromResponse = (
-  data?: ReturnType<typeof getBotCanvas> extends Promise<infer R>
-    ? R
-    : never
+  data?: ReturnType<typeof getBotCanvas> extends Promise<infer R> ? R : never
 ) => data?.data?.canvas?.draftState || data?.data?.draftState;
 
 const getPublishedStateFromResponse = (
-  data?: ReturnType<typeof getBotCanvas> extends Promise<infer R>
-    ? R
-    : never
+  data?: ReturnType<typeof getBotCanvas> extends Promise<infer R> ? R : never
 ) => data?.data?.canvas?.publishedState || data?.data?.publishedState;
 
 const getSettingsFromResponse = (settings?: BotSettings) => settings;
@@ -1033,9 +1047,13 @@ const prepareNodeContent = (node: BuilderNode): BotCanvasNodeContent => {
       ? sections.map((section, sectionIndex) => ({
           title: String(section.title || `Section ${sectionIndex + 1}`),
           rows: (section.rows || []).map((row, rowIndex) => {
-            const title = String(row.title || row.label || `Item ${rowIndex + 1}`);
+            const title = String(
+              row.title || row.label || `Item ${rowIndex + 1}`
+            );
             const id = String(
-              row.id || row.replyId || slugifyTrigger(title || `ITEM_${rowIndex + 1}`)
+              row.id ||
+                row.replyId ||
+                slugifyTrigger(title || `ITEM_${rowIndex + 1}`)
             );
             return {
               id,
@@ -1050,15 +1068,18 @@ const prepareNodeContent = (node: BuilderNode): BotCanvasNodeContent => {
       : [
           {
             title: "Menu",
-            rows: visibleActions.slice(0, LIST_MAX_ROWS).map((action, index) => ({
-              id: action.replyId || action.actionId || `ITEM_${index + 1}`,
-              replyId: action.replyId || action.actionId || `ITEM_${index + 1}`,
-              title: action.label || `Item ${index + 1}`,
-              description:
-                typeof action.metadata?.description === "string"
-                  ? action.metadata.description
-                  : undefined
-            }))
+            rows: visibleActions
+              .slice(0, LIST_MAX_ROWS)
+              .map((action, index) => ({
+                id: action.replyId || action.actionId || `ITEM_${index + 1}`,
+                replyId:
+                  action.replyId || action.actionId || `ITEM_${index + 1}`,
+                title: action.label || `Item ${index + 1}`,
+                description:
+                  typeof action.metadata?.description === "string"
+                    ? action.metadata.description
+                    : undefined
+              }))
           }
         ];
   }
@@ -1073,14 +1094,19 @@ const canvasEdgesToFlow = (
   const handleByNodeAndReply = new Map<string, string>();
   nodes.forEach((node) => {
     node.data.actions.forEach((action) => {
-      handleByNodeAndReply.set(`${node.id}:${action.actionId}`, action.actionId);
+      handleByNodeAndReply.set(
+        `${node.id}:${action.actionId}`,
+        action.actionId
+      );
       if (action.replyId)
-        handleByNodeAndReply.set(`${node.id}:${action.replyId}`, action.actionId);
+        handleByNodeAndReply.set(
+          `${node.id}:${action.replyId}`,
+          action.actionId
+        );
     });
   });
 
-  return (
-  (edges || []).map((edge) => ({
+  return (edges || []).map((edge) => ({
     id: edge.id,
     source: edge.source,
     target: edge.target,
@@ -1098,8 +1124,7 @@ const canvasEdgesToFlow = (
     targetHandle: edge.targetHandle || "in",
     animated: false,
     data: edge.metadata
-  }))
-  );
+  }));
 };
 
 const localValidate = (nodes: BuilderNode[], edges: Edge[]) => {
@@ -1110,7 +1135,10 @@ const localValidate = (nodes: BuilderNode[], edges: Edge[]) => {
   );
   const triggerKeys = new Set(nodes.map((node) => node.data.triggerKey));
   const triggerCounts = nodes.reduce((counts, node) => {
-    counts.set(node.data.triggerKey, (counts.get(node.data.triggerKey) || 0) + 1);
+    counts.set(
+      node.data.triggerKey,
+      (counts.get(node.data.triggerKey) || 0) + 1
+    );
     return counts;
   }, new Map<string, number>());
 
@@ -1132,7 +1160,9 @@ const localValidate = (nodes: BuilderNode[], edges: Edge[]) => {
     const title = node.data.label;
     if ((triggerCounts.get(node.data.triggerKey) || 0) > 1) {
       invalidIds.add(node.id);
-      messages.push(`${title}: trigger key "${node.data.triggerKey}" is duplicated.`);
+      messages.push(
+        `${title}: trigger key "${node.data.triggerKey}" is duplicated.`
+      );
     }
     if (!node.data.label?.trim() || !node.data.triggerKey.trim())
       invalidIds.add(node.id);
@@ -1174,7 +1204,11 @@ const localValidate = (nodes: BuilderNode[], edges: Edge[]) => {
         invalidIds.add(node.id);
         messages.push(`${title}: address request message is required.`);
       }
-      if (String(content.country || "IN").trim().toUpperCase() !== "IN") {
+      if (
+        String(content.country || "IN")
+          .trim()
+          .toUpperCase() !== "IN"
+      ) {
         invalidIds.add(node.id);
         messages.push(`${title}: address request supports country IN only.`);
       }
@@ -1189,7 +1223,9 @@ const localValidate = (nodes: BuilderNode[], edges: Edge[]) => {
       });
       if (!hasNamedContact) {
         invalidIds.add(node.id);
-        messages.push(`${title}: add at least one contact with a formatted name.`);
+        messages.push(
+          `${title}: add at least one contact with a formatted name.`
+        );
       }
     }
     if (
@@ -1206,13 +1242,15 @@ const localValidate = (nodes: BuilderNode[], edges: Edge[]) => {
     if (node.data.blockType === "buttons" && content.mediaType) {
       if (!String(content.mediaId || "").trim()) {
         invalidIds.add(node.id);
-        messages.push(`${title}: media header requires media from the library.`);
+        messages.push(
+          `${title}: media header requires media from the library.`
+        );
       }
-      if (
-        !["image", "document", "video"].includes(String(content.mediaType))
-      ) {
+      if (!["image", "document", "video"].includes(String(content.mediaType))) {
         invalidIds.add(node.id);
-        messages.push(`${title}: media header must be image, document, or video.`);
+        messages.push(
+          `${title}: media header must be image, document, or video.`
+        );
       }
     }
     if (node.data.blockType === "buttons") {
@@ -1264,32 +1302,32 @@ const localValidate = (nodes: BuilderNode[], edges: Edge[]) => {
           );
         }
         (section.rows || []).forEach((row) => {
-        const label = String(row.title || row.label || "").trim();
-        const rowId = String(row.id || row.replyId || "").trim();
-        const description = String(row.description || "");
-        if (label.length < 1 || label.length > LIST_ROW_TITLE_MAX) {
-          invalidIds.add(node.id);
-          messages.push(
-            `${title}: list row "${label || "Untitled"}" must be 1-${LIST_ROW_TITLE_MAX} characters.`
-          );
-        }
-        if (rowId.length < 1 || rowId.length > LIST_ROW_ID_MAX) {
-          invalidIds.add(node.id);
-          messages.push(
-            `${title}: list row "${label || "Untitled"}" id must be 1-${LIST_ROW_ID_MAX} characters.`
-          );
-        }
-        if (rowIds.has(rowId)) {
-          invalidIds.add(node.id);
-          messages.push(`${title}: list row id "${rowId}" is duplicated.`);
-        }
-        rowIds.add(rowId);
-        if (description.length > LIST_ROW_DESCRIPTION_MAX) {
-          invalidIds.add(node.id);
-          messages.push(
-            `${title}: list row "${label || "Untitled"}" description must be ${LIST_ROW_DESCRIPTION_MAX} characters or less.`
-          );
-        }
+          const label = String(row.title || row.label || "").trim();
+          const rowId = String(row.id || row.replyId || "").trim();
+          const description = String(row.description || "");
+          if (label.length < 1 || label.length > LIST_ROW_TITLE_MAX) {
+            invalidIds.add(node.id);
+            messages.push(
+              `${title}: list row "${label || "Untitled"}" must be 1-${LIST_ROW_TITLE_MAX} characters.`
+            );
+          }
+          if (rowId.length < 1 || rowId.length > LIST_ROW_ID_MAX) {
+            invalidIds.add(node.id);
+            messages.push(
+              `${title}: list row "${label || "Untitled"}" id must be 1-${LIST_ROW_ID_MAX} characters.`
+            );
+          }
+          if (rowIds.has(rowId)) {
+            invalidIds.add(node.id);
+            messages.push(`${title}: list row id "${rowId}" is duplicated.`);
+          }
+          rowIds.add(rowId);
+          if (description.length > LIST_ROW_DESCRIPTION_MAX) {
+            invalidIds.add(node.id);
+            messages.push(
+              `${title}: list row "${label || "Untitled"}" description must be ${LIST_ROW_DESCRIPTION_MAX} characters or less.`
+            );
+          }
         });
       });
     }
@@ -1388,7 +1426,8 @@ const localValidate = (nodes: BuilderNode[], edges: Edge[]) => {
 
 function FlowsBuilder() {
   const router = useRouter();
-  const canvasId = typeof router.query.canvasId === "string" ? router.query.canvasId : "";
+  const canvasId =
+    typeof router.query.canvasId === "string" ? router.query.canvasId : "";
   const activeOrganization = useOrganizationStore(
     (state) => state.activeOrganization
   );
@@ -1402,6 +1441,8 @@ function FlowsBuilder() {
     Edge
   > | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [previewNodeId, setPreviewNodeId] = useState<string | null>(null);
+  const [flowPreviewOpen, setFlowPreviewOpen] = useState(false);
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
   const [saveState, setSaveState] = useState<
     "idle" | "saving" | "saved" | "error"
@@ -1466,6 +1507,10 @@ function FlowsBuilder() {
   const visibleNodes = canvasMode === "draft" ? nodes : publishedNodes;
   const visibleEdges = canvasMode === "draft" ? edges : publishedEdges;
   const isPublishedMode = canvasMode === "published";
+  const previewNode = useMemo(
+    () => visibleNodes.find((node) => node.id === previewNodeId) || null,
+    [previewNodeId, visibleNodes]
+  );
 
   const buildDraftState = useCallback(
     (currentNodes = nodes, currentEdges = edges): BotCanvasDraftState => {
@@ -1484,12 +1529,11 @@ function FlowsBuilder() {
       return {
         version: 1,
         defaultTriggerKey:
-          publishNodes.find(
-            (node) =>
-              Boolean(
-                (node.data.metadata as Record<string, unknown> | undefined)
-                  ?.isDefault
-              )
+          publishNodes.find((node) =>
+            Boolean(
+              (node.data.metadata as Record<string, unknown> | undefined)
+                ?.isDefault
+            )
           )?.data.triggerKey ||
           publishNodes.find(
             (node) =>
@@ -1565,7 +1609,9 @@ function FlowsBuilder() {
         ? cachedDraft
         : backendDraft;
     const loadedNodes = draft?.nodes?.length
-      ? ensureUniqueNodeTriggers(ensureRequiredNodes(draft.nodes.map(toReactNode)))
+      ? ensureUniqueNodeTriggers(
+          ensureRequiredNodes(draft.nodes.map(toReactNode))
+        )
       : defaultCanvasNodes();
     const loadedEdges = canvasEdgesToFlow(draft?.edges, loadedNodes);
     const useStarter =
@@ -1587,7 +1633,10 @@ function FlowsBuilder() {
   useEffect(() => {
     const published = getPublishedStateFromResponse(publishedData);
     const nextPublishedNodes = published?.nodes?.length
-      ? applyDefaultMarker(published.nodes.map(toReactNode), published.defaultTriggerKey)
+      ? applyDefaultMarker(
+          published.nodes.map(toReactNode),
+          published.defaultTriggerKey
+        )
       : [];
     setPublishedNodes(nextPublishedNodes);
     setPublishedEdges(canvasEdgesToFlow(published?.edges, nextPublishedNodes));
@@ -1598,7 +1647,14 @@ function FlowsBuilder() {
     const draft = buildDraftState();
     latestDraftRef.current = draft;
     writeCachedDraft(activeOrganization?._id, canvasId, draft);
-  }, [activeOrganization?._id, buildDraftState, canvasId, edges, isPublishedMode, nodes]);
+  }, [
+    activeOrganization?._id,
+    buildDraftState,
+    canvasId,
+    edges,
+    isPublishedMode,
+    nodes
+  ]);
 
   useEffect(() => {
     if (!activeOrganization?._id || !canvasId) return;
@@ -1759,7 +1815,9 @@ function FlowsBuilder() {
           ?.isDefault
       )
     ) {
-      toast.error("Choose another block as default before deleting this block.");
+      toast.error(
+        "Choose another block as default before deleting this block."
+      );
       return;
     }
     if (selectedNode.data.locked) {
@@ -1776,6 +1834,7 @@ function FlowsBuilder() {
       )
     );
     setSelectedNodeId(null);
+    setPreviewNodeId(null);
   };
 
   const handleNodesChange = useCallback(
@@ -1785,8 +1844,8 @@ function FlowsBuilder() {
       );
       const defaultNodeIds = new Set(
         nodes
-          .filter(
-            (node) => Boolean(
+          .filter((node) =>
+            Boolean(
               (node.data.metadata as Record<string, unknown> | undefined)
                 ?.isDefault
             )
@@ -1801,7 +1860,9 @@ function FlowsBuilder() {
       );
 
       if (defaultRemoval) {
-        toast.error("Choose another block as default before deleting this block.");
+        toast.error(
+          "Choose another block as default before deleting this block."
+        );
       } else if (lockedRemoval) {
         toast.error("System blocks cannot be deleted.");
       }
@@ -1841,7 +1902,9 @@ function FlowsBuilder() {
       const validationResponse = await validateDraft();
       const backendValidation = getBackendValidation(validationResponse.data);
       if (backendValidation && backendValidation.valid === false) {
-        const errors = backendValidation.errors || ["Backend validation failed."];
+        const errors = backendValidation.errors || [
+          "Backend validation failed."
+        ];
         setValidationMessages(errors);
         setSaveState("error");
         toast.error(errors[0]);
@@ -2004,6 +2067,7 @@ function FlowsBuilder() {
               onValueChange={(value) => {
                 setCanvasMode(value as CanvasMode);
                 setSelectedNodeId(null);
+                setPreviewNodeId(null);
               }}
               className="mr-1"
             >
@@ -2016,6 +2080,7 @@ function FlowsBuilder() {
               <Switch
                 checked={Boolean(settings?.isBotEnabled)}
                 disabled={isUpdatingSettings}
+                title="Turn the active WhatsApp flow on or off"
                 onCheckedChange={(checked) =>
                   toggleSetting("isBotEnabled", checked)
                 }
@@ -2026,6 +2091,7 @@ function FlowsBuilder() {
               <Switch
                 checked={Boolean(settings?.isAiEnabled)}
                 disabled={isUpdatingSettings}
+                title="Allow AI fallback when no route matches"
                 onCheckedChange={(checked) =>
                   toggleSetting("isAiEnabled", checked)
                 }
@@ -2065,10 +2131,7 @@ function FlowsBuilder() {
               )}
               Properties
             </Button> */}
-            <Button
-              onClick={publish}
-              disabled={isPublishing || isValidating}
-            >
+            <Button onClick={publish} disabled={isPublishing || isValidating}>
               {isPublishing || isValidating ? (
                 <Loader2 className="size-4 animate-spin" />
               ) : (
@@ -2140,7 +2203,6 @@ function FlowsBuilder() {
                 );
               })}
             </div>
-
           </aside>
 
           <main
@@ -2153,10 +2215,7 @@ function FlowsBuilder() {
             }}
           >
             {(canvasMode === "draft" ? isDraftLoading : isPublishedLoading) ? (
-              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                <Loader2 className="mr-2 size-4 animate-spin" />
-                Loading {canvasMode} canvas...
-              </div>
+              <CanvasLoadingSkeleton />
             ) : (
               <ReactFlow
                 nodes={visibleNodes}
@@ -2167,10 +2226,14 @@ function FlowsBuilder() {
                 onEdgesChange={isPublishedMode ? undefined : onEdgesChange}
                 onConnect={onConnect}
                 onNodeClick={(_, node) => {
+                  if (node.id !== selectedNodeId) setPreviewNodeId(null);
                   setSelectedNodeId(node.id);
                   setRightPanelOpen(true);
                 }}
-                onPaneClick={() => setSelectedNodeId(null)}
+                onPaneClick={() => {
+                  setSelectedNodeId(null);
+                  setPreviewNodeId(null);
+                }}
                 fitView
                 minZoom={0.2}
                 maxZoom={1.4}
@@ -2192,8 +2255,37 @@ function FlowsBuilder() {
                   style={{ width: 116, height: 82 }}
                   className="!rounded-lg !border !bg-white/90 !shadow-sm"
                 />
+                <ViewportPortal>
+                  {previewNode && (
+                    <div
+                      className="nodrag nopan nowheel absolute z-[1000] w-[292px] max-w-[calc(100vw-2rem)]"
+                      style={{
+                        transform: `translate(${previewNode.position.x - 36}px, ${previewNode.position.y - 18}px) translateY(-100%)`
+                      }}
+                    >
+                      <WhatsAppFlowBlockPreview
+                        blockType={previewNode.data.blockType}
+                        content={previewNode.data.content}
+                        actions={previewNode.data.actions}
+                        onClose={() => setPreviewNodeId(null)}
+                      />
+                    </div>
+                  )}
+                </ViewportPortal>
               </ReactFlow>
             )}
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="absolute right-4 top-4 z-10 bg-white/95 shadow-xs backdrop-blur"
+              tooltip="Open a read-only diagram of every block and connection"
+              disabled={!visibleNodes.length}
+              onClick={() => setFlowPreviewOpen(true)}
+            >
+              <Workflow className="size-4" />
+              Preview flow
+            </Button>
             {validationMessages.length > 0 && (
               <div className="absolute bottom-4 left-4 max-w-md rounded-lg border border-destructive/30 bg-white p-3 shadow-md">
                 <div className="flex items-center gap-2 text-sm font-medium text-destructive">
@@ -2227,6 +2319,12 @@ function FlowsBuilder() {
               );
             }}
             deleteNode={deleteSelectedNode}
+            previewOpen={previewNodeId === selectedNode?.id}
+            togglePreview={() =>
+              setPreviewNodeId((current) =>
+                current === selectedNode?.id ? null : selectedNode?.id || null
+              )
+            }
             setDefaultNode={(nodeId) => {
               setNodes((current) =>
                 current.map((item) => ({
@@ -2234,7 +2332,8 @@ function FlowsBuilder() {
                   data: {
                     ...item.data,
                     metadata: {
-                      ...((item.data.metadata as Record<string, unknown>) || {}),
+                      ...((item.data.metadata as Record<string, unknown>) ||
+                        {}),
                       isDefault: item.id === nodeId || undefined
                     }
                   }
@@ -2258,6 +2357,14 @@ function FlowsBuilder() {
         }
         onSelect={selectMedia}
       />
+      <FlowDiagramPreviewDialog
+        open={flowPreviewOpen}
+        onOpenChange={setFlowPreviewOpen}
+        title="WhatsApp flow preview"
+        platform="WhatsApp"
+        nodes={visibleNodes}
+        edges={visibleEdges}
+      />
     </AppLayout>
   );
 }
@@ -2269,6 +2376,8 @@ function PropertiesPanel({
   updateNode,
   removeEdgesForAction,
   deleteNode,
+  previewOpen,
+  togglePreview,
   setDefaultNode,
   openMediaPicker,
   status
@@ -2282,6 +2391,8 @@ function PropertiesPanel({
   ) => void;
   removeEdgesForAction: (actionId: string) => void;
   deleteNode: () => void;
+  previewOpen: boolean;
+  togglePreview: () => void;
   setDefaultNode: (nodeId: string) => void;
   openMediaPicker: (
     type: "IMAGE" | "DOCUMENT" | "VIDEO",
@@ -2407,6 +2518,21 @@ function PropertiesPanel({
       </div>
 
       <div className="mt-4 space-y-4">
+        <Button
+          type="button"
+          variant={previewOpen ? "secondary" : "outline"}
+          className="w-full"
+          tooltip={
+            previewOpen
+              ? "Hide the live WhatsApp message preview"
+              : "Preview this block with its current WhatsApp message data"
+          }
+          onClick={togglePreview}
+        >
+          <Eye className="size-4" />
+          {previewOpen ? "Hide preview" : "Show preview"}
+        </Button>
+
         <Field label="Block name">
           <Input
             value={node.data.label}
@@ -2703,8 +2829,9 @@ function PropertiesPanel({
             </Field>
             {node.data.blockType === "address_request" && (
               <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">
-                Meta address request messages currently support India only.
-                This block will publish with <span className="font-semibold">country: IN</span>.
+                Meta address request messages currently support India only. This
+                block will publish with{" "}
+                <span className="font-semibold">country: IN</span>.
               </div>
             )}
           </div>
@@ -2721,18 +2848,26 @@ function PropertiesPanel({
             <Field label="Formatted name">
               <Input
                 value={String(
-                  ((content.contacts as Array<Record<string, unknown>> | undefined)?.[0]
-                    ?.name as Record<string, unknown> | undefined)?.formatted_name ||
-                    ""
+                  (
+                    (
+                      content.contacts as
+                        | Array<Record<string, unknown>>
+                        | undefined
+                    )?.[0]?.name as Record<string, unknown> | undefined
+                  )?.formatted_name || ""
                 )}
                 disabled={readOnly}
                 onChange={(event) => {
                   const currentContact =
-                    ((content.contacts as Array<Record<string, unknown>> | undefined)?.[0] as
+                    ((
+                      content.contacts as
+                        | Array<Record<string, unknown>>
+                        | undefined
+                    )?.[0] as Record<string, unknown> | undefined) || {};
+                  const currentName =
+                    (currentContact.name as
                       | Record<string, unknown>
                       | undefined) || {};
-                  const currentName =
-                    (currentContact.name as Record<string, unknown> | undefined) || {};
                   updateContent({
                     contacts: [
                       {
@@ -2754,19 +2889,27 @@ function PropertiesPanel({
             <Field label="Phone number">
               <Input
                 value={String(
-                  (((content.contacts as Array<Record<string, unknown>> | undefined)?.[0]
-                    ?.phones as Array<Record<string, unknown>> | undefined)?.[0]
-                    ?.phone as string | undefined) || ""
+                  ((
+                    (
+                      content.contacts as
+                        | Array<Record<string, unknown>>
+                        | undefined
+                    )?.[0]?.phones as Array<Record<string, unknown>> | undefined
+                  )?.[0]?.phone as string | undefined) || ""
                 )}
                 disabled={readOnly}
                 placeholder="+91..."
                 onChange={(event) => {
                   const currentContact =
-                    ((content.contacts as Array<Record<string, unknown>> | undefined)?.[0] as
-                      | Record<string, unknown>
-                      | undefined) || {};
+                    ((
+                      content.contacts as
+                        | Array<Record<string, unknown>>
+                        | undefined
+                    )?.[0] as Record<string, unknown> | undefined) || {};
                   const currentPhones =
-                    (currentContact.phones as Array<Record<string, unknown>> | undefined) || [];
+                    (currentContact.phones as
+                      | Array<Record<string, unknown>>
+                      | undefined) || [];
                   updateContent({
                     contacts: [
                       {
@@ -2788,19 +2931,27 @@ function PropertiesPanel({
               <Input
                 type="email"
                 value={String(
-                  (((content.contacts as Array<Record<string, unknown>> | undefined)?.[0]
-                    ?.emails as Array<Record<string, unknown>> | undefined)?.[0]
-                    ?.email as string | undefined) || ""
+                  ((
+                    (
+                      content.contacts as
+                        | Array<Record<string, unknown>>
+                        | undefined
+                    )?.[0]?.emails as Array<Record<string, unknown>> | undefined
+                  )?.[0]?.email as string | undefined) || ""
                 )}
                 disabled={readOnly}
                 placeholder="support@example.com"
                 onChange={(event) => {
                   const currentContact =
-                    ((content.contacts as Array<Record<string, unknown>> | undefined)?.[0] as
-                      | Record<string, unknown>
-                      | undefined) || {};
+                    ((
+                      content.contacts as
+                        | Array<Record<string, unknown>>
+                        | undefined
+                    )?.[0] as Record<string, unknown> | undefined) || {};
                   const currentEmails =
-                    (currentContact.emails as Array<Record<string, unknown>> | undefined) || [];
+                    (currentContact.emails as
+                      | Array<Record<string, unknown>>
+                      | undefined) || [];
                   updateContent({
                     contacts: [
                       {
@@ -2822,19 +2973,27 @@ function PropertiesPanel({
               <Input
                 type="url"
                 value={String(
-                  (((content.contacts as Array<Record<string, unknown>> | undefined)?.[0]
-                    ?.urls as Array<Record<string, unknown>> | undefined)?.[0]
-                    ?.url as string | undefined) || ""
+                  ((
+                    (
+                      content.contacts as
+                        | Array<Record<string, unknown>>
+                        | undefined
+                    )?.[0]?.urls as Array<Record<string, unknown>> | undefined
+                  )?.[0]?.url as string | undefined) || ""
                 )}
                 disabled={readOnly}
                 placeholder="https://example.com"
                 onChange={(event) => {
                   const currentContact =
-                    ((content.contacts as Array<Record<string, unknown>> | undefined)?.[0] as
-                      | Record<string, unknown>
-                      | undefined) || {};
+                    ((
+                      content.contacts as
+                        | Array<Record<string, unknown>>
+                        | undefined
+                    )?.[0] as Record<string, unknown> | undefined) || {};
                   const currentUrls =
-                    (currentContact.urls as Array<Record<string, unknown>> | undefined) || [];
+                    (currentContact.urls as
+                      | Array<Record<string, unknown>>
+                      | undefined) || [];
                   updateContent({
                     contacts: [
                       {
@@ -2901,16 +3060,16 @@ function PropertiesPanel({
 
         {(node.data.blockType === "buttons" ||
           node.data.blockType === "product_carousel") && (
-            <div className="space-y-3 rounded-lg border p-3">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold">Button / item actions</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {node.data.blockType === "buttons"
-                      ? "Reply button messages support up to 3 buttons."
-                      : "Configure route actions for this block."}
-                  </p>
-                </div>
+          <div className="space-y-3 rounded-lg border p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold">Button / item actions</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {node.data.blockType === "buttons"
+                    ? "Reply button messages support up to 3 buttons."
+                    : "Configure route actions for this block."}
+                </p>
+              </div>
               <Button
                 size="sm"
                 variant="outline"
@@ -2920,14 +3079,18 @@ function PropertiesPanel({
                     node.data.blockType === "buttons" &&
                     node.data.actions.length >= 3
                   ) {
-                    toast.error("WhatsApp reply button messages support at most 3 buttons.");
+                    toast.error(
+                      "WhatsApp reply button messages support at most 3 buttons."
+                    );
                     return;
                   }
                   if (
                     node.data.blockType === "list" &&
                     node.data.actions.length >= 10
                   ) {
-                    toast.error("WhatsApp list messages support at most 10 rows.");
+                    toast.error(
+                      "WhatsApp list messages support at most 10 rows."
+                    );
                     return;
                   }
                   updateNode(node.id, (data) => ({
@@ -2939,101 +3102,101 @@ function PropertiesPanel({
                   }));
                 }}
               >
-                  <Plus className="size-4" />
-                  Add
-                </Button>
-              </div>
+                <Plus className="size-4" />
+                Add
+              </Button>
+            </div>
 
-              {node.data.actions.map((action) => (
-                <div
-                  key={action.actionId}
-                  className="space-y-2 rounded-md bg-muted/40 p-2"
-                >
-                  <Input
-                    value={action.label || ""}
-                    placeholder="Button or item label"
-                    disabled={readOnly}
-                    maxLength={
-                      node.data.blockType === "buttons"
+            {node.data.actions.map((action) => (
+              <div
+                key={action.actionId}
+                className="space-y-2 rounded-md bg-muted/40 p-2"
+              >
+                <Input
+                  value={action.label || ""}
+                  placeholder="Button or item label"
+                  disabled={readOnly}
+                  maxLength={
+                    node.data.blockType === "buttons"
+                      ? REPLY_BUTTON_LABEL_MAX
+                      : LIST_ROW_TITLE_MAX
+                  }
+                  onChange={(event) =>
+                    updateAction(action.actionId, {
+                      label: event.target.value,
+                      replyId: slugifyTrigger(event.target.value)
+                    })
+                  }
+                />
+                <p
+                  className={cn(
+                    "text-[11px]",
+                    String(action.label || "").length >
+                      (node.data.blockType === "buttons"
                         ? REPLY_BUTTON_LABEL_MAX
-                        : LIST_ROW_TITLE_MAX
-                    }
+                        : LIST_ROW_TITLE_MAX)
+                      ? "text-destructive"
+                      : "text-muted-foreground"
+                  )}
+                >
+                  {String(action.label || "").length}/
+                  {node.data.blockType === "buttons"
+                    ? REPLY_BUTTON_LABEL_MAX
+                    : LIST_ROW_TITLE_MAX}{" "}
+                  characters
+                </p>
+                <Select
+                  value={action.type}
+                  disabled={readOnly}
+                  onValueChange={(value) =>
+                    updateAction(action.actionId, {
+                      type: value as BotActionType
+                    })
+                  }
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {actionTypeOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {action.type === "open_url" && (
+                  <Input
+                    value={action.url || ""}
+                    placeholder="https://example.com"
+                    disabled={readOnly}
                     onChange={(event) =>
                       updateAction(action.actionId, {
-                        label: event.target.value,
-                        replyId: slugifyTrigger(event.target.value)
+                        url: event.target.value
                       })
                     }
                   />
-                  <p
-                    className={cn(
-                      "text-[11px]",
-                      String(action.label || "").length >
-                        (node.data.blockType === "buttons"
-                          ? REPLY_BUTTON_LABEL_MAX
-                          : LIST_ROW_TITLE_MAX)
-                        ? "text-destructive"
-                        : "text-muted-foreground"
-                    )}
-                  >
-                    {String(action.label || "").length}/
-                    {node.data.blockType === "buttons"
-                      ? REPLY_BUTTON_LABEL_MAX
-                      : LIST_ROW_TITLE_MAX}{" "}
-                    characters
-                  </p>
-                  <Select
-                    value={action.type}
+                )}
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>
+                    {action.type === "go_to_trigger"
+                      ? "Output dot visible on canvas"
+                      : "No output dot for this action"}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 text-destructive"
                     disabled={readOnly}
-                    onValueChange={(value) =>
-                      updateAction(action.actionId, {
-                        type: value as BotActionType
-                      })
-                    }
+                    onClick={() => removeAction(action.actionId)}
                   >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {actionTypeOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {action.type === "open_url" && (
-                    <Input
-                      value={action.url || ""}
-                      placeholder="https://example.com"
-                      disabled={readOnly}
-                      onChange={(event) =>
-                        updateAction(action.actionId, {
-                          url: event.target.value
-                        })
-                      }
-                    />
-                  )}
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>
-                      {action.type === "go_to_trigger"
-                        ? "Output dot visible on canvas"
-                        : "No output dot for this action"}
-                    </span>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 text-destructive"
-                      disabled={readOnly}
-                      onClick={() => removeAction(action.actionId)}
-                    >
-                      Remove
-                    </Button>
-                  </div>
+                    Remove
+                  </Button>
                 </div>
-              ))}
-            </div>
-          )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </aside>
   );
@@ -3185,7 +3348,10 @@ function ListSectionsEditor({
       </div>
 
       {sections.map((section, sectionIndex) => (
-        <div key={sectionIndex} className="space-y-3 rounded-lg bg-muted/30 p-3">
+        <div
+          key={sectionIndex}
+          className="space-y-3 rounded-lg bg-muted/30 p-3"
+        >
           <div className="flex items-start gap-2">
             <div className="min-w-0 flex-1">
               <Input
@@ -3218,7 +3384,9 @@ function ListSectionsEditor({
             {(section.rows || []).map((row, rowIndex) => {
               const replyId = String(row.replyId || row.id || "");
               const action = actionByReplyId.get(replyId);
-              const actionType = (row.type || action?.type || "go_to_trigger") as BotActionType;
+              const actionType = (row.type ||
+                action?.type ||
+                "go_to_trigger") as BotActionType;
               return (
                 <div
                   key={`${replyId}-${rowIndex}`}
@@ -3501,11 +3669,11 @@ function GenericCarouselEditor({
             Add 2-10 cards. Each card can pick image or video media.
           </p>
         </div>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={readOnly}
-                onClick={addCard}
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={readOnly}
+          onClick={addCard}
         >
           <Plus className="size-4" />
           Card
@@ -3678,18 +3846,7 @@ function GenericCarouselEditor({
                             })
                           }
                         />
-                      ) : (
-                        <Input
-                          value={String(button.replyId || "")}
-                          placeholder="Reply ID"
-                          disabled={readOnly}
-                          onChange={(event) =>
-                            updateButton(index, buttonIndex, {
-                              replyId: slugifyTrigger(event.target.value)
-                            })
-                          }
-                        />
-                      )}
+                      ) : null}
                     </div>
                   );
                 }

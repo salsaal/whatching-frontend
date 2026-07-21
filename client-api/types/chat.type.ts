@@ -10,7 +10,12 @@ export type ManualTakeoverSource =
   | "instagram_app"
   | "automation_handoff";
 export type MessageDirection = "inbound" | "outbound" | "system";
-export type MessageSource = "customer" | "agent" | "bot" | "system" | "broadcast";
+export type MessageSource =
+  | "customer"
+  | "agent"
+  | "bot"
+  | "system"
+  | "broadcast";
 export type MessageType =
   | "text"
   | "image"

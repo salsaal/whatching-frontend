@@ -108,8 +108,7 @@ const getEmbeddedSignupSession = (
   };
 
   const signupEvent =
-    data.event ||
-    (typeof data.data?.event === "string" ? data.data.event : "");
+    data.event || (typeof data.data?.event === "string" ? data.data.event : "");
   if (data.type !== "WA_EMBEDDED_SIGNUP" || !signupEvent) {
     return null;
   }
@@ -220,46 +219,49 @@ export default function OverviewPage() {
       }
     });
 
-  const tryConnectMeta = useCallback((
-    session: EmbeddedSignupSession | null,
-    authResponse: FacebookAuthResponse | null
-  ) => {
-    if (!session || !authResponse || isConnectingRef.current) return;
+  const tryConnectMeta = useCallback(
+    (
+      session: EmbeddedSignupSession | null,
+      authResponse: FacebookAuthResponse | null
+    ) => {
+      if (!session || !authResponse || isConnectingRef.current) return;
 
-    if (!session.phoneNumberId) {
-      setLastSignupError(
-        "Meta returned the WhatsApp Business app onboarding event without a phone number id. Backend onboarding needs the phone number id before it can connect this account."
-      );
-      return;
-    }
+      if (!session.phoneNumberId) {
+        setLastSignupError(
+          "Meta returned the WhatsApp Business app onboarding event without a phone number id. Backend onboarding needs the phone number id before it can connect this account."
+        );
+        return;
+      }
 
-    const code = authResponse.code?.trim();
+      const code = authResponse.code?.trim();
 
-    if (!code) {
-      setLastSignupError("Meta did not return an authorization code.");
-      return;
-    }
+      if (!code) {
+        setLastSignupError("Meta did not return an authorization code.");
+        return;
+      }
 
-    isConnectingRef.current = true;
-    setLastSignupError("");
-    connectMetaMutate({
-      code,
-      authResponse: { ...authResponse },
-      wabaId: session.wabaId,
-      waba_id: session.wabaId,
-      whatsappBusinessAccountId: session.wabaId,
-      phoneNumberId: session.phoneNumberId,
-      phone_number_id: session.phoneNumberId,
-      businessPhoneNumberId: session.phoneNumberId,
-      businessId: session.businessId,
-      business_id: session.businessId,
-      event: session.event,
-      sessionEvent: session.event,
-      signupEvent: session.event,
-      data: session.data,
-      coexistenceEnabled: session.coexistenceEnabled
-    });
-  }, [connectMetaMutate]);
+      isConnectingRef.current = true;
+      setLastSignupError("");
+      connectMetaMutate({
+        code,
+        authResponse: { ...authResponse },
+        wabaId: session.wabaId,
+        waba_id: session.wabaId,
+        whatsappBusinessAccountId: session.wabaId,
+        phoneNumberId: session.phoneNumberId,
+        phone_number_id: session.phoneNumberId,
+        businessPhoneNumberId: session.phoneNumberId,
+        businessId: session.businessId,
+        business_id: session.businessId,
+        event: session.event,
+        sessionEvent: session.event,
+        signupEvent: session.event,
+        data: session.data,
+        coexistenceEnabled: session.coexistenceEnabled
+      });
+    },
+    [connectMetaMutate]
+  );
 
   const stats = [
     {

@@ -218,7 +218,10 @@ export default function AgentsSettingsPage() {
               </p>
             </div>
           </div>
-          <Button onClick={() => setIsAddOpen(true)}>
+          <Button
+            onClick={() => setIsAddOpen(true)}
+            tooltip="Add a staff account to this organization"
+          >
             <UserPlus className="size-4" />
             Add agent
           </Button>
@@ -275,7 +278,9 @@ export default function AgentsSettingsPage() {
                         {member.userId?.name || "Team member"}
                       </p>
                       <Badge
-                        variant={member.role === "owner" ? "default" : "secondary"}
+                        variant={
+                          member.role === "owner" ? "default" : "secondary"
+                        }
                       >
                         {member.role}
                       </Badge>
@@ -299,6 +304,11 @@ export default function AgentsSettingsPage() {
                   variant="outline"
                   className="text-destructive hover:text-destructive"
                   disabled={member.role === "owner"}
+                  tooltip={
+                    member.role === "owner"
+                      ? "The organization owner cannot be removed"
+                      : "Remove this member's organization access"
+                  }
                   onClick={() => setRemoveTarget(member)}
                 >
                   <Trash2 className="size-4" />
@@ -331,8 +341,9 @@ export default function AgentsSettingsPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Remove team member?</AlertDialogTitle>
             <AlertDialogDescription>
-              This revokes access for {removeTarget?.userId?.name || "this user"}
-              . Existing conversation history remains intact.
+              This revokes access for{" "}
+              {removeTarget?.userId?.name || "this user"}. Existing conversation
+              history remains intact.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="flex gap-3 rounded-sm bg-amber-50 p-3 text-sm text-amber-800">

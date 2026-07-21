@@ -1,7 +1,6 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
 import { useRouter } from "next/router";
 
 import {
@@ -10,6 +9,7 @@ import {
 } from "@/client-api/functions/templates";
 import TemplateCreateForm from "@/components/templates/TemplateCreateForm";
 import { mapDraftToTemplate } from "@/components/templates/templateUtils";
+import { DetailLoadingSkeleton } from "@/components/ui/loading-skeletons";
 import AppLayout from "@/layouts/AppLayout";
 
 export default function TemplateDetailPage() {
@@ -40,9 +40,7 @@ export default function TemplateDetailPage() {
     <AppLayout>
       <div className="mx-auto max-w-7xl">
         {isLoading || !data ? (
-          <div className="flex min-h-80 items-center justify-center rounded-lg bg-white shadow-xs">
-            <Loader2 className="size-8 animate-spin text-primary" />
-          </div>
+          <DetailLoadingSkeleton className="min-h-80" />
         ) : (
           <TemplateCreateForm initialTemplate={data} editKind={source} />
         )}

@@ -1,6 +1,15 @@
 "use client";
 
-import { Edit3, Instagram, Plus, Search, Tag, Trash2, Upload, X } from "lucide-react";
+import {
+  Edit3,
+  Instagram,
+  Plus,
+  Search,
+  Tag,
+  Trash2,
+  Upload,
+  X
+} from "lucide-react";
 import { ElementType, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { AxiosError } from "axios";
@@ -17,7 +26,10 @@ import {
   importSubscribers,
   updateSubscriber
 } from "@/client-api/functions/subscribers";
-import { Subscriber, SubscriberPayload } from "@/client-api/types/subscribers.type";
+import {
+  Subscriber,
+  SubscriberPayload
+} from "@/client-api/types/subscribers.type";
 import ImportSubscribersModal from "@/components/subscribers/ImportSubscribersModal";
 import SubscriberModal from "@/components/subscribers/SubscriberModal";
 import {
@@ -508,13 +520,15 @@ export default function ContactsPage() {
                           {(subscriber.instagramUsername ||
                             subscriber.instagramUserId) && (
                             <p className="text-xs text-muted-foreground">
-                              @{subscriber.instagramUsername ||
+                              @
+                              {subscriber.instagramUsername ||
                                 subscriber.instagramUserId}
                             </p>
                           )}
                           {!subscriber.phoneNumber &&
                             !subscriber.instagramUsername &&
-                            !subscriber.instagramUserId && "-"}
+                            !subscriber.instagramUserId &&
+                            "-"}
                         </div>
                       </td>
                       <td className="p-4">

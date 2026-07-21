@@ -270,4 +270,3 @@ Notes:
 
 - `npm run lint` is configured as `next lint --fix`, which may mutate files.
 - The repo currently has uncommitted changes in multiple app files. Do not revert user changes unless explicitly asked.
-

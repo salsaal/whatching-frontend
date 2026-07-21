@@ -4,7 +4,6 @@ import {
   Building2,
   CalendarDays,
   CheckCircle2,
-  Loader2,
   LogOut,
   Plus,
   Smartphone,
@@ -38,6 +37,7 @@ import {
   DialogTitle
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { CardGridLoadingSkeleton } from "@/components/ui/loading-skeletons";
 import assets from "@/json/assets";
 import { useAuthStore } from "@/stores/authStore";
 import { Organization, useOrganizationStore } from "@/stores/organizationStore";
@@ -195,9 +195,7 @@ function Organisations() {
           </div>
 
           {isLoading ? (
-            <div className="flex min-h-56 items-center justify-center rounded-lg bg-white shadow-xs">
-              <Loader2 className="size-8 animate-spin text-primary" />
-            </div>
+            <CardGridLoadingSkeleton count={6} />
           ) : organizations.length ? (
             <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
               {organizations.map((organization) => (

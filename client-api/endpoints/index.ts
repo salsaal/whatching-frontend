@@ -170,10 +170,8 @@ export const INSTAGRAM_ENDPOINTS = {
     `${INSTAGRAM_BASE}/canvases/${canvasId}/activate`,
   FLOWS: `${INSTAGRAM_BASE}/flows`,
   FLOW_BY_ID: (flowId: string) => `${INSTAGRAM_BASE}/flows/${flowId}`,
-  FLOW_PUBLISH: (flowId: string) =>
-    `${INSTAGRAM_BASE}/flows/${flowId}/publish`,
-  FLOW_ARCHIVE: (flowId: string) =>
-    `${INSTAGRAM_BASE}/flows/${flowId}/archive`,
+  FLOW_PUBLISH: (flowId: string) => `${INSTAGRAM_BASE}/flows/${flowId}/publish`,
+  FLOW_ARCHIVE: (flowId: string) => `${INSTAGRAM_BASE}/flows/${flowId}/archive`,
   COMMENT_RULES: `${INSTAGRAM_BASE}/comment-rules`,
   COMMENT_RULE_BY_ID: (ruleId: string) =>
     `${INSTAGRAM_BASE}/comment-rules/${ruleId}`,

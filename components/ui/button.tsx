@@ -2,6 +2,11 @@ import * as React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from "@/components/ui/tooltip";
 
 const buttonVariants = cva(
   "inline-flex items-center justify-center whitespace-nowrap rounded-sm text-sm font-semibold font-heading transition-all duration-200 outline-none disabled:pointer-events-none disabled:opacity-60 cursor-pointer",
@@ -39,6 +44,7 @@ function Button({
   asChild = false,
   isLoading = false,
   children,
+  tooltip,
   spacebetween,
   center,
   ...props
@@ -48,10 +54,11 @@ function Button({
     isLoading?: boolean;
     spacebetween?: boolean;
     center?: boolean;
+    tooltip?: React.ReactNode;
   }) {
   const Comp = asChild ? Slot : "button";
 
-  return (
+  const button = (
     <Comp
       data-slot="button"
       className={cn(buttonVariants({ variant, size }), className)}
@@ -71,6 +78,15 @@ function Button({
         {!isLoading && children}
       </span>
     </Comp>
+  );
+
+  if (!tooltip) return button;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{button}</TooltipTrigger>
+      <TooltipContent sideOffset={6}>{tooltip}</TooltipContent>
+    </Tooltip>
   );
 }
 

@@ -95,6 +95,7 @@ export default function BillingSettingsPage() {
               <Button
                 variant="outline"
                 className="text-destructive hover:text-destructive"
+                title="Stop renewal at the end of the current billing period"
                 disabled={
                   !activeOrganization ||
                   activeOrganization.planTier === "none" ||

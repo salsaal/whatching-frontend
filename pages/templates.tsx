@@ -283,11 +283,15 @@ export default function TemplatesPage() {
               variant="outline"
               onClick={handleRefresh}
               isLoading={isRefreshing}
+              tooltip="Sync the latest templates and drafts"
             >
               <RefreshCw className="size-4" />
               Refresh
             </Button>
-            <Button className="whitespace-nowrap">
+            <Button
+              className="whitespace-nowrap"
+              tooltip="Create a new WhatsApp message template"
+            >
               <Link
                 href="/templates/create"
                 className="flex items-center gap-1"

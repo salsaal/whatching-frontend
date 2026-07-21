@@ -74,7 +74,10 @@ export const listBotCanvases = async (): Promise<BotCanvasesResponse> => {
 export const createBotCanvas = async (
   payload: { name?: string } = {}
 ): Promise<BotCanvasResponse> => {
-  const res = await api.post<BotCanvasResponse>(BOT_ENDPOINTS.CANVASES, payload);
+  const res = await api.post<BotCanvasResponse>(
+    BOT_ENDPOINTS.CANVASES,
+    payload
+  );
   return res.data;
 };
 

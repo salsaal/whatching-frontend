@@ -84,7 +84,9 @@ export function CountryCodeSelect({
               )}
             </span>
           ) : (
-            <span className="truncate text-muted-foreground">{placeholder}</span>
+            <span className="truncate text-muted-foreground">
+              {placeholder}
+            </span>
           )}
           <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
         </Button>

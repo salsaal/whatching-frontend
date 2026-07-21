@@ -95,13 +95,15 @@ import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
 import { useOrganizationStore } from "@/stores/organizationStore";
 
-const statusOptions: Array<{ value: ConversationStatus | "all"; label: string }> =
-  [
-    { value: "all", label: "All statuses" },
-    { value: "open", label: "Open" },
-    { value: "pending", label: "Pending" },
-    { value: "resolved", label: "Resolved" }
-  ];
+const statusOptions: Array<{
+  value: ConversationStatus | "all";
+  label: string;
+}> = [
+  { value: "all", label: "All statuses" },
+  { value: "open", label: "Open" },
+  { value: "pending", label: "Pending" },
+  { value: "resolved", label: "Resolved" }
+];
 
 const modeOptions: Array<{ value: ConversationMode | "all"; label: string }> = [
   { value: "all", label: "All modes" },
@@ -158,9 +160,17 @@ const subscriberHandle = (conversation?: Conversation | null) => {
       subscriber.metadata?.igUsername
     );
     if (username) return username.startsWith("@") ? username : `@${username}`;
-    return getString(subscriber.instagramUserId, subscriber.metadata?.instagramUserId, "Instagram user");
+    return getString(
+      subscriber.instagramUserId,
+      subscriber.metadata?.instagramUserId,
+      "Instagram user"
+    );
   }
-  return getString(subscriber.phoneNumber, subscriber.waId, conversation?.channel);
+  return getString(
+    subscriber.phoneNumber,
+    subscriber.waId,
+    conversation?.channel
+  );
 };
 
 type MessageMediaPreview = {
@@ -421,7 +431,8 @@ const messageText = (message: ChatMessage) => {
   if (message.type === "image") return "Image";
   if (message.type === "video") return "Video";
   if (message.type === "audio") return "Audio";
-  if (message.type === "document") return message.attachment?.filename || "Document";
+  if (message.type === "document")
+    return message.attachment?.filename || "Document";
   if (message.type === "contacts") {
     const contacts = Array.isArray(payload.contacts)
       ? (payload.contacts as Array<Record<string, unknown>>)
@@ -429,7 +440,8 @@ const messageText = (message: ChatMessage) => {
         ? [payload.contact as Record<string, unknown>]
         : [];
     const first = contacts[0];
-    const name = asRecord(first?.name).formatted_name || asRecord(first?.name).first_name;
+    const name =
+      asRecord(first?.name).formatted_name || asRecord(first?.name).first_name;
     return name ? `Contact: ${String(name)}` : "Contact card";
   }
   if (getMessageLocation(message) || message.type === "location") {
@@ -460,7 +472,12 @@ const getMessageContacts = (message: ChatMessage) => {
     const org = asRecord(contact.org);
     return {
       key: `${String(name.formatted_name || name.first_name || "contact")}-${index}`,
-      name: getString(name.formatted_name, name.first_name, name.last_name, "Contact"),
+      name: getString(
+        name.formatted_name,
+        name.first_name,
+        name.last_name,
+        "Contact"
+      ),
       phone: getString(phones[0]?.phone, phones[0]?.wa_id),
       email: getString(emails[0]?.email),
       website: getString(urls[0]?.url, urls[0]?.href, org.website)
@@ -506,8 +523,18 @@ const getMessageMedia = (message: ChatMessage): MessageMediaPreview[] => {
   addPreview("image", payload.image, "Image", payload.caption);
   addPreview("video", payload.video, "Video", payload.caption);
   addPreview("document", payload.document, "Document", payload.caption);
-  addPreview("image", payload.instagramImage, "Instagram image", payload.caption);
-  addPreview("video", payload.instagramVideo, "Instagram video", payload.caption);
+  addPreview(
+    "image",
+    payload.instagramImage,
+    "Instagram image",
+    payload.caption
+  );
+  addPreview(
+    "video",
+    payload.instagramVideo,
+    "Instagram video",
+    payload.caption
+  );
   addPreview("image", payload.media, "Media", payload.caption);
   addPreview("image", payload.mediaData, "Media", payload.caption);
   addPreview("image", payload.attachment, "Attachment", payload.caption);
@@ -645,24 +672,36 @@ function ConversationListItem({
         <div className="flex items-start justify-between gap-2">
           <p className="truncate text-sm font-medium">{name}</p>
           <span className="shrink-0 text-[11px] text-muted-foreground">
-            {formatDateTime(conversation.lastMessageAt || conversation.updatedAt)}
+            {formatDateTime(
+              conversation.lastMessageAt || conversation.updatedAt
+            )}
           </span>
         </div>
         <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
           {conversation.lastMessage || "No messages yet"}
         </p>
         <div className="mt-1.5 flex flex-wrap items-center gap-1">
-          <Badge className={cn("px-1.5 py-0 text-[10px] capitalize", statusClass[conversation.status])}>
+          <Badge
+            className={cn(
+              "px-1.5 py-0 text-[10px] capitalize",
+              statusClass[conversation.status]
+            )}
+          >
             {conversation.status}
           </Badge>
           <Badge
             variant="secondary"
-            className={cn("px-1.5 py-0 text-[10px] capitalize", priorityClass[conversation.priority])}
+            className={cn(
+              "px-1.5 py-0 text-[10px] capitalize",
+              priorityClass[conversation.priority]
+            )}
           >
             {conversation.priority}
           </Badge>
           {conversation.unreadCount > 0 && (
-            <Badge className="px-1.5 py-0 text-[10px]">{conversation.unreadCount}</Badge>
+            <Badge className="px-1.5 py-0 text-[10px]">
+              {conversation.unreadCount}
+            </Badge>
           )}
         </div>
       </div>
@@ -684,7 +723,8 @@ function MessageBubble({
   replyPreview?: ChatMessage | null;
 }) {
   const isOutbound = message.direction === "outbound";
-  const isSystem = message.direction === "system" || message.senderRole === "system";
+  const isSystem =
+    message.direction === "system" || message.senderRole === "system";
   const attachmentName = getAttachmentName(message);
   const mediaPreviews = getMessageMedia(message);
   const imageVideoPreviews = mediaPreviews.filter((item) =>
@@ -841,10 +881,14 @@ function MessageBubble({
                 <div className="min-w-0">
                   <p className="truncate font-medium">{contact.name}</p>
                   {contact.phone && (
-                    <p className="truncate text-xs opacity-75">{contact.phone}</p>
+                    <p className="truncate text-xs opacity-75">
+                      {contact.phone}
+                    </p>
                   )}
                   {contact.email && (
-                    <p className="truncate text-xs opacity-75">{contact.email}</p>
+                    <p className="truncate text-xs opacity-75">
+                      {contact.email}
+                    </p>
                   )}
                   {contact.website && (
                     <a
@@ -866,7 +910,9 @@ function MessageBubble({
           </div>
         )}
         {contacts.length === 0 && !location && (
-          <p className="whitespace-pre-wrap break-words">{messageText(message)}</p>
+          <p className="whitespace-pre-wrap break-words">
+            {messageText(message)}
+          </p>
         )}
         {interactiveActions.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1.5">
@@ -927,9 +973,9 @@ export default function ConversationsPage() {
   const socketRef = useRef<Socket | null>(null);
   const joinedConversationRef = useRef("");
   const replyContextCacheRef = useRef<Record<string, ReplyContext>>({});
-  const realtimeTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>(
-    {}
-  );
+  const realtimeTimersRef = useRef<
+    Record<string, ReturnType<typeof setTimeout>>
+  >({});
   const activeOrganization = useOrganizationStore(
     (state) => state.activeOrganization
   );
@@ -978,15 +1024,7 @@ export default function ConversationsPage() {
       unreadOnly,
       pendingEscalation
     }),
-    [
-      page,
-      search,
-      status,
-      mode,
-      assignedTo,
-      unreadOnly,
-      pendingEscalation
-    ]
+    [page, search, status, mode, assignedTo, unreadOnly, pendingEscalation]
   );
 
   const { data: bootstrap } = useQuery({
@@ -1008,15 +1046,13 @@ export default function ConversationsPage() {
     enabled: Boolean(activeOrganization?._id && isTemplateModalOpen)
   });
 
-  const {
-    data: conversationsData,
-    isLoading: isConversationsLoading
-  } = useQuery({
-    queryKey: ["conversations", activeOrganization?._id, queryParams],
-    queryFn: () => getConversations(queryParams),
-    enabled: Boolean(activeOrganization?._id),
-    staleTime: 30_000
-  });
+  const { data: conversationsData, isLoading: isConversationsLoading } =
+    useQuery({
+      queryKey: ["conversations", activeOrganization?._id, queryParams],
+      queryFn: () => getConversations(queryParams),
+      enabled: Boolean(activeOrganization?._id),
+      staleTime: 30_000
+    });
 
   const conversations = useMemo(
     () => conversationsData?.data.conversations || [],
@@ -1026,19 +1062,26 @@ export default function ConversationsPage() {
     () =>
       channel === "all"
         ? conversations
-        : conversations.filter((conversation) => conversation.channel === channel),
+        : conversations.filter(
+            (conversation) => conversation.channel === channel
+          ),
     [channel, conversations]
   );
   const selectedConversation =
-    visibleConversations.find((conversation) => conversation._id === selectedId) ||
-    null;
+    visibleConversations.find(
+      (conversation) => conversation._id === selectedId
+    ) || null;
 
   useEffect(() => {
     selectedIdRef.current = selectedId;
   }, [selectedId]);
 
   useEffect(() => {
-    if (!visibleConversations.some((conversation) => conversation._id === selectedId)) {
+    if (
+      !visibleConversations.some(
+        (conversation) => conversation._id === selectedId
+      )
+    ) {
       setSelectedId(visibleConversations[0]?._id || "");
     }
   }, [selectedId, visibleConversations]);
@@ -1120,11 +1163,13 @@ export default function ConversationsPage() {
         joinedConversationRef.current = selectedIdRef.current;
       }
     });
-    socket.on("conversation.updated", (payload: { conversation?: Conversation }) =>
-      scheduleRealtimeRefresh(payload.conversation?._id, {
-        messages: true,
-        context: true
-      })
+    socket.on(
+      "conversation.updated",
+      (payload: { conversation?: Conversation }) =>
+        scheduleRealtimeRefresh(payload.conversation?._id, {
+          messages: true,
+          context: true
+        })
     );
     socket.on("conversation.read", (payload: { conversationId?: string }) =>
       scheduleRealtimeRefresh(payload.conversationId, {
@@ -1132,16 +1177,20 @@ export default function ConversationsPage() {
         context: true
       })
     );
-    socket.on("conversation.escalated", (payload: { conversation?: Conversation }) =>
-      scheduleRealtimeRefresh(payload.conversation?._id, { context: true })
+    socket.on(
+      "conversation.escalated",
+      (payload: { conversation?: Conversation }) =>
+        scheduleRealtimeRefresh(payload.conversation?._id, { context: true })
     );
     socket.on(
       "conversation.agent_takeover",
       (payload: { conversation?: Conversation }) =>
         scheduleRealtimeRefresh(payload.conversation?._id, { context: true })
     );
-    socket.on("conversation.bot_resumed", (payload: { conversation?: Conversation }) =>
-      scheduleRealtimeRefresh(payload.conversation?._id, { context: true })
+    socket.on(
+      "conversation.bot_resumed",
+      (payload: { conversation?: Conversation }) =>
+        scheduleRealtimeRefresh(payload.conversation?._id, { context: true })
     );
     socket.on(
       "message.created",
@@ -1244,7 +1293,9 @@ export default function ConversationsPage() {
         await invalidateConversations();
       },
       onError: (error: AxiosError<{ message?: string }>) => {
-        toast.error(error.response?.data?.message || "Contact could not be updated.");
+        toast.error(
+          error.response?.data?.message || "Contact could not be updated."
+        );
       }
     });
 
@@ -1273,7 +1324,9 @@ export default function ConversationsPage() {
         await invalidateConversations();
       },
       onError: (error: AxiosError<{ message?: string }>) => {
-        toast.error(error.response?.data?.message || "Template could not be sent.");
+        toast.error(
+          error.response?.data?.message || "Template could not be sent."
+        );
       }
     });
 
@@ -1290,7 +1343,10 @@ export default function ConversationsPage() {
     approvedTemplates.find((template) => template._id === selectedTemplateId) ||
     null;
   const selectedTemplateBody = getTemplateComponent(selectedTemplate, "BODY");
-  const selectedTemplateFooter = getTemplateComponent(selectedTemplate, "FOOTER");
+  const selectedTemplateFooter = getTemplateComponent(
+    selectedTemplate,
+    "FOOTER"
+  );
   const selectedTemplateButtons = getTemplateComponent(
     selectedTemplate,
     "BUTTONS"
@@ -1321,10 +1377,12 @@ export default function ConversationsPage() {
   useEffect(() => {
     messages.forEach((message) => {
       const replyContext = getReplyContext(message);
-      if (replyContext) replyContextCacheRef.current[message._id] = replyContext;
+      if (replyContext)
+        replyContextCacheRef.current[message._id] = replyContext;
     });
   }, [messages]);
-  const contextConversation = contextData?.data.conversation || selectedConversation;
+  const contextConversation =
+    contextData?.data.conversation || selectedConversation;
   const replyWindow = contextConversation?.replyWindow;
   const canReply = Boolean(replyWindow?.isOpen && selectedId);
   const isInstagramConversation = contextConversation?.channel === "instagram";
@@ -1337,7 +1395,8 @@ export default function ConversationsPage() {
     "";
 
   useEffect(() => {
-    const subscriber = contextData?.data.subscriber || contextConversation?.subscriberId;
+    const subscriber =
+      contextData?.data.subscriber || contextConversation?.subscriberId;
     setContactFirstName(subscriber?.firstName || "");
     setContactLastName(subscriber?.lastName || "");
   }, [
@@ -1348,7 +1407,8 @@ export default function ConversationsPage() {
 
   const saveContactName = () => {
     const subscriberId =
-      contextData?.data.subscriber?._id || contextConversation?.subscriberId?._id;
+      contextData?.data.subscriber?._id ||
+      contextConversation?.subscriberId?._id;
     if (!subscriberId) {
       toast.error("Subscriber record is not loaded yet.");
       return;
@@ -1493,13 +1553,22 @@ export default function ConversationsPage() {
             ["Open", summary?.open || 0, MessageCircle],
             ["Pending", summary?.pending || 0, Clock3],
             ["Unread", summary?.unread || 0, ShieldAlert],
-            ["Manual", conversationsData?.data.summary.agentManual || 0, UserCheck]
+            [
+              "Manual",
+              conversationsData?.data.summary.agentManual || 0,
+              UserCheck
+            ]
           ].map(([label, value, Icon]) => {
             const StatIcon = Icon as typeof Inbox;
             return (
-              <div key={String(label)} className="rounded-lg bg-white p-4 shadow-xs">
+              <div
+                key={String(label)}
+                className="rounded-lg bg-white p-4 shadow-xs"
+              >
                 <div className="flex items-center justify-between">
-                  <p className="text-sm text-muted-foreground">{String(label)}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {String(label)}
+                  </p>
                   <StatIcon className="size-4 text-primary" />
                 </div>
                 <p className="mt-2 font-heading text-2xl font-semibold">
@@ -1510,7 +1579,7 @@ export default function ConversationsPage() {
           })}
         </section>
 
-        <section className="grid min-h-0 flex-1 overflow-hidden rounded-xl bg-white shadow-xs xl:grid-cols-[360px_1fr_340px]">
+        <section className="grid min-h-0 flex-1 overflow-hidden rounded-xl bg-white shadow-xs xl:grid-cols-[360px_1fr_56px]">
           <aside className="flex min-h-0 flex-col border-r">
             <div className="border-b p-3">
               <div className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3">
@@ -1600,7 +1669,10 @@ export default function ConversationsPage() {
                   <SelectContent>
                     <SelectItem value="all">All agents</SelectItem>
                     {assigneeOptions.map((member) => (
-                      <SelectItem key={member.userId._id} value={member.userId._id}>
+                      <SelectItem
+                        key={member.userId._id}
+                        value={member.userId._id}
+                      >
                         {member.userId.name}
                       </SelectItem>
                     ))}
@@ -1722,7 +1794,7 @@ export default function ConversationsPage() {
                     <ThreadSkeleton />
                   ) : messages.length ? (
                     <div className="space-y-3">
-                      {messages.map((message) => (
+                      {messages.map((message) =>
                         (() => {
                           const replyContext =
                             getReplyContext(message) ||
@@ -1737,7 +1809,9 @@ export default function ConversationsPage() {
                               replyContext={replyContext}
                               replyPreview={
                                 (replyContext?.messageId
-                                  ? messagesById.byId.get(replyContext.messageId)
+                                  ? messagesById.byId.get(
+                                      replyContext.messageId
+                                    )
                                   : null) ||
                                 (replyContext?.metaMessageId
                                   ? messagesById.byMetaId.get(
@@ -1749,7 +1823,7 @@ export default function ConversationsPage() {
                             />
                           );
                         })()
-                      ))}
+                      )}
                       <div ref={messagesEndRef} />
                     </div>
                   ) : (
@@ -1761,20 +1835,23 @@ export default function ConversationsPage() {
 
                 <form
                   onSubmit={handleReply}
-	                  onDragEnter={(event) => {
-	                    event.preventDefault();
-	                    if (canSendMediaReply) setIsDraggingFile(true);
-	                  }}
+                  onDragEnter={(event) => {
+                    event.preventDefault();
+                    if (canSendMediaReply) setIsDraggingFile(true);
+                  }}
                   onDragOver={(event) => event.preventDefault()}
                   onDragLeave={(event) => {
-                    if (!event.currentTarget.contains(event.relatedTarget as Node)) {
+                    if (
+                      !event.currentTarget.contains(event.relatedTarget as Node)
+                    ) {
                       setIsDraggingFile(false);
                     }
                   }}
                   onDrop={handleDrop}
                   className={cn(
                     "relative border-t bg-white/95 p-3 transition",
-                    isDraggingFile && "bg-primary/5 ring-2 ring-inset ring-primary/30"
+                    isDraggingFile &&
+                      "bg-primary/5 ring-2 ring-inset ring-primary/30"
                   )}
                 >
                   {isDraggingFile && (
@@ -1782,13 +1859,13 @@ export default function ConversationsPage() {
                       Drop file to attach
                     </div>
                   )}
-	                  {!canReply && (
-	                    <div className="mb-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
-	                      {isInstagramConversation
-	                        ? "The 24-hour customer service window is closed for this Instagram conversation."
-	                        : "The 24-hour customer service window is closed. Send an approved template to re-open chat."}
-	                    </div>
-	                  )}
+                  {!canReply && (
+                    <div className="mb-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
+                      {isInstagramConversation
+                        ? "The 24-hour customer service window is closed for this Instagram conversation."
+                        : "The 24-hour customer service window is closed. Send an approved template to re-open chat."}
+                    </div>
+                  )}
                   {(attachment || selectedMedia) && (
                     <div className="mb-2 flex items-center justify-between gap-3 rounded-lg bg-muted px-3 py-2 text-sm">
                       <div className="flex min-w-0 items-center gap-3">
@@ -1814,7 +1891,9 @@ export default function ConversationsPage() {
                             {attachment?.name || selectedMedia?.name}
                           </p>
                           <p className="truncate text-xs text-muted-foreground">
-                            {attachment?.type || selectedMedia?.fileType || "File"}
+                            {attachment?.type ||
+                              selectedMedia?.fileType ||
+                              "File"}
                           </p>
                         </div>
                       </div>
@@ -1850,38 +1929,43 @@ export default function ConversationsPage() {
                     </div>
                   )}
                   <div className="flex items-end gap-2">
-                    <label className="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full border hover:bg-muted">
+                    <label
+                      className="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full border hover:bg-muted"
+                      title="Attach a file from your device"
+                    >
                       <Paperclip className="size-4" />
                       <input
                         type="file"
                         className="hidden"
-	                        disabled={!canSendMediaReply || isSending}
-	                        onChange={handleAttachment}
-	                      />
+                        disabled={!canSendMediaReply || isSending}
+                        onChange={handleAttachment}
+                      />
                     </label>
                     <Button
                       type="button"
                       variant="outline"
                       className="size-10 shrink-0 rounded-full p-0"
-	                      disabled={!canSendMediaReply || isSending}
-	                      onClick={() => setIsMediaPickerOpen(true)}
+                      tooltip="Choose an attachment from the media library"
+                      disabled={!canSendMediaReply || isSending}
+                      onClick={() => setIsMediaPickerOpen(true)}
                     >
                       <ImageIcon className="size-4" />
                     </Button>
-	                    {canSendTemplate && (
-	                      <Button
-	                        type="button"
-	                        variant="outline"
-	                        className="h-10 shrink-0 rounded-full px-3"
-	                        disabled={!selectedId || isSendingTemplate}
-	                        onClick={() => setIsTemplateModalOpen(true)}
-	                      >
-	                        <FileText className="mr-2 size-4" />
-	                        Template
-	                      </Button>
-	                    )}
-	                    <Textarea
-	                      ref={replyInputRef}
+                    {canSendTemplate && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-10 shrink-0 rounded-full px-3"
+                        tooltip="Send an approved WhatsApp template"
+                        disabled={!selectedId || isSendingTemplate}
+                        onClick={() => setIsTemplateModalOpen(true)}
+                      >
+                        <FileText className="mr-2 size-4" />
+                        Template
+                      </Button>
+                    )}
+                    <Textarea
+                      ref={replyInputRef}
                       className="max-h-32 min-h-11 resize-none rounded-2xl"
                       value={replyText}
                       disabled={!canReply || isSending}
@@ -1895,6 +1979,7 @@ export default function ConversationsPage() {
                       type="submit"
                       size="icon"
                       className="size-11 shrink-0 rounded-full p-0"
+                      tooltip="Send reply"
                       disabled={!canReply || isSending}
                     >
                       {isSending ? (
@@ -1914,9 +1999,18 @@ export default function ConversationsPage() {
             )}
           </main>
 
-          <aside className="hidden min-h-0 flex-col border-l bg-white xl:flex">
+          <aside
+            className="group/details relative z-20 hidden min-h-0 w-14 justify-self-end overflow-hidden border-l bg-white shadow-sm transition-[width] duration-200 hover:w-[340px] xl:flex"
+            title="Hover to open conversation details"
+          >
+            <div className="absolute inset-0 flex flex-col items-center gap-3 pt-5 text-muted-foreground transition-opacity group-hover/details:pointer-events-none group-hover/details:opacity-0">
+              <ContactRound className="size-5 text-primary" />
+              <span className="text-[10px] font-medium uppercase tracking-widest [writing-mode:vertical-rl]">
+                Details
+              </span>
+            </div>
             {contextConversation ? (
-              <div className="min-h-0 flex-1 overflow-y-auto p-4">
+              <div className="min-h-0 w-[340px] flex-1 overflow-y-auto p-4 opacity-0 transition-opacity duration-150 group-hover/details:opacity-100">
                 <div className="text-center">
                   <Avatar className="mx-auto size-16">
                     <AvatarFallback className="bg-primary/10 text-xl text-primary">
@@ -1986,7 +2080,9 @@ export default function ConversationsPage() {
                       Assigned agent
                     </p>
                     <Select
-                      value={contextConversation.assignedTo?._id || "unassigned"}
+                      value={
+                        contextConversation.assignedTo?._id || "unassigned"
+                      }
                       disabled={isAssigning}
                       onValueChange={(value) =>
                         assignMutate({
@@ -2047,7 +2143,9 @@ export default function ConversationsPage() {
 
                 <div className="grid gap-3 text-sm">
                   <div className="rounded-lg bg-muted/40 p-3">
-                    <p className="text-xs text-muted-foreground">Reply window</p>
+                    <p className="text-xs text-muted-foreground">
+                      Reply window
+                    </p>
                     <p className="mt-1 font-medium">
                       {replyWindow?.isOpen ? "Open" : "Closed"}
                     </p>
@@ -2078,21 +2176,27 @@ export default function ConversationsPage() {
                       )}
                     </p>
                     <div className="mt-2 rounded-md bg-white px-2 py-1 text-xs">
-                      <span className="text-muted-foreground">Manual source: </span>
+                      <span className="text-muted-foreground">
+                        Manual source:{" "}
+                      </span>
                       <span className="font-medium">
                         {contextConversation.takeoverState?.manualTakeoverSource
                           ? takeoverSourceLabel[
                               contextConversation.takeoverState
                                 .manualTakeoverSource
                             ] ||
-                            contextConversation.takeoverState.manualTakeoverSource
+                            contextConversation.takeoverState
+                              .manualTakeoverSource
                           : "Not in manual takeover"}
                       </span>
                     </div>
                     {contextConversation.takeoverState?.manualTakeoverBy && (
                       <p className="mt-2 text-xs text-muted-foreground">
                         By{" "}
-                        {contextConversation.takeoverState.manualTakeoverBy.name}
+                        {
+                          contextConversation.takeoverState.manualTakeoverBy
+                            .name
+                        }
                       </p>
                     )}
                   </div>
@@ -2110,7 +2214,9 @@ export default function ConversationsPage() {
                       </span>
                     </div>
                     <div className="flex justify-between gap-3">
-                      <span className="text-muted-foreground">Last inbound</span>
+                      <span className="text-muted-foreground">
+                        Last inbound
+                      </span>
                       <span>
                         {formatDateTime(
                           contextData?.data.subscriber?.lastInboundAt
@@ -2351,7 +2457,10 @@ export default function ConversationsPage() {
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2">
                       {selectedTemplateQuickReplies.map(({ button, index }) => (
-                        <div key={`${button.text}-${index}`} className="space-y-2">
+                        <div
+                          key={`${button.text}-${index}`}
+                          className="space-y-2"
+                        >
                           <Label>
                             {button.text}{" "}
                             <span className="text-muted-foreground">
@@ -2470,7 +2579,9 @@ function MediaLightbox({
           <div className="min-w-0">
             <p className="truncate text-sm font-medium">{preview.name}</p>
             {preview.caption && (
-              <p className="truncate text-xs text-white/65">{preview.caption}</p>
+              <p className="truncate text-xs text-white/65">
+                {preview.caption}
+              </p>
             )}
           </div>
           <a

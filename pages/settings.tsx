@@ -1,6 +1,14 @@
 "use client";
 
-import { Brain, CreditCard, Loader2, Settings, Trash2, UserPlus, UsersRound } from "lucide-react";
+import {
+  Brain,
+  CreditCard,
+  Loader2,
+  Settings,
+  Trash2,
+  UserPlus,
+  UsersRound
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { useState } from "react";
@@ -154,11 +162,13 @@ export default function SettingsPage() {
                 <Trash2 className="size-5" />
               </div>
               <div>
-                <p className="font-medium text-destructive">Delete organization</p>
+                <p className="font-medium text-destructive">
+                  Delete organization
+                </p>
                 <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
                   This permanently deletes subscribers, conversations, messages,
-                  broadcasts, media, flows, Instagram automation, team access, and
-                  settings. Active subscriptions must be cancelled first.
+                  broadcasts, media, flows, Instagram automation, team access,
+                  and settings. Active subscriptions must be cancelled first.
                 </p>
               </div>
             </div>
@@ -166,6 +176,7 @@ export default function SettingsPage() {
               type="button"
               variant="destructive"
               className="cursor-pointer"
+              tooltip="Permanently delete this organization and its data"
               onClick={() => {
                 setConfirmation("");
                 setDeleteOpen(true);
@@ -183,7 +194,8 @@ export default function SettingsPage() {
             <AlertDialogTitle>Delete this organization?</AlertDialogTitle>
             <AlertDialogDescription>
               This cannot be undone. Type the organization name or slug to
-              confirm. If a subscription is active, cancel it from Billing first.
+              confirm. If a subscription is active, cancel it from Billing
+              first.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="space-y-2">

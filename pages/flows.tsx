@@ -53,6 +53,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { CardGridLoadingSkeleton } from "@/components/ui/loading-skeletons";
 import { Switch } from "@/components/ui/switch";
 import AppLayout from "@/layouts/AppLayout";
 import { useOrganizationStore } from "@/stores/organizationStore";
@@ -237,6 +238,7 @@ export default function FlowsPage() {
             <Switch
               checked={Boolean(settingsData?.data?.settings.isBotEnabled)}
               disabled={isSettingsLoading || isUpdatingSettings}
+              title="Turn the active WhatsApp flow on or off"
               onCheckedChange={(checked) =>
                 updateSettingsMutate({ isBotEnabled: checked })
               }
@@ -252,6 +254,7 @@ export default function FlowsPage() {
             <Switch
               checked={Boolean(settingsData?.data?.settings.isAiEnabled)}
               disabled={isSettingsLoading || isUpdatingSettings}
+              title="Allow AI fallback when no flow route matches"
               onCheckedChange={(checked) =>
                 updateSettingsMutate({ isAiEnabled: checked })
               }
@@ -261,11 +264,9 @@ export default function FlowsPage() {
 
         <section className="grid gap-4 lg:grid-cols-3">
           {isLoading ? (
-            <Card className="rounded-lg lg:col-span-3">
-              <CardContent className="p-5 text-sm text-muted-foreground">
-                Loading flows...
-              </CardContent>
-            </Card>
+            <div className="lg:col-span-3">
+              <CardGridLoadingSkeleton count={6} />
+            </div>
           ) : canvases.length ? (
             canvases.map((canvas) => {
               const isActive = canvas.status === "active";
@@ -323,6 +324,11 @@ export default function FlowsPage() {
                       <Switch
                         checked={isActive}
                         disabled={isActive || isActivating}
+                        title={
+                          isActive
+                            ? "This is the active WhatsApp flow"
+                            : "Make this the active WhatsApp flow"
+                        }
                         onCheckedChange={(checked) => {
                           if (checked) activateCanvasMutate(canvas._id);
                         }}
@@ -359,7 +365,6 @@ export default function FlowsPage() {
                         Delete
                       </Button>
                     </div>
-
                   </CardContent>
                 </Card>
               );

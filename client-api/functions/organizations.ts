@@ -100,9 +100,7 @@ export const addAgent = async (
   return res.data;
 };
 
-export const removeTeamMember = async (
-  membershipId: string
-): Promise<void> => {
+export const removeTeamMember = async (membershipId: string): Promise<void> => {
   await api.delete(ORGANIZATION_ENDPOINTS.TEAM_MEMBER(membershipId));
 };
 

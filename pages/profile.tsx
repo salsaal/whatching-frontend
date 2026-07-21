@@ -1,12 +1,13 @@
 "use client";
 
-import { CheckCircle2, Loader2, LogOut, UserRound } from "lucide-react";
+import { CheckCircle2, LogOut, UserRound } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/router";
 import { useEffect } from "react";
 
 import { getMe } from "@/client-api/functions/auth";
 import { Button } from "@/components/ui/button";
+import { DetailLoadingSkeleton } from "@/components/ui/loading-skeletons";
 import { Skeleton } from "@/components/ui/skeleton";
 import AppLayout from "@/layouts/AppLayout";
 import { useAuthStore } from "@/stores/authStore";
@@ -77,9 +78,7 @@ export default function ProfilePage() {
         </section>
 
         {isLoading ? (
-          <div className="rounded-lg bg-white p-6 shadow-xs">
-            <Loader2 className="size-6 animate-spin text-primary" />
-          </div>
+          <DetailLoadingSkeleton />
         ) : (
           <section className="grid gap-4 rounded-lg bg-white p-6 shadow-xs sm:grid-cols-2">
             <div>

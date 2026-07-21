@@ -25,7 +25,10 @@ import {
 } from "@/client-api/functions/broadcasts";
 import { getAllSubscribers, getTags } from "@/client-api/functions/subscribers";
 import { getAllTemplates } from "@/client-api/functions/templates";
-import { Broadcast, BroadcastAudience } from "@/client-api/types/broadcasts.type";
+import {
+  Broadcast,
+  BroadcastAudience
+} from "@/client-api/types/broadcasts.type";
 import { MessageTemplate } from "@/client-api/types/templates.type";
 import {
   extractVariables,
@@ -111,7 +114,10 @@ const statusClasses: Record<string, string> = {
   canceled: "bg-muted text-muted-foreground"
 };
 
-type BroadcastVariableSource = "subscriber_field" | "metadata_field" | "literal";
+type BroadcastVariableSource =
+  | "subscriber_field"
+  | "metadata_field"
+  | "literal";
 
 interface BroadcastVariableMapping {
   source: BroadcastVariableSource;
@@ -136,10 +142,16 @@ const getTemplateBodyVariables = (template?: MessageTemplate) =>
     (a, b) => Number(a) - Number(b)
   );
 
-const getTemplateBodyExample = (template: MessageTemplate | undefined, key: string) => {
-  const examples = getBodyComponent(template?.components || [])?.example?.body_text;
+const getTemplateBodyExample = (
+  template: MessageTemplate | undefined,
+  key: string
+) => {
+  const examples = getBodyComponent(template?.components || [])?.example
+    ?.body_text;
   const sampleValues = Array.isArray(examples?.[0]) ? examples?.[0] : examples;
-  return Array.isArray(sampleValues) ? String(sampleValues[Number(key) - 1] || "") : "";
+  return Array.isArray(sampleValues)
+    ? String(sampleValues[Number(key) - 1] || "")
+    : "";
 };
 
 const defaultVariableMapping = (key: string): BroadcastVariableMapping => ({
@@ -266,8 +278,8 @@ export default function BroadcastsPage() {
   );
   const subscribers = useMemo(
     () =>
-      (subscribersData?.data.subscribers || []).filter(
-        (subscriber) => Boolean(subscriber.phoneNumber)
+      (subscribersData?.data.subscribers || []).filter((subscriber) =>
+        Boolean(subscriber.phoneNumber)
       ),
     [subscribersData?.data.subscribers]
   );
@@ -363,12 +375,17 @@ export default function BroadcastsPage() {
           ? {
               mode: "specific",
               subscriberIds: selectedSubscriberIds.filter((subscriberId) =>
-                subscribers.some((subscriber) => subscriber._id === subscriberId)
+                subscribers.some(
+                  (subscriber) => subscriber._id === subscriberId
+                )
               )
             }
           : { mode: "all" };
 
-    const components = buildBroadcastComponents(bodyVariables, variableMappings);
+    const components = buildBroadcastComponents(
+      bodyVariables,
+      variableMappings
+    );
     if (!components) return;
 
     createDraft({
@@ -484,6 +501,7 @@ export default function BroadcastsPage() {
                           <Button
                             variant="ghost"
                             size="icon"
+                            tooltip="View broadcast details"
                             onClick={() =>
                               router.push(`/broadcasts/${broadcast._id}`)
                             }
@@ -496,6 +514,7 @@ export default function BroadcastsPage() {
                             <Button
                               variant="ghost"
                               size="icon"
+                              tooltip="Cancel this broadcast"
                               className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                               onClick={() => setCancelTarget(broadcast)}
                             >
@@ -593,13 +612,13 @@ export default function BroadcastsPage() {
                   {bodyVariables.map((key) => {
                     const mapping =
                       variableMappings[key] || defaultVariableMapping(key);
-                    const sample = getTemplateBodyExample(selectedTemplate, key);
+                    const sample = getTemplateBodyExample(
+                      selectedTemplate,
+                      key
+                    );
 
                     return (
-                      <div
-                        key={key}
-                        className="rounded-md bg-muted/40 p-3"
-                      >
+                      <div key={key} className="rounded-md bg-muted/40 p-3">
                         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                           <Label>{`{{${key}}}`}</Label>
                           {sample && (
@@ -868,7 +887,8 @@ export default function BroadcastsPage() {
                     <div>
                       <p className="text-sm font-semibold">Send timing</p>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        Start immediately or pick a local schedule in Asia/Kolkata.
+                        Start immediately or pick a local schedule in
+                        Asia/Kolkata.
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">

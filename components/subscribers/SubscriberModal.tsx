@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 
-import { Subscriber, SubscriberPayload } from "@/client-api/types/subscribers.type";
+import {
+  Subscriber,
+  SubscriberPayload
+} from "@/client-api/types/subscribers.type";
 import { Button } from "@/components/ui/button";
 import PhoneNumberInput, {
   buildInternationalPhoneNumber
@@ -83,15 +86,15 @@ export default function SubscriberModal({
               <Label>Phone number</Label>
               <div className="mt-2">
                 <PhoneNumberInput
-                countryCode={countryCode}
-                countryIso={countryIso}
-                phoneNumber={phoneNumber}
-                disabled={Boolean(subscriber)}
-                onCountryCodeChange={setCountryCode}
-                onCountryIsoChange={setCountryIso}
-                onPhoneNumberChange={setPhoneNumber}
-                placeholder="9876543210"
-              />
+                  countryCode={countryCode}
+                  countryIso={countryIso}
+                  phoneNumber={phoneNumber}
+                  disabled={Boolean(subscriber)}
+                  onCountryCodeChange={setCountryCode}
+                  onCountryIsoChange={setCountryIso}
+                  onPhoneNumberChange={setPhoneNumber}
+                  placeholder="9876543210"
+                />
               </div>
             </div>
             <div>
