@@ -239,8 +239,8 @@ export default function FlowDiagramPreviewDialog({
             <div>
               <DialogTitle>{title}</DialogTitle>
               <DialogDescription className="mt-1">
-                Live message previews with each connection originating from
-                its button, reply, list row, or carousel item.
+                Live message previews with each connection originating from its
+                button, reply, list row, or carousel item.
               </DialogDescription>
             </div>
             <Badge variant="secondary" className="ml-auto mr-2">
