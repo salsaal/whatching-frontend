@@ -41,6 +41,7 @@ import {
   ShieldAlert,
   Tags,
   Trash2,
+  UserCheck,
   UserRound,
   Video,
   Workflow,
@@ -68,7 +69,6 @@ import { toast } from "sonner";
 
 import {
   connectInstagramLogin,
-  activateInstagramCanvas,
   createInstagramCanvas,
   deleteInstagramCanvas,
   createInstagramCommentRule,
@@ -90,6 +90,7 @@ import {
   syncInstagramMedia,
   syncInstagramStatus,
   updateInstagramCanvas,
+  updateInstagramCanvasStatus,
   updateInstagramCommentRule,
   validateInstagramCanvasById,
   validateInstagramCanvas
@@ -208,6 +209,11 @@ const blockMeta: Record<
     label: "Generic Template",
     icon: Route,
     description: "Carousel with up to 10 cards"
+  },
+  follow_condition: {
+    label: "Follower Check",
+    icon: UserCheck,
+    description: "Route by whether the person follows your account"
   },
   tag_subscriber: {
     label: "Tag Subscriber",
@@ -414,6 +420,9 @@ const defaultContentForType = (
       ]
     };
   }
+  if (type === "follow_condition") {
+    return {};
+  }
   if (type === "pause_automation") return { minutes: 60 };
   if (type === "tag_subscriber") return { tags: ["instagram"] };
   if (type === "handoff_to_agent") return { reason: "instagram_handoff" };
@@ -425,6 +434,32 @@ const deriveActions = (
   blockType: InstagramBlockType,
   content: InstagramCanvasContent
 ): InstagramCanvasAction[] => {
+  if (blockType === "follow_condition") {
+    return [
+      {
+        actionId: "follows",
+        type: "go_to_node",
+        label: "Follows you",
+        condition: "follows",
+        metadata: { condition: "follows" }
+      },
+      {
+        actionId: "not_follows",
+        type: "go_to_node",
+        label: "Does not follow",
+        condition: "not_follows",
+        metadata: { condition: "not_follows" }
+      },
+      {
+        actionId: "unknown",
+        type: "go_to_node",
+        label: "Could not verify",
+        condition: "unknown",
+        metadata: { condition: "unknown" }
+      }
+    ];
+  }
+
   if (blockType === "quick_replies") {
     return ((content.quickReplies as InstagramQuickReply[]) || []).map(
       (reply, index) => {
@@ -522,6 +557,25 @@ const toCanvasState = (
         : node.id === defaultNode?.id && defaultTriggerKey
           ? defaultTriggerKey
           : undefined;
+      const followRouteContent =
+        node.data.blockType === "follow_condition"
+          ? edges
+              .filter((edge) => edge.source === node.id && edge.sourceHandle)
+              .reduce<Record<string, string>>((routes, edge) => {
+                const target = nodes.find((item) => item.id === edge.target);
+                if (!target?.data.triggerKey) return routes;
+                const field =
+                  edge.sourceHandle === "follows"
+                    ? "followsTriggerKey"
+                    : edge.sourceHandle === "not_follows"
+                      ? "notFollowsTriggerKey"
+                      : edge.sourceHandle === "unknown"
+                        ? "unknownTriggerKey"
+                        : "";
+                if (field) routes[field] = normalizeKey(target.data.triggerKey);
+                return routes;
+              }, {})
+          : {};
       return {
         id: node.id,
         type: "instagramBlock",
@@ -532,7 +586,7 @@ const toCanvasState = (
             node.id === defaultNode?.id ? "default" : node.data.triggerType,
           triggerKey,
           blockType: node.data.blockType,
-          content: node.data.content,
+          content: { ...node.data.content, ...followRouteContent },
           actions,
           locked: node.data.locked,
           metadata: {
@@ -1124,10 +1178,14 @@ export function InstagramPage({
     onError: (error) => toast.error(getErrorMessage(error))
   });
 
-  const activateCanvasMutation = useMutation({
-    mutationFn: activateInstagramCanvas,
-    onSuccess: () => {
-      toast.success("Instagram canvas activated");
+  const canvasStatusMutation = useMutation({
+    mutationFn: updateInstagramCanvasStatus,
+    onSuccess: (_data, variables) => {
+      toast.success(
+        variables.status === "active"
+          ? "Instagram canvas activated"
+          : "Instagram canvas deactivated"
+      );
       queryClient.invalidateQueries({ queryKey: ["instagram-canvases"] });
       queryClient.invalidateQueries({ queryKey: ["instagram-canvas"] });
     },
@@ -1207,7 +1265,7 @@ export function InstagramPage({
         return;
       }
       if (!connection.sourceHandle) {
-        toast.error("Start the line from a quick reply or postback button");
+        toast.error("Start the line from one of the block's route outputs");
         return;
       }
       setEdges((currentEdges) => {
@@ -2189,6 +2247,16 @@ export function InstagramPage({
             />
           </div>
         )}
+        {selectedNode.data.blockType === "follow_condition" && (
+          <div className="rounded-lg border border-pink-200 bg-pink-50/60 p-4">
+            <p className="text-sm font-semibold">Follower routes</p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              Connect each output on the block to its next message. If Meta
+              cannot verify follower status, the unknown path is used; the
+              backend then falls back to the “Does not follow” route if needed.
+            </p>
+          </div>
+        )}
         {selectedNode.data.blockType === "pause_automation" && (
           <div className="space-y-2">
             <Label>Pause minutes</Label>
@@ -2338,21 +2406,23 @@ export function InstagramPage({
                     </div>
                     <Switch
                       checked={isActive}
-                      disabled={isActive || activateCanvasMutation.isPending}
+                      disabled={canvasStatusMutation.isPending}
                       title={
                         isActive
                           ? "This is the active Instagram message flow"
                           : "Make this the active Instagram message flow"
                       }
                       onCheckedChange={(checked) => {
-                        if (!checked) return;
-                        if (!canvas.latestPublishedVersionId) {
+                        if (checked && !canvas.latestPublishedVersionId) {
                           toast.error(
                             "Publish this Instagram canvas before activating it."
                           );
                           return;
                         }
-                        activateCanvasMutation.mutate(canvas._id);
+                        canvasStatusMutation.mutate({
+                          canvasId: canvas._id,
+                          status: checked ? "active" : "inactive"
+                        });
                       }}
                     />
                   </div>

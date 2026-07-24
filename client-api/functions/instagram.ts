@@ -232,6 +232,20 @@ export const activateInstagramCanvas = async (
   return res.data;
 };
 
+export const updateInstagramCanvasStatus = async ({
+  canvasId,
+  status
+}: {
+  canvasId: string;
+  status: "active" | "inactive";
+}): Promise<{ status: string; data: { canvas: InstagramCanvasRecord } }> => {
+  const res = await api.patch<{
+    status: string;
+    data: { canvas: InstagramCanvasRecord };
+  }>(INSTAGRAM_ENDPOINTS.CANVAS_STATUS_BY_ID(canvasId), { status });
+  return res.data;
+};
+
 export const deleteInstagramCanvas = async (
   canvasId: string
 ): Promise<{ status: string; data: { canvas: InstagramCanvasRecord } }> => {

@@ -23,6 +23,7 @@ import {
   getBroadcastById,
   startBroadcast
 } from "@/client-api/functions/broadcasts";
+import { getBotCanvasTriggers } from "@/client-api/functions/bot";
 import { getAllSubscribers, getTags } from "@/client-api/functions/subscribers";
 import { getAllTemplates } from "@/client-api/functions/templates";
 import {
@@ -31,8 +32,14 @@ import {
 } from "@/client-api/types/broadcasts.type";
 import { MessageTemplate } from "@/client-api/types/templates.type";
 import {
+  ALL_WHATSAPP_NUMBERS,
+  WhatsAppNumberSwitcher,
+  useWhatsAppNumberContext
+} from "@/components/whatsapp/WhatsAppNumberSwitcher";
+import {
   extractVariables,
-  getBodyComponent
+  getBodyComponent,
+  getButtonsComponent
 } from "@/components/templates/templateUtils";
 import {
   AlertDialog,
@@ -230,6 +237,8 @@ export default function BroadcastsPage() {
   const [scheduleDate, setScheduleDate] = useState<Date | undefined>();
   const [scheduleTime, setScheduleTime] = useState("09:00");
   const [broadcastName, setBroadcastName] = useState("");
+  const { selectedPhoneNumberId, effectiveNumber } = useWhatsAppNumberContext();
+  const [senderPhoneNumberId, setSenderPhoneNumberId] = useState("");
   const [templateId, setTemplateId] = useState("");
   const [variableMappings, setVariableMappings] = useState<
     Record<string, BroadcastVariableMapping>
@@ -242,8 +251,13 @@ export default function BroadcastsPage() {
   );
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ["broadcasts"],
-    queryFn: getAllBroadcasts,
+    queryKey: ["broadcasts", selectedPhoneNumberId],
+    queryFn: () =>
+      getAllBroadcasts({
+        ...(selectedPhoneNumberId !== ALL_WHATSAPP_NUMBERS
+          ? { phoneNumberId: selectedPhoneNumberId }
+          : {})
+      }),
     refetchOnMount: "always"
   });
   const { data: templatesData } = useQuery({
@@ -257,6 +271,12 @@ export default function BroadcastsPage() {
   const { data: tagsData } = useQuery({
     queryKey: ["subscriber-tags"],
     queryFn: getTags
+  });
+  const { data: senderTriggersData } = useQuery({
+    queryKey: ["bot-canvas-triggers", senderPhoneNumberId],
+    queryFn: () => getBotCanvasTriggers(senderPhoneNumberId),
+    enabled: Boolean(isCreateOpen && senderPhoneNumberId),
+    refetchOnMount: "always"
   });
   const { data: selectedBroadcastData, refetch: refetchSelectedBroadcast } =
     useQuery({
@@ -305,6 +325,34 @@ export default function BroadcastsPage() {
     [selectedTemplate]
   );
   const bodyText = getTemplateBodyText(selectedTemplate);
+  const senderTriggerKeys = useMemo(
+    () => new Set(senderTriggersData?.data?.triggerKeys || []),
+    [senderTriggersData?.data?.triggerKeys]
+  );
+  const templateHasRoutingIssue = (template: MessageTemplate) => {
+    const quickReplyIndexes =
+      getButtonsComponent(template.components)
+        ?.buttons?.map((button, index) => ({ button, index }))
+        .filter(({ button }) => button.type === "QUICK_REPLY")
+        .map(({ index }) => index) || [];
+    if (!quickReplyIndexes.length) return false;
+    return quickReplyIndexes.some((index) => {
+      const route = template.quickReplyRoutes?.find(
+        (item) => item.index === index
+      );
+      return !route || !senderTriggerKeys.has(route.triggerKey);
+    });
+  };
+
+  useEffect(() => {
+    if (
+      isCreateOpen &&
+      !senderPhoneNumberId &&
+      effectiveNumber?.phoneNumberId
+    ) {
+      setSenderPhoneNumberId(effectiveNumber.phoneNumberId);
+    }
+  }, [effectiveNumber?.phoneNumberId, isCreateOpen, senderPhoneNumberId]);
 
   useEffect(() => {
     if (!selectedTemplate) {
@@ -367,6 +415,16 @@ export default function BroadcastsPage() {
       toast.error("Broadcast name and template are required");
       return;
     }
+    if (!senderPhoneNumberId) {
+      toast.error("Select the WhatsApp sender number");
+      return;
+    }
+    if (selectedTemplate && templateHasRoutingIssue(selectedTemplate)) {
+      toast.error(
+        "This template needs quick reply routing for the selected sender number"
+      );
+      return;
+    }
 
     const audience: BroadcastAudience =
       audienceMode === "tags"
@@ -392,7 +450,8 @@ export default function BroadcastsPage() {
       name: broadcastName.trim(),
       templateId,
       audience,
-      components
+      components,
+      phoneNumberId: senderPhoneNumberId
     });
   };
 
@@ -471,6 +530,7 @@ export default function BroadcastsPage() {
                     <th className="p-4">Name</th>
                     <th className="p-4">Template</th>
                     <th className="p-4">Status</th>
+                    <th className="p-4">Sender</th>
                     <th className="p-4">Recipients</th>
                     <th className="p-4">Created</th>
                     <th className="p-4 text-right">Action</th>
@@ -491,6 +551,14 @@ export default function BroadcastsPage() {
                         >
                           {broadcast.status}
                         </span>
+                      </td>
+                      <td className="p-4">
+                        {broadcast.whatsappSender?.displayPhoneNumber ||
+                          broadcast.whatsappSender?.phoneNumberId ||
+                          broadcast.displayPhoneNumber ||
+                          broadcast.whatsappPhoneNumberId ||
+                          broadcast.phoneNumberId ||
+                          "-"}
                       </td>
                       <td className="p-4">
                         {broadcast.stats?.totalRecipients || 0}
@@ -545,7 +613,7 @@ export default function BroadcastsPage() {
             <DialogTitle>Create broadcast draft</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleCreate} className="space-y-5">
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-3">
               <div className="space-y-2">
                 <Label>Name</Label>
                 <Input
@@ -565,12 +633,25 @@ export default function BroadcastsPage() {
                       <SelectItem
                         key={template.templateId}
                         value={template.templateId}
+                        disabled={templateHasRoutingIssue(template)}
                       >
                         {template.name}
+                        {templateHasRoutingIssue(template)
+                          ? " · Action required"
+                          : ""}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>WhatsApp sender</Label>
+                <WhatsAppNumberSwitcher
+                  includeAll={false}
+                  value={senderPhoneNumberId}
+                  onValueChange={setSenderPhoneNumberId}
+                  className="h-11 w-full"
+                />
               </div>
             </div>
 

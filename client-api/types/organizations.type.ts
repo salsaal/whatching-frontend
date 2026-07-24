@@ -1,5 +1,65 @@
 import { IntegrationStatus, Organization } from "@/stores/organizationStore";
 
+export type WhatsAppPhoneNumberStatus =
+  | "active"
+  | "inactive"
+  | "plan_locked"
+  | "archived";
+
+export interface WhatsAppPhoneNumber {
+  _id: string;
+  id: string;
+  orgId: string;
+  wabaId: string;
+  phoneNumberId: string;
+  displayPhoneNumber?: string;
+  verifiedName?: string;
+  businessAccountName?: string;
+  status: WhatsAppPhoneNumberStatus;
+  connectionStatus: "pending" | "ready" | "disconnected";
+  isDefault: boolean;
+  qualityRating?: string;
+  qualityStatus?: string;
+  messagingLimitTier?: string;
+  activeCanvasId?: string;
+  coexistenceEnabled?: boolean;
+  coexistenceStatus?: "not_enabled" | "enabled" | "disconnected" | "limited";
+  lastHealthCheckAt?: string;
+  connectedAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  activeAlerts?: Array<{
+    code: string;
+    severity: "info" | "warning" | "critical";
+    message: string;
+    createdAt?: string;
+    lastTriggeredAt?: string;
+  }>;
+}
+
+export interface WhatsAppPhoneNumberSummary {
+  planLimit: number | null;
+  activeCount: number;
+  remainingActiveSlots: number | null;
+  phoneNumbers: WhatsAppPhoneNumber[];
+}
+
+export interface WhatsAppPhoneNumbersResponse {
+  status: string;
+  results?: number;
+  data: WhatsAppPhoneNumberSummary & {
+    syncedPhoneNumbers?: WhatsAppPhoneNumber[];
+  };
+}
+
+export interface WhatsAppPhoneNumberResponse {
+  status: string;
+  data: {
+    phoneNumber: WhatsAppPhoneNumber;
+    summary?: WhatsAppPhoneNumberSummary;
+  };
+}
+
 export interface OrganizationsResponse {
   status: string;
   results: number;

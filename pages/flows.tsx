@@ -21,16 +21,21 @@ import {
 import { toast } from "sonner";
 
 import {
-  activateBotCanvas,
   archiveBotCanvas,
   createBotCanvas,
   getBotCanvas,
   getBotSettings,
   listBotCanvases,
   updateBotCanvas,
+  updateBotCanvasStatus,
   updateBotSettings
 } from "@/client-api/functions/bot";
 import { BotCanvasRecord } from "@/client-api/types/bot.type";
+import { updateWhatsAppPhoneNumber } from "@/client-api/functions/organizations";
+import {
+  ALL_WHATSAPP_NUMBERS,
+  useWhatsAppNumberContext
+} from "@/components/whatsapp/WhatsAppNumberSwitcher";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -74,6 +79,8 @@ export default function FlowsPage() {
   const activeOrganization = useOrganizationStore(
     (state) => state.activeOrganization
   );
+  const { numbers, selectedPhoneNumberId, selectedNumber } =
+    useWhatsAppNumberContext();
   const [name, setName] = useState("");
   const [editingCanvas, setEditingCanvas] = useState<BotCanvasRecord | null>(
     null
@@ -144,16 +151,15 @@ export default function FlowsPage() {
     onError: handleError
   });
 
-  const { mutate: activateCanvasMutate, isPending: isActivating } = useMutation(
-    {
-      mutationFn: activateBotCanvas,
+  const { mutate: setCanvasStatus, isPending: isChangingCanvasStatus } =
+    useMutation({
+      mutationFn: updateBotCanvasStatus,
       onSuccess: async () => {
-        toast.success("Active flow updated.");
+        toast.success("Organisation fallback updated.");
         await invalidate();
       },
       onError: handleError
-    }
-  );
+    });
 
   const { mutate: archiveCanvasMutate, isPending: isDeleting } = useMutation({
     mutationFn: archiveBotCanvas,
@@ -161,6 +167,16 @@ export default function FlowsPage() {
       toast.success("Flow archived.");
       setDeleteCanvas(null);
       await invalidate();
+    },
+    onError: handleError
+  });
+  const { mutate: assignCanvasMutate, isPending: isAssigning } = useMutation({
+    mutationFn: updateWhatsAppPhoneNumber,
+    onSuccess: async () => {
+      toast.success("Number flow assignment updated.");
+      await queryClient.invalidateQueries({
+        queryKey: ["whatsapp-phone-numbers", activeOrganization?._id]
+      });
     },
     onError: handleError
   });
@@ -191,8 +207,8 @@ export default function FlowsPage() {
                 </p>
                 <h1 className="font-heading text-3xl font-semibold">Flows</h1>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Manage multiple canvases. Publish any canvas, but only one can
-                  be active for WhatsApp automation at a time.
+                  Publish reusable canvases, choose the organisation fallback,
+                  and assign a different published flow to each WhatsApp number.
                 </p>
               </div>
             </div>
@@ -232,7 +248,7 @@ export default function FlowsPage() {
             <div>
               <p className="text-sm font-semibold">Active bot</p>
               <p className="text-xs text-muted-foreground">
-                Enable WhatsApp automation for the active published canvas.
+                Global switch for automation across every WhatsApp number.
               </p>
             </div>
             <Switch
@@ -270,6 +286,17 @@ export default function FlowsPage() {
           ) : canvases.length ? (
             canvases.map((canvas) => {
               const isActive = canvas.status === "active";
+              const isSelectedNumberContext =
+                selectedPhoneNumberId !== ALL_WHATSAPP_NUMBERS &&
+                Boolean(selectedNumber);
+              const isAssignedToSelectedNumber =
+                selectedNumber?.activeCanvasId === canvas._id;
+              const assignedNumbers = numbers.filter(
+                (number) => number.activeCanvasId === canvas._id
+              );
+              const hasPublishedVersion = Boolean(
+                canvas.latestPublishedVersionId || canvas.publishedState
+              );
               const detail = canvasDetailById.get(canvas._id);
               const nodeCount =
                 canvas.draftState?.nodes?.length ||
@@ -307,6 +334,21 @@ export default function FlowsPage() {
                       </Badge>
                     </div>
 
+                    {(isActive || assignedNumbers.length > 0) && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {isActive && (
+                          <Badge className="bg-emerald-100 text-emerald-800">
+                            Organisation fallback
+                          </Badge>
+                        )}
+                        {assignedNumbers.map((number) => (
+                          <Badge key={number.id} variant="outline">
+                            {number.displayPhoneNumber || number.phoneNumberId}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+
                     <div className="grid gap-2 text-sm">
                       <div className="rounded-md bg-muted/50 p-3">
                         <p className="text-xs text-muted-foreground">Blocks</p>
@@ -316,21 +358,50 @@ export default function FlowsPage() {
 
                     <div className="flex items-center justify-between rounded-md border px-3 py-2">
                       <div>
-                        <p className="text-sm font-medium">Active canvas</p>
+                        <p className="text-sm font-medium">
+                          {isSelectedNumberContext
+                            ? "Use for selected number"
+                            : "Organisation fallback"}
+                        </p>
                         <p className="text-xs text-muted-foreground">
-                          Only one flow can receive live inbound messages.
+                          {isSelectedNumberContext
+                            ? "Overrides the fallback flow for this number."
+                            : "Used when a number has no specific assignment."}
                         </p>
                       </div>
                       <Switch
-                        checked={isActive}
-                        disabled={isActive || isActivating}
+                        checked={
+                          isSelectedNumberContext
+                            ? isAssignedToSelectedNumber
+                            : isActive
+                        }
+                        disabled={
+                          isSelectedNumberContext
+                            ? isAssigning || !hasPublishedVersion
+                            : isChangingCanvasStatus
+                        }
                         title={
-                          isActive
-                            ? "This is the active WhatsApp flow"
-                            : "Make this the active WhatsApp flow"
+                          isSelectedNumberContext
+                            ? "Assign this published flow to the selected WhatsApp number"
+                            : "Use this flow as the organisation fallback"
                         }
                         onCheckedChange={(checked) => {
-                          if (checked) activateCanvasMutate(canvas._id);
+                          if (isSelectedNumberContext && selectedNumber) {
+                            assignCanvasMutate({
+                              phoneNumberRecordId: selectedNumber.id,
+                              activeCanvasId: checked ? canvas._id : ""
+                            });
+                          } else if (checked) {
+                            setCanvasStatus({
+                              canvasId: canvas._id,
+                              status: "active"
+                            });
+                          } else {
+                            setCanvasStatus({
+                              canvasId: canvas._id,
+                              status: "inactive"
+                            });
+                          }
                         }}
                       />
                     </div>

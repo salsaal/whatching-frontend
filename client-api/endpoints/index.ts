@@ -22,6 +22,16 @@ export const ORGANIZATION_ENDPOINTS = {
   CONNECT_META: `${ORGANIZATIONS_BASE}/connect-meta`,
   CONNECT_META_EMBEDDED_SIGNUP: `${ORGANIZATIONS_BASE}/connect-meta/embedded-signup`,
   SYNC_INTEGRATION: `${ORGANIZATIONS_BASE}/integration/sync`,
+  WHATSAPP_PHONE_NUMBERS: `${ORGANIZATIONS_BASE}/whatsapp/phone-numbers`,
+  WHATSAPP_PHONE_NUMBERS_SYNC: `${ORGANIZATIONS_BASE}/whatsapp/phone-numbers/sync`,
+  WHATSAPP_PHONE_NUMBER: (phoneNumberRecordId: string) =>
+    `${ORGANIZATIONS_BASE}/whatsapp/phone-numbers/${phoneNumberRecordId}`,
+  WHATSAPP_PHONE_NUMBER_SET_DEFAULT: (phoneNumberRecordId: string) =>
+    `${ORGANIZATIONS_BASE}/whatsapp/phone-numbers/${phoneNumberRecordId}/set-default`,
+  WHATSAPP_PHONE_NUMBER_ACTIVATE: (phoneNumberRecordId: string) =>
+    `${ORGANIZATIONS_BASE}/whatsapp/phone-numbers/${phoneNumberRecordId}/activate`,
+  WHATSAPP_PHONE_NUMBER_DEACTIVATE: (phoneNumberRecordId: string) =>
+    `${ORGANIZATIONS_BASE}/whatsapp/phone-numbers/${phoneNumberRecordId}/deactivate`,
   TEAM: `${ORGANIZATIONS_BASE}/team`,
   ADD_AGENT: `${ORGANIZATIONS_BASE}/add-agent`,
   TEAM_MEMBER: (membershipId: string) =>
@@ -46,7 +56,9 @@ export const TEMPLATE_ENDPOINTS = {
   UPDATE_APPROVED: (templateId: string) => `${TEMPLATES_BASE}/${templateId}`,
   DELETE: (templateId: string) => `${TEMPLATES_BASE}/${templateId}`,
   LINK_MEDIA: (templateId: string) =>
-    `${TEMPLATES_BASE}/${templateId}/link-media`
+    `${TEMPLATES_BASE}/${templateId}/link-media`,
+  QUICK_REPLY_ROUTES: (templateId: string) =>
+    `${TEMPLATES_BASE}/${templateId}/quick-reply-routes`
 };
 
 export const SUBSCRIBER_ENDPOINTS = {
@@ -103,6 +115,8 @@ export const BOT_ENDPOINTS = {
     `${BOT_BASE}/canvases/${canvasId}/publish`,
   CANVAS_ACTIVATE_BY_ID: (canvasId: string) =>
     `${BOT_BASE}/canvases/${canvasId}/activate`,
+  CANVAS_STATUS_BY_ID: (canvasId: string) =>
+    `${BOT_BASE}/canvases/${canvasId}/status`,
   KNOWLEDGE_SOURCES: `${BOT_BASE}/knowledge-sources`,
   KNOWLEDGE_TEXT: `${BOT_BASE}/knowledge-sources/text`,
   KNOWLEDGE_UPLOAD: `${BOT_BASE}/knowledge-sources/upload`,
@@ -168,6 +182,8 @@ export const INSTAGRAM_ENDPOINTS = {
     `${INSTAGRAM_BASE}/canvases/${canvasId}/publish`,
   CANVAS_ACTIVATE_BY_ID: (canvasId: string) =>
     `${INSTAGRAM_BASE}/canvases/${canvasId}/activate`,
+  CANVAS_STATUS_BY_ID: (canvasId: string) =>
+    `${INSTAGRAM_BASE}/canvases/${canvasId}/status`,
   FLOWS: `${INSTAGRAM_BASE}/flows`,
   FLOW_BY_ID: (flowId: string) => `${INSTAGRAM_BASE}/flows/${flowId}`,
   FLOW_PUBLISH: (flowId: string) => `${INSTAGRAM_BASE}/flows/${flowId}/publish`,

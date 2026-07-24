@@ -41,6 +41,7 @@ import {
   AlertDialogTitle
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { WhatsAppNumberSwitcher } from "@/components/whatsapp/WhatsAppNumberSwitcher";
 import {
   Dialog,
   DialogContent,
@@ -344,29 +345,32 @@ export default function AppLayout({
                 </div>
               </div>
 
-              <div className="flex items-center justify-start gap-3 rounded-sm bg-background px-3 py-2 shadow-xs lg:justify-center">
-                {isIntegrationLoading ? (
-                  <Loader2 className="size-4 animate-spin text-primary" />
-                ) : (
-                  <span
-                    className={cn(
-                      "size-2.5 rounded-full",
-                      isReady ? "bg-primary" : "bg-amber-500"
-                    )}
-                  />
-                )}
-                <span className="text-sm font-medium">
-                  WhatsApp Business API:{" "}
-                  <span className="capitalize">{status}</span>
-                </span>
-                {!isReady && (
-                  <Button
-                    size="sm"
-                    onClick={() => router.push("/overview?connectMeta=1")}
-                  >
-                    Connect now
-                  </Button>
-                )}
+              <div className="flex flex-wrap items-center justify-start gap-3 lg:justify-center">
+                <WhatsAppNumberSwitcher showManage />
+                <div className="flex items-center gap-2 rounded-sm bg-background px-3 py-2 shadow-xs">
+                  {isIntegrationLoading ? (
+                    <Loader2 className="size-4 animate-spin text-primary" />
+                  ) : (
+                    <span
+                      className={cn(
+                        "size-2.5 rounded-full",
+                        isReady ? "bg-primary" : "bg-amber-500"
+                      )}
+                    />
+                  )}
+                  <span className="text-sm font-medium">
+                    WhatsApp Business API:{" "}
+                    <span className="capitalize">{status}</span>
+                  </span>
+                  {!isReady && (
+                    <Button
+                      size="sm"
+                      onClick={() => router.push("/overview?connectMeta=1")}
+                    >
+                      Connect now
+                    </Button>
+                  )}
+                </div>
               </div>
 
               <div className="flex items-center justify-start gap-3 lg:justify-end">

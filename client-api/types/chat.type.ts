@@ -61,6 +61,14 @@ export interface ReplyWindow {
   remainingMs: number;
 }
 
+export interface WhatsAppSenderSummary {
+  phoneNumberRecordId?: string;
+  phoneNumberId: string;
+  displayPhoneNumber?: string | null;
+  verifiedName?: string | null;
+  wabaId?: string;
+}
+
 export interface Conversation {
   _id: string;
   orgId: string;
@@ -79,6 +87,7 @@ export interface Conversation {
   createdAt: string;
   updatedAt: string;
   replyWindow: ReplyWindow;
+  whatsappSender?: WhatsAppSenderSummary | null;
   botState?: {
     mode: ConversationMode;
     activeFlowId?: string | null;
@@ -148,6 +157,7 @@ export interface ChatMessage {
     source?: string | null;
   } | null;
   errorMessage?: string;
+  whatsappSender?: WhatsAppSenderSummary | null;
   sentAt?: string;
   createdAt: string;
   updatedAt: string;
@@ -168,6 +178,12 @@ export interface ChatBootstrapResponse {
       metaStatus: string;
       phoneNumberId: string | null;
       displayPhoneNumber: string | null;
+      whatsAppPhoneNumbers?: {
+        planLimit: number | null;
+        activeCount: number;
+        remainingActiveSlots: number | null;
+        phoneNumbers: Array<Record<string, unknown>>;
+      };
     };
     bot: {
       settings: BotSettings | null;
@@ -187,6 +203,8 @@ export interface ConversationListParams {
   unreadOnly?: boolean;
   pendingEscalation?: boolean;
   search?: string;
+  channel?: ConversationChannel | "all";
+  phoneNumberId?: string;
 }
 
 export interface ConversationListResponse {
@@ -287,6 +305,7 @@ export interface SendTemplateMessagePayload {
   templateName: string;
   languageCode?: string;
   components?: TemplateSendComponent[];
+  phoneNumberId?: string;
 }
 
 export interface SendTemplateMessageResponse {

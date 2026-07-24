@@ -99,6 +99,7 @@ export const mapDraftToTemplate = (draft: TemplateDraft): MessageTemplate => ({
   metaTemplateId: draft.metaTemplateId,
   allowCategoryChange: draft.allowCategoryChange,
   defaultMediaId: draft.defaultMediaId,
+  quickReplyRoutes: draft.quickReplyRoutes,
   source: "draft"
 });
 

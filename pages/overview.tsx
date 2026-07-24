@@ -21,6 +21,7 @@ import {
 } from "@/client-api/functions/organizations";
 import { Button } from "@/components/ui/button";
 import AppLayout from "@/layouts/AppLayout";
+import WhatsAppNumbersPanel from "@/components/whatsapp/WhatsAppNumbersPanel";
 import { useOrganizationStore } from "@/stores/organizationStore";
 
 interface EmbeddedSignupSession {
@@ -200,6 +201,9 @@ export default function OverviewPage() {
           }),
           queryClient.invalidateQueries({
             queryKey: ["integration-status", activeOrgId]
+          }),
+          queryClient.invalidateQueries({
+            queryKey: ["whatsapp-phone-numbers", activeOrgId]
           })
         ]);
       },
@@ -569,14 +573,21 @@ export default function OverviewPage() {
                 type="button"
                 className="w-full sm:w-auto"
                 disabled={!metaAppId || !metaConfigId || isConnectingMeta}
-                onClick={startEmbeddedSignup}
+                onClick={
+                  isMetaReady
+                    ? () =>
+                        document
+                          .getElementById("whatsapp-numbers")
+                          ?.scrollIntoView({ behavior: "smooth" })
+                    : startEmbeddedSignup
+                }
               >
                 {isConnectingMeta ? (
                   <Loader2 className="size-4 animate-spin" />
                 ) : (
                   <Smartphone className="size-4" />
                 )}
-                {isMetaReady ? "Reconnect Meta" : "Connect Meta"}
+                {isMetaReady ? "Manage numbers" : "Connect Meta"}
               </Button>
               <Button
                 type="button"
@@ -595,6 +606,10 @@ export default function OverviewPage() {
             </div>
           </div>
         </section>
+        <WhatsAppNumbersPanel
+          onAddNumber={startEmbeddedSignup}
+          addingNumber={isConnectingMeta}
+        />
       </div>
     </AppLayout>
   );

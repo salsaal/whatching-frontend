@@ -3,6 +3,7 @@ import { BOT_ENDPOINTS } from "../endpoints";
 import {
   BotCanvasDraftState,
   BotCanvasResponse,
+  BotCanvasTriggersResponse,
   BotCanvasesResponse,
   BotSettingsPatch,
   BotSettingsResponse,
@@ -63,6 +64,21 @@ export const publishBotCanvasDraft = async (
 
 export const getBotCanvasPublished = async (): Promise<BotCanvasResponse> => {
   const res = await api.get<BotCanvasResponse>(BOT_ENDPOINTS.CANVAS_PUBLISHED);
+  return res.data;
+};
+
+export const getBotCanvasTriggers = async (
+  phoneNumberId?: string
+): Promise<BotCanvasTriggersResponse> => {
+  const res = await api.get<BotCanvasTriggersResponse>(
+    BOT_ENDPOINTS.CANVAS_PUBLISHED,
+    {
+      params: {
+        view: "triggerKeys",
+        ...(phoneNumberId ? { phoneNumberId } : {})
+      }
+    }
+  );
   return res.data;
 };
 
@@ -146,6 +162,20 @@ export const activateBotCanvas = async (
 ): Promise<BotCanvasResponse> => {
   const res = await api.post<BotCanvasResponse>(
     BOT_ENDPOINTS.CANVAS_ACTIVATE_BY_ID(canvasId)
+  );
+  return res.data;
+};
+
+export const updateBotCanvasStatus = async ({
+  canvasId,
+  status
+}: {
+  canvasId: string;
+  status: "active" | "inactive";
+}): Promise<BotCanvasResponse> => {
+  const res = await api.patch<BotCanvasResponse>(
+    BOT_ENDPOINTS.CANVAS_STATUS_BY_ID(canvasId),
+    { status }
   );
   return res.data;
 };

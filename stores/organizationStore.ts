@@ -49,12 +49,17 @@ interface OrganizationState {
   integration: IntegrationStatus | null;
   ownerUserId: string | null;
   hasHydrated: boolean;
+  selectedWhatsAppPhoneNumberByOrg: Record<string, string>;
   setOrganizationOwner: (userId: string | null) => void;
   setOrganizations: (organizations: Organization[]) => void;
   addOrganization: (organization: Organization) => void;
   upsertOrganization: (organization: Organization) => void;
   setActiveOrganization: (organization: Organization | null) => void;
   setIntegration: (integration: IntegrationStatus | null) => void;
+  setSelectedWhatsAppPhoneNumber: (
+    organizationId: string,
+    phoneNumberId: string
+  ) => void;
   clearOrganizations: () => void;
   setHasHydrated: (hasHydrated: boolean) => void;
 }
@@ -67,6 +72,7 @@ export const useOrganizationStore = create<OrganizationState>()(
       integration: null,
       ownerUserId: null,
       hasHydrated: false,
+      selectedWhatsAppPhoneNumberByOrg: {},
       setOrganizationOwner: (userId) => set({ ownerUserId: userId }),
       setOrganizations: (organizations) =>
         set((state) => {
@@ -116,6 +122,13 @@ export const useOrganizationStore = create<OrganizationState>()(
         set({ activeOrganization: organization });
       },
       setIntegration: (integration) => set({ integration }),
+      setSelectedWhatsAppPhoneNumber: (organizationId, phoneNumberId) =>
+        set((state) => ({
+          selectedWhatsAppPhoneNumberByOrg: {
+            ...state.selectedWhatsAppPhoneNumberByOrg,
+            [organizationId]: phoneNumberId
+          }
+        })),
       clearOrganizations: () => {
         if (typeof window !== "undefined") {
           localStorage.removeItem("orgId");
@@ -125,7 +138,8 @@ export const useOrganizationStore = create<OrganizationState>()(
           organizations: [],
           activeOrganization: null,
           integration: null,
-          ownerUserId: null
+          ownerUserId: null,
+          selectedWhatsAppPhoneNumberByOrg: {}
         });
       },
       setHasHydrated: (hasHydrated) => set({ hasHydrated })
@@ -137,7 +151,8 @@ export const useOrganizationStore = create<OrganizationState>()(
         organizations: state.organizations,
         activeOrganization: state.activeOrganization,
         integration: state.integration,
-        ownerUserId: state.ownerUserId
+        ownerUserId: state.ownerUserId,
+        selectedWhatsAppPhoneNumberByOrg: state.selectedWhatsAppPhoneNumberByOrg
       }),
       onRehydrateStorage: () => (state) => {
         if (

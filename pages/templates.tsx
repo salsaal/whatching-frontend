@@ -13,9 +13,15 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { parseAsString, useQueryState } from "nuqs";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient
+} from "@tanstack/react-query";
 
+import { getBotCanvasTriggers } from "@/client-api/functions/bot";
 import {
   deleteDraftTemplate,
   deleteTemplate,
@@ -30,6 +36,7 @@ import MediaPickerDialog from "@/components/media/MediaPickerDialog";
 import TemplatesTable from "@/components/templates/TemplatesTable";
 import {
   getTemplateType,
+  getButtonsComponent,
   getTemplateEditId,
   mapDraftToTemplate,
   statusLabel,
@@ -52,6 +59,11 @@ import AppLayout from "@/layouts/AppLayout";
 import { cn } from "@/lib/utils";
 import { useOrganizationStore } from "@/stores/organizationStore";
 import { useTemplateStore } from "@/stores/templateStore";
+import {
+  ALL_WHATSAPP_NUMBERS,
+  isUsableWhatsAppNumber,
+  useWhatsAppNumberContext
+} from "@/components/whatsapp/WhatsAppNumberSwitcher";
 
 const statusIcons: Record<string, React.ElementType> = {
   ALL: CircleDashed,
@@ -82,6 +94,8 @@ export default function TemplatesPage() {
   const activeOrgId = useOrganizationStore(
     (state) => state.activeOrganization?._id
   );
+  const { numbers, selectedPhoneNumberId, selectedNumber, defaultNumber } =
+    useWhatsAppNumberContext();
   const templatesQueryKey = useMemo(
     () => ["templates", activeOrgId] as const,
     [activeOrgId]
@@ -216,6 +230,59 @@ export default function TemplatesPage() {
     }
   }, [data, draftsData, setTemplates]);
 
+  const routingValidationNumbers = useMemo(
+    () =>
+      selectedPhoneNumberId === ALL_WHATSAPP_NUMBERS
+        ? numbers.filter(isUsableWhatsAppNumber)
+        : selectedNumber
+          ? [selectedNumber]
+          : defaultNumber
+            ? [defaultNumber]
+            : [],
+    [defaultNumber, numbers, selectedNumber, selectedPhoneNumberId]
+  );
+  const triggerQueries = useQueries({
+    queries: routingValidationNumbers.map((number) => ({
+      queryKey: ["bot-canvas-triggers", activeOrgId, number.phoneNumberId],
+      queryFn: () => getBotCanvasTriggers(number.phoneNumberId),
+      enabled: Boolean(activeOrgId),
+      refetchOnMount: "always" as const,
+      refetchOnWindowFocus: true
+    }))
+  });
+  const triggerKeySets = useMemo(
+    () =>
+      triggerQueries.map(
+        (triggerQuery) => new Set(triggerQuery.data?.data?.triggerKeys || [])
+      ),
+    [triggerQueries]
+  );
+  const hasTemplateRoutingIssue = useCallback(
+    (template: MessageTemplate) => {
+      const quickReplyIndexes =
+        getButtonsComponent(template.components)
+          ?.buttons?.map((button, index) => ({ button, index }))
+          .filter(({ button }) => button.type === "QUICK_REPLY")
+          .map(({ index }) => index) || [];
+      if (!quickReplyIndexes.length) return false;
+
+      const routes = template.quickReplyRoutes || [];
+      if (
+        quickReplyIndexes.some(
+          (index) => !routes.some((route) => route.index === index)
+        )
+      ) {
+        return true;
+      }
+      if (!routingValidationNumbers.length) return true;
+
+      return triggerKeySets.some((keys) =>
+        routes.some((route) => !keys.has(route.triggerKey))
+      );
+    },
+    [routingValidationNumbers.length, triggerKeySets]
+  );
+
   const filteredTemplates = useMemo(() => {
     const normalizedStatus = status.toUpperCase();
     const normalizedQuery = query.trim().toLowerCase();
@@ -225,7 +292,8 @@ export default function TemplatesPage() {
         normalizedStatus === "ALL" ||
         (normalizedStatus === "ACTION_REQUIRED"
           ? template.status.toUpperCase() === normalizedStatus ||
-            templateNeedsMedia(template)
+            templateNeedsMedia(template) ||
+            hasTemplateRoutingIssue(template)
           : template.status.toUpperCase() === normalizedStatus);
       const matchesQuery =
         !normalizedQuery ||
@@ -236,8 +304,11 @@ export default function TemplatesPage() {
 
       return matchesStatus && matchesQuery;
     });
-  }, [query, status, templates]);
-  const isLoading = isTemplatesLoading || isDraftsLoading;
+  }, [hasTemplateRoutingIssue, query, status, templates]);
+  const isLoading =
+    isTemplatesLoading ||
+    isDraftsLoading ||
+    triggerQueries.some((triggerQuery) => triggerQuery.isLoading);
   const isRefreshing = isManualRefreshing;
 
   const handleRefresh = async () => {
@@ -322,6 +393,9 @@ export default function TemplatesPage() {
                 const hasActionRequired =
                   item === "ACTION_REQUIRED" &&
                   templates.some((template) => templateNeedsMedia(template));
+                const hasRoutingActionRequired =
+                  item === "ACTION_REQUIRED" &&
+                  templates.some(hasTemplateRoutingIssue);
 
                 return (
                   <button
@@ -338,7 +412,7 @@ export default function TemplatesPage() {
                   >
                     <Icon className="size-4" />
                     {item === "ALL" ? "All" : statusLabel(item)}
-                    {hasActionRequired && (
+                    {(hasActionRequired || hasRoutingActionRequired) && (
                       <span className="size-2 rounded-full bg-destructive" />
                     )}
                   </button>
@@ -352,6 +426,7 @@ export default function TemplatesPage() {
           templates={filteredTemplates}
           isLoading={isLoading}
           deletingId={deletingId}
+          hasRoutingIssue={hasTemplateRoutingIssue}
           onEdit={handleEdit}
           onLinkMedia={setMediaTarget}
           onDelete={(templateId) => {

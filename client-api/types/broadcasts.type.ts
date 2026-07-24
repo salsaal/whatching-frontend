@@ -57,6 +57,18 @@ export interface Broadcast {
     name: string;
     email: string;
   };
+  phoneNumberId?: string;
+  wabaId?: string;
+  whatsappPhoneNumberId?: string;
+  whatsappPhoneNumberRecordId?: string;
+  displayPhoneNumber?: string;
+  messagingLimitTier?: string;
+  whatsappSender?: {
+    phoneNumberRecordId?: string;
+    phoneNumberId: string;
+    displayPhoneNumber?: string | null;
+    verifiedName?: string | null;
+  } | null;
 }
 
 export interface BroadcastsResponse {
@@ -119,6 +131,15 @@ export interface CreateBroadcastPayload {
   templateId: string;
   audience: BroadcastAudience;
   components: unknown[];
+  phoneNumberId?: string;
+}
+
+export interface BroadcastListParams {
+  page?: number;
+  limit?: number;
+  status?: string;
+  q?: string;
+  phoneNumberId?: string;
 }
 
 export interface StartBroadcastPayload {

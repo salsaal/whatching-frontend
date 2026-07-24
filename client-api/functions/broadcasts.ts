@@ -2,6 +2,7 @@ import api from "../axiosInstance";
 import { BROADCAST_ENDPOINTS } from "../endpoints";
 import {
   BroadcastResponse,
+  BroadcastListParams,
   BroadcastsResponse,
   CreateBroadcastPayload,
   StartBroadcastPayload,
@@ -9,8 +10,12 @@ import {
 } from "../types/broadcasts.type";
 import { ApiResponse } from "../types/api";
 
-export const getAllBroadcasts = async (): Promise<BroadcastsResponse> => {
-  const res = await api.get<BroadcastsResponse>(BROADCAST_ENDPOINTS.GET_ALL);
+export const getAllBroadcasts = async (
+  params: BroadcastListParams = {}
+): Promise<BroadcastsResponse> => {
+  const res = await api.get<BroadcastsResponse>(BROADCAST_ENDPOINTS.GET_ALL, {
+    params
+  });
   return res.data;
 };
 

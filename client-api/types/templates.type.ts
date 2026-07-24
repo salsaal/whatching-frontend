@@ -39,6 +39,15 @@ export interface TemplateButton {
   url?: string;
   phone_number?: string;
   example?: string[];
+  triggerKey?: string;
+  flowTriggerKey?: string;
+  payload?: string;
+}
+
+export interface TemplateQuickReplyRoute {
+  index: number;
+  label?: string;
+  triggerKey: string;
 }
 
 export interface TemplateComponent {
@@ -85,6 +94,7 @@ export interface MessageTemplate {
   metaTemplateId?: string;
   allowCategoryChange?: boolean;
   defaultMediaId?: string;
+  quickReplyRoutes?: TemplateQuickReplyRoute[];
 }
 
 export interface TemplatesResponse {
@@ -155,6 +165,7 @@ export interface CreateTemplatePayload {
   category: TemplateCategory;
   allowCategoryChange: boolean;
   components: TemplateComponent[];
+  phoneNumberId?: string;
 }
 
 export type CreateDraftPayload = CreateTemplatePayload;
@@ -162,8 +173,15 @@ export type CreateDraftPayload = CreateTemplatePayload;
 export interface UpdateDraftPayload {
   name?: string;
   components?: TemplateComponent[];
+  phoneNumberId?: string;
 }
 
 export interface UpdateApprovedTemplatePayload {
   components: TemplateComponent[];
+  phoneNumberId?: string;
+}
+
+export interface UpdateTemplateQuickReplyRoutesPayload {
+  quickReplyRoutes: TemplateQuickReplyRoute[];
+  phoneNumberId?: string;
 }

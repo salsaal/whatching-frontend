@@ -10,7 +10,8 @@ import {
   TemplateResponse,
   TemplatesResponse,
   UpdateApprovedTemplatePayload,
-  UpdateDraftPayload
+  UpdateDraftPayload,
+  UpdateTemplateQuickReplyRoutesPayload
 } from "../types/templates.type";
 import { ApiResponse } from "../types/api";
 
@@ -78,11 +79,30 @@ export const updateDraftTemplate = async ({
   return res.data;
 };
 
-export const submitDraftTemplate = async (
-  draftId: string
-): Promise<SubmitDraftResponse> => {
+export const submitDraftTemplate = async ({
+  draftId,
+  phoneNumberId
+}: {
+  draftId: string;
+  phoneNumberId?: string;
+}): Promise<SubmitDraftResponse> => {
   const res = await api.post<SubmitDraftResponse>(
-    TEMPLATE_ENDPOINTS.SUBMIT_DRAFT(draftId)
+    TEMPLATE_ENDPOINTS.SUBMIT_DRAFT(draftId),
+    phoneNumberId ? { phoneNumberId } : {}
+  );
+  return res.data;
+};
+
+export const updateTemplateQuickReplyRoutes = async ({
+  templateId,
+  payload
+}: {
+  templateId: string;
+  payload: UpdateTemplateQuickReplyRoutesPayload;
+}): Promise<TemplateResponse> => {
+  const res = await api.patch<TemplateResponse>(
+    TEMPLATE_ENDPOINTS.QUICK_REPLY_ROUTES(templateId),
+    payload
   );
   return res.data;
 };

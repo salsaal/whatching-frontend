@@ -48,6 +48,7 @@ import {
   sendTemplateMessage,
   updateConversationStatus
 } from "@/client-api/functions/chat";
+import { getBotCanvasTriggers } from "@/client-api/functions/bot";
 import { getTeam } from "@/client-api/functions/organizations";
 import { updateSubscriber } from "@/client-api/functions/subscribers";
 import { getAllTemplates } from "@/client-api/functions/templates";
@@ -67,6 +68,11 @@ import {
   TemplateComponent
 } from "@/client-api/types/templates.type";
 import MediaPickerDialog from "@/components/media/MediaPickerDialog";
+import {
+  ALL_WHATSAPP_NUMBERS,
+  WhatsAppNumberSwitcher,
+  useWhatsAppNumberContext
+} from "@/components/whatsapp/WhatsAppNumberSwitcher";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -647,10 +653,12 @@ const canReplyToMessage = (message: ChatMessage) =>
 function ConversationListItem({
   conversation,
   selected,
+  senderLabel,
   onSelect
 }: {
   conversation: Conversation;
   selected: boolean;
+  senderLabel?: string;
   onSelect: () => void;
 }) {
   const name = subscriberName(conversation);
@@ -698,6 +706,14 @@ function ConversationListItem({
           >
             {conversation.priority}
           </Badge>
+          {conversation.channel === "whatsapp" && senderLabel && (
+            <Badge
+              variant="outline"
+              className="max-w-28 truncate px-1.5 py-0 text-[10px]"
+            >
+              {senderLabel}
+            </Badge>
+          )}
           {conversation.unreadCount > 0 && (
             <Badge className="px-1.5 py-0 text-[10px]">
               {conversation.unreadCount}
@@ -979,6 +995,7 @@ export default function ConversationsPage() {
   const activeOrganization = useOrganizationStore(
     (state) => state.activeOrganization
   );
+  const { numbers, selectedPhoneNumberId } = useWhatsAppNumberContext();
   const token = useAuthStore((state) => state.token);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<ConversationStatus | "all">("all");
@@ -1018,13 +1035,29 @@ export default function ConversationsPage() {
       page,
       limit: 20,
       search,
+      channel,
       status,
       mode,
+      phoneNumberId:
+        channel !== "instagram" &&
+        selectedPhoneNumberId !== ALL_WHATSAPP_NUMBERS
+          ? selectedPhoneNumberId
+          : undefined,
       assignedTo: assignedTo === "all" ? undefined : assignedTo,
       unreadOnly,
       pendingEscalation
     }),
-    [page, search, status, mode, assignedTo, unreadOnly, pendingEscalation]
+    [
+      page,
+      search,
+      channel,
+      status,
+      mode,
+      assignedTo,
+      unreadOnly,
+      pendingEscalation,
+      selectedPhoneNumberId
+    ]
   );
 
   const { data: bootstrap } = useQuery({
@@ -1075,6 +1108,11 @@ export default function ConversationsPage() {
   useEffect(() => {
     selectedIdRef.current = selectedId;
   }, [selectedId]);
+
+  useEffect(() => {
+    setPage(1);
+    setSelectedId("");
+  }, [selectedPhoneNumberId]);
 
   useEffect(() => {
     if (
@@ -1383,6 +1421,34 @@ export default function ConversationsPage() {
   }, [messages]);
   const contextConversation =
     contextData?.data.conversation || selectedConversation;
+  const conversationSenderPhoneNumberId =
+    contextConversation?.whatsappSender?.phoneNumberId;
+  const { data: conversationSenderTriggers } = useQuery({
+    queryKey: [
+      "bot-canvas-triggers",
+      activeOrganization?._id,
+      conversationSenderPhoneNumberId
+    ],
+    queryFn: () =>
+      getBotCanvasTriggers(conversationSenderPhoneNumberId as string),
+    enabled: Boolean(
+      isTemplateModalOpen &&
+        contextConversation?.channel === "whatsapp" &&
+        conversationSenderPhoneNumberId
+    ),
+    refetchOnMount: "always"
+  });
+  const conversationSenderTriggerKeys = useMemo(
+    () => new Set(conversationSenderTriggers?.data?.triggerKeys || []),
+    [conversationSenderTriggers?.data?.triggerKeys]
+  );
+  const templateHasRoutingIssue = (template: MessageTemplate) =>
+    getTemplateQuickReplyButtons(template).some(({ index }) => {
+      const route = template.quickReplyRoutes?.find(
+        (item) => item.index === index
+      );
+      return !route || !conversationSenderTriggerKeys.has(route.triggerKey);
+    });
   const replyWindow = contextConversation?.replyWindow;
   const canReply = Boolean(replyWindow?.isOpen && selectedId);
   const isInstagramConversation = contextConversation?.channel === "instagram";
@@ -1494,6 +1560,19 @@ export default function ConversationsPage() {
       toast.error("This conversation does not have a phone number.");
       return;
     }
+    const conversationPhoneNumberId = conversationSenderPhoneNumberId;
+    if (!conversationPhoneNumberId) {
+      toast.error(
+        "This legacy conversation is not assigned to a WhatsApp sender number."
+      );
+      return;
+    }
+    if (templateHasRoutingIssue(selectedTemplate)) {
+      toast.error(
+        "This template needs quick reply routing for this conversation's sender number."
+      );
+      return;
+    }
 
     const missingVariable = selectedTemplateVariables.find(
       (variable) => !templateVariables[variable.key]?.trim()
@@ -1514,6 +1593,7 @@ export default function ConversationsPage() {
       phoneNumber: templateRecipientPhone,
       templateName: selectedTemplate.name,
       languageCode: selectedTemplate.language || "en_US",
+      phoneNumberId: conversationPhoneNumberId,
       components: buildTemplateComponents({
         template: selectedTemplate,
         variables: templateVariables,
@@ -1547,6 +1627,15 @@ export default function ConversationsPage() {
   return (
     <AppLayout hideHeader fullBleed>
       <div className="flex h-screen min-h-0 flex-col overflow-hidden p-3">
+        <section className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-lg bg-white p-3 shadow-xs">
+          <div>
+            <p className="font-heading text-lg font-semibold">Conversations</p>
+            <p className="text-xs text-muted-foreground">
+              Filter the inbox by the WhatsApp number that received the message.
+            </p>
+          </div>
+          <WhatsAppNumberSwitcher showManage />
+        </section>
         <section className="mb-3 grid shrink-0 gap-3 md:grid-cols-5">
           {[
             ["Total", summary?.total || 0, Inbox],
@@ -1718,6 +1807,14 @@ export default function ConversationsPage() {
                     key={conversation._id}
                     conversation={conversation}
                     selected={conversation._id === selectedId}
+                    senderLabel={
+                      numbers.find(
+                        (number) =>
+                          number.phoneNumberId ===
+                          conversation.whatsappSender?.phoneNumberId
+                      )?.displayPhoneNumber ||
+                      conversation.whatsappSender?.phoneNumberId
+                    }
                     onSelect={() => setSelectedId(conversation._id)}
                   />
                 ))
@@ -2311,8 +2408,15 @@ export default function ConversationsPage() {
                 </SelectTrigger>
                 <SelectContent>
                   {approvedTemplates.map((template) => (
-                    <SelectItem key={template._id} value={template._id}>
+                    <SelectItem
+                      key={template._id}
+                      value={template._id}
+                      disabled={templateHasRoutingIssue(template)}
+                    >
                       {template.name} · {template.language}
+                      {templateHasRoutingIssue(template)
+                        ? " · Action required"
+                        : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>

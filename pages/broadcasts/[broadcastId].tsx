@@ -194,6 +194,22 @@ export default function BroadcastMetricsPage() {
                 Delivery performance, recipient status, and campaign timing for
                 this broadcast.
               </p>
+              {(broadcast?.whatsappSender ||
+                broadcast?.displayPhoneNumber ||
+                broadcast?.whatsappPhoneNumberId) && (
+                <p className="mt-2 text-sm">
+                  Sent from{" "}
+                  <span className="font-medium">
+                    {broadcast.whatsappSender?.displayPhoneNumber ||
+                      broadcast.whatsappSender?.phoneNumberId ||
+                      broadcast.displayPhoneNumber ||
+                      broadcast.whatsappPhoneNumberId}
+                  </span>
+                  {broadcast.whatsappSender?.verifiedName
+                    ? ` · ${broadcast.whatsappSender.verifiedName}`
+                    : ""}
+                </p>
+              )}
             </div>
 
             <div className="flex items-center gap-3">

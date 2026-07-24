@@ -102,6 +102,27 @@ export interface BotCanvasRecord {
   updatedAt?: string;
 }
 
+export interface BotCanvasTrigger {
+  triggerKey: string;
+  nodeId: string;
+  name: string;
+  blockType: BotBlockType;
+}
+
+export interface BotCanvasTriggerSummary {
+  canvasId: string | null;
+  source?: "phone_number" | "organization_default" | string;
+  phoneNumber?: {
+    id?: string;
+    phoneNumberId?: string;
+    displayPhoneNumber?: string;
+  } | null;
+  updatedAt?: string | null;
+  defaultTriggerKey: string | null;
+  triggerKeys: string[];
+  triggers: BotCanvasTrigger[];
+}
+
 export interface BotSettings {
   isBotEnabled: boolean;
   isAiEnabled: boolean;
@@ -183,3 +204,4 @@ export type KnowledgeSourceResponse = ApiResponse<{
 export type BotStatusResponse = ApiResponse<{
   status: BotStatus;
 }>;
+export type BotCanvasTriggersResponse = ApiResponse<BotCanvasTriggerSummary>;

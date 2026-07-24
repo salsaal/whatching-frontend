@@ -109,6 +109,7 @@ export type InstagramBlockType =
   | "quick_replies"
   | "button_template"
   | "generic_template"
+  | "follow_condition"
   | "tag_subscriber"
   | "handoff_to_agent"
   | "pause_automation"
@@ -133,6 +134,7 @@ export interface InstagramCanvasAction {
   tags?: string[];
   pauseMinutes?: number;
   reason?: string;
+  condition?: string;
   metadata?: Record<string, unknown>;
 }
 
@@ -177,6 +179,9 @@ export interface InstagramCanvasContent {
   minutes?: number;
   pauseMinutes?: number;
   reason?: string;
+  followsTriggerKey?: string;
+  notFollowsTriggerKey?: string;
+  unknownTriggerKey?: string;
   [key: string]: unknown;
 }
 

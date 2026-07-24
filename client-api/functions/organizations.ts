@@ -12,7 +12,9 @@ import {
   OrganizationResponse,
   OrganizationsResponse,
   SubscribeResponse,
-  TeamResponse
+  TeamResponse,
+  WhatsAppPhoneNumberResponse,
+  WhatsAppPhoneNumbersResponse
 } from "../types/organizations.type";
 
 export const getMyOrganizations = async (): Promise<OrganizationsResponse> => {
@@ -84,6 +86,70 @@ export const syncMetaIntegration =
     );
     return res.data;
   };
+
+export const getWhatsAppPhoneNumbers =
+  async (): Promise<WhatsAppPhoneNumbersResponse> => {
+    const res = await api.get<WhatsAppPhoneNumbersResponse>(
+      ORGANIZATION_ENDPOINTS.WHATSAPP_PHONE_NUMBERS
+    );
+    return res.data;
+  };
+
+export const syncWhatsAppPhoneNumbers =
+  async (): Promise<WhatsAppPhoneNumbersResponse> => {
+    const res = await api.post<WhatsAppPhoneNumbersResponse>(
+      ORGANIZATION_ENDPOINTS.WHATSAPP_PHONE_NUMBERS_SYNC
+    );
+    return res.data;
+  };
+
+export const updateWhatsAppPhoneNumber = async ({
+  phoneNumberRecordId,
+  activeCanvasId,
+  metadata
+}: {
+  phoneNumberRecordId: string;
+  activeCanvasId?: string;
+  metadata?: Record<string, unknown>;
+}): Promise<WhatsAppPhoneNumberResponse> => {
+  const res = await api.patch<WhatsAppPhoneNumberResponse>(
+    ORGANIZATION_ENDPOINTS.WHATSAPP_PHONE_NUMBER(phoneNumberRecordId),
+    {
+      ...(activeCanvasId !== undefined ? { activeCanvasId } : {}),
+      ...(metadata ? { metadata } : {})
+    }
+  );
+  return res.data;
+};
+
+export const setDefaultWhatsAppPhoneNumber = async (
+  phoneNumberRecordId: string
+): Promise<WhatsAppPhoneNumberResponse> => {
+  const res = await api.post<WhatsAppPhoneNumberResponse>(
+    ORGANIZATION_ENDPOINTS.WHATSAPP_PHONE_NUMBER_SET_DEFAULT(
+      phoneNumberRecordId
+    )
+  );
+  return res.data;
+};
+
+export const activateWhatsAppPhoneNumber = async (
+  phoneNumberRecordId: string
+): Promise<WhatsAppPhoneNumberResponse> => {
+  const res = await api.post<WhatsAppPhoneNumberResponse>(
+    ORGANIZATION_ENDPOINTS.WHATSAPP_PHONE_NUMBER_ACTIVATE(phoneNumberRecordId)
+  );
+  return res.data;
+};
+
+export const deactivateWhatsAppPhoneNumber = async (
+  phoneNumberRecordId: string
+): Promise<WhatsAppPhoneNumberResponse> => {
+  const res = await api.post<WhatsAppPhoneNumberResponse>(
+    ORGANIZATION_ENDPOINTS.WHATSAPP_PHONE_NUMBER_DEACTIVATE(phoneNumberRecordId)
+  );
+  return res.data;
+};
 
 export const getTeam = async (): Promise<TeamResponse> => {
   const res = await api.get<TeamResponse>(ORGANIZATION_ENDPOINTS.TEAM);
