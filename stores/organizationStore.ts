@@ -22,6 +22,11 @@ export interface Organization {
   slug: string;
   planTier: string;
   subscriptionStatus: string;
+  subscriptionCurrentPeriodEnd?: string;
+  trialPlanTier?: "basic" | "pro" | null;
+  trialStartedAt?: string;
+  trialEndsAt?: string;
+  trialConsumedAt?: string;
   walletBalance: number;
   metaConfig: OrganizationMetaConfig;
   usage: OrganizationUsage;

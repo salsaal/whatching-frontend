@@ -17,8 +17,6 @@ import {
   Paperclip,
   Search,
   Send,
-  ShieldAlert,
-  UserCheck,
   X
 } from "lucide-react";
 import {
@@ -48,9 +46,11 @@ import {
   sendTemplateMessage,
   updateConversationStatus
 } from "@/client-api/functions/chat";
-import { getBotCanvasTriggers } from "@/client-api/functions/bot";
 import { getTeam } from "@/client-api/functions/organizations";
-import { updateSubscriber } from "@/client-api/functions/subscribers";
+import {
+  getAllSubscribers,
+  updateSubscriber
+} from "@/client-api/functions/subscribers";
 import { getAllTemplates } from "@/client-api/functions/templates";
 import {
   ChatMessage,
@@ -63,6 +63,7 @@ import {
 } from "@/client-api/types/chat.type";
 import { FaWhatsapp } from "react-icons/fa";
 import { MediaAsset } from "@/client-api/types/media.type";
+import { Subscriber } from "@/client-api/types/subscribers.type";
 import {
   MessageTemplate,
   TemplateComponent
@@ -650,6 +651,27 @@ const canReplyToMessage = (message: ChatMessage) =>
   message.status !== "failed" &&
   Boolean(getMessageMetaId(message));
 
+const renderOutboundStatusIcon = (status: ChatMessage["status"]) => {
+  if (status === "queued") {
+    return <Clock3 className="size-3" aria-label="Queued" />;
+  }
+
+  if (status === "failed") {
+    return <X className="size-3 text-red-300" aria-label="Failed" />;
+  }
+
+  if (status === "delivered" || status === "read") {
+    return (
+      <CheckCheck
+        className={cn("size-3", status === "read" && "text-sky-200")}
+        aria-label={status === "read" ? "Read" : "Delivered"}
+      />
+    );
+  }
+
+  return <CheckCheck className="size-3" aria-label="Sent" />;
+};
+
 function ConversationListItem({
   conversation,
   selected,
@@ -954,7 +976,7 @@ function MessageBubble({
           )}
         >
           {formatDateTime(message.createdAt || message.sentAt)}
-          {isOutbound && <CheckCheck className="size-3" />}
+          {isOutbound && renderOutboundStatusIcon(message.status)}
         </div>
       </div>
       {isOutbound && canReplyToMessage(message) && (
@@ -986,6 +1008,8 @@ export default function ConversationsPage() {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const replyInputRef = useRef<HTMLTextAreaElement | null>(null);
   const selectedIdRef = useRef("");
+  const listScrollRef = useRef<HTMLDivElement | null>(null);
+  const listEndRef = useRef<HTMLDivElement | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const joinedConversationRef = useRef("");
   const replyContextCacheRef = useRef<Record<string, ReplyContext>>({});
@@ -1005,6 +1029,9 @@ export default function ConversationsPage() {
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [pendingEscalation, setPendingEscalation] = useState(false);
   const [page, setPage] = useState(1);
+  const [loadedConversations, setLoadedConversations] = useState<
+    Conversation[]
+  >([]);
   const [selectedId, setSelectedId] = useState("");
   const [replyText, setReplyText] = useState("");
   const [replyTarget, setReplyTarget] = useState<ChatMessage | null>(null);
@@ -1016,6 +1043,12 @@ export default function ConversationsPage() {
   );
   const [isMediaPickerOpen, setIsMediaPickerOpen] = useState(false);
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
+  const [templateMode, setTemplateMode] = useState<"conversation" | "contact">(
+    "conversation"
+  );
+  const [selectedContactId, setSelectedContactId] = useState("");
+  const [contactSearch, setContactSearch] = useState("");
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [templateMediaPickerOpen, setTemplateMediaPickerOpen] = useState(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [templateVariables, setTemplateVariables] = useState<
@@ -1029,6 +1062,34 @@ export default function ConversationsPage() {
   const [isDraggingFile, setIsDraggingFile] = useState(false);
   const [contactFirstName, setContactFirstName] = useState("");
   const [contactLastName, setContactLastName] = useState("");
+
+  const filterKey = useMemo(
+    () =>
+      JSON.stringify({
+        search,
+        channel,
+        status,
+        mode,
+        phoneNumberId:
+          channel !== "instagram" &&
+          selectedPhoneNumberId !== ALL_WHATSAPP_NUMBERS
+            ? selectedPhoneNumberId
+            : undefined,
+        assignedTo: assignedTo === "all" ? undefined : assignedTo,
+        unreadOnly,
+        pendingEscalation
+      }),
+    [
+      search,
+      channel,
+      status,
+      mode,
+      assignedTo,
+      unreadOnly,
+      pendingEscalation,
+      selectedPhoneNumberId
+    ]
+  );
 
   const queryParams = useMemo(
     () => ({
@@ -1078,19 +1139,52 @@ export default function ConversationsPage() {
     queryFn: getAllTemplates,
     enabled: Boolean(activeOrganization?._id && isTemplateModalOpen)
   });
+  const { data: contactsData, isLoading: isContactsLoading } = useQuery({
+    queryKey: [
+      "conversation-start-contacts",
+      activeOrganization?._id,
+      contactSearch
+    ],
+    queryFn: () =>
+      getAllSubscribers({
+        channel: "whatsapp",
+        limit: 100,
+        q: contactSearch
+      }),
+    enabled: Boolean(activeOrganization?._id && isTemplateModalOpen)
+  });
 
-  const { data: conversationsData, isLoading: isConversationsLoading } =
-    useQuery({
+  const {
+    data: conversationsData,
+    isFetching: isConversationsFetching,
+    isLoading: isConversationsLoading
+  } = useQuery({
       queryKey: ["conversations", activeOrganization?._id, queryParams],
       queryFn: () => getConversations(queryParams),
       enabled: Boolean(activeOrganization?._id),
       staleTime: 30_000
     });
 
-  const conversations = useMemo(
-    () => conversationsData?.data.conversations || [],
-    [conversationsData]
-  );
+  useEffect(() => {
+    setPage(1);
+    setSelectedId("");
+    setLoadedConversations([]);
+  }, [filterKey]);
+
+  useEffect(() => {
+    const nextPageConversations = conversationsData?.data.conversations || [];
+    setLoadedConversations((current) => {
+      if (page === 1) return nextPageConversations;
+
+      const byId = new Map(current.map((conversation) => [conversation._id, conversation]));
+      nextPageConversations.forEach((conversation) => {
+        byId.set(conversation._id, conversation);
+      });
+      return Array.from(byId.values());
+    });
+  }, [conversationsData, page]);
+
+  const conversations = loadedConversations;
   const visibleConversations = useMemo(
     () =>
       channel === "all"
@@ -1110,11 +1204,6 @@ export default function ConversationsPage() {
   }, [selectedId]);
 
   useEffect(() => {
-    setPage(1);
-    setSelectedId("");
-  }, [selectedPhoneNumberId]);
-
-  useEffect(() => {
     if (
       !visibleConversations.some(
         (conversation) => conversation._id === selectedId
@@ -1123,6 +1212,28 @@ export default function ConversationsPage() {
       setSelectedId(visibleConversations[0]?._id || "");
     }
   }, [selectedId, visibleConversations]);
+
+  const currentConversationPage = conversationsData?.pagination.page || page;
+  const totalConversationPages = conversationsData?.pagination.totalPages || 1;
+  const hasMoreConversations = currentConversationPage < totalConversationPages;
+
+  useEffect(() => {
+    const sentinel = listEndRef.current;
+    const root = listScrollRef.current;
+    if (!sentinel || !root || !hasMoreConversations) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !isConversationsFetching) {
+          setPage((value) => value + 1);
+        }
+      },
+      { root, rootMargin: "160px 0px" }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMoreConversations, isConversationsFetching]);
 
   const { data: messagesData, isLoading: isMessagesLoading } = useQuery({
     queryKey: ["conversation-messages", activeOrganization?._id, selectedId],
@@ -1358,6 +1469,8 @@ export default function ConversationsPage() {
         setTemplateVariables({});
         setTemplateButtonPayloads({});
         setTemplateHeaderMedia(null);
+        setSelectedContactId("");
+        setTemplateMode("conversation");
         toast.success("Template queued for delivery.");
         await invalidateConversations();
       },
@@ -1377,6 +1490,16 @@ export default function ConversationsPage() {
       ),
     [templatesData]
   );
+  const whatsappContacts = useMemo(
+    () =>
+      (contactsData?.data.subscribers || []).filter(
+        (subscriber: Subscriber) => subscriber.phoneNumber || subscriber.waId
+      ),
+    [contactsData?.data.subscribers]
+  );
+  const selectedContact =
+    whatsappContacts.find((contact) => contact._id === selectedContactId) ||
+    null;
   const selectedTemplate =
     approvedTemplates.find((template) => template._id === selectedTemplateId) ||
     null;
@@ -1423,42 +1546,23 @@ export default function ConversationsPage() {
     contextData?.data.conversation || selectedConversation;
   const conversationSenderPhoneNumberId =
     contextConversation?.whatsappSender?.phoneNumberId;
-  const { data: conversationSenderTriggers } = useQuery({
-    queryKey: [
-      "bot-canvas-triggers",
-      activeOrganization?._id,
-      conversationSenderPhoneNumberId
-    ],
-    queryFn: () =>
-      getBotCanvasTriggers(conversationSenderPhoneNumberId as string),
-    enabled: Boolean(
-      isTemplateModalOpen &&
-        contextConversation?.channel === "whatsapp" &&
-        conversationSenderPhoneNumberId
-    ),
-    refetchOnMount: "always"
-  });
-  const conversationSenderTriggerKeys = useMemo(
-    () => new Set(conversationSenderTriggers?.data?.triggerKeys || []),
-    [conversationSenderTriggers?.data?.triggerKeys]
-  );
-  const templateHasRoutingIssue = (template: MessageTemplate) =>
-    getTemplateQuickReplyButtons(template).some(({ index }) => {
-      const route = template.quickReplyRoutes?.find(
-        (item) => item.index === index
-      );
-      return !route || !conversationSenderTriggerKeys.has(route.triggerKey);
-    });
+  const templateSenderPhoneNumberId =
+    templateMode === "contact"
+      ? selectedPhoneNumberId !== ALL_WHATSAPP_NUMBERS
+        ? selectedPhoneNumberId
+        : undefined
+      : conversationSenderPhoneNumberId;
   const replyWindow = contextConversation?.replyWindow;
   const canReply = Boolean(replyWindow?.isOpen && selectedId);
   const isInstagramConversation = contextConversation?.channel === "instagram";
   const canSendMediaReply = canReply;
   const canSendTemplate = contextConversation?.channel === "whatsapp";
-  const summary = conversationsData?.data.summary || bootstrap?.data.sidebar;
   const templateRecipientPhone =
-    contextConversation?.subscriberId?.phoneNumber ||
-    contextConversation?.subscriberId?.waId ||
-    "";
+    templateMode === "contact"
+      ? selectedContact?.phoneNumber || selectedContact?.waId || ""
+      : contextConversation?.subscriberId?.phoneNumber ||
+        contextConversation?.subscriberId?.waId ||
+        "";
 
   useEffect(() => {
     const subscriber =
@@ -1556,24 +1660,27 @@ export default function ConversationsPage() {
       return;
     }
 
-    if (!templateRecipientPhone) {
-      toast.error("This conversation does not have a phone number.");
-      return;
-    }
-    const conversationPhoneNumberId = conversationSenderPhoneNumberId;
-    if (!conversationPhoneNumberId) {
-      toast.error(
-        "This legacy conversation is not assigned to a WhatsApp sender number."
-      );
-      return;
-    }
-    if (templateHasRoutingIssue(selectedTemplate)) {
-      toast.error(
-        "This template needs quick reply routing for this conversation's sender number."
-      );
+    if (templateMode === "contact" && !selectedContact) {
+      toast.error("Select a WhatsApp contact first.");
       return;
     }
 
+    if (!templateRecipientPhone) {
+      toast.error(
+        templateMode === "contact"
+          ? "This contact does not have a WhatsApp phone number."
+          : "This conversation does not have a phone number."
+      );
+      return;
+    }
+    if (!templateSenderPhoneNumberId) {
+      toast.error(
+        templateMode === "contact"
+          ? "Choose a specific WhatsApp sender number before starting a conversation."
+          : "This legacy conversation is not assigned to a WhatsApp sender number."
+      );
+      return;
+    }
     const missingVariable = selectedTemplateVariables.find(
       (variable) => !templateVariables[variable.key]?.trim()
     );
@@ -1590,10 +1697,12 @@ export default function ConversationsPage() {
     }
 
     sendTemplateMutate({
-      phoneNumber: templateRecipientPhone,
+      ...(templateMode === "contact" && selectedContact
+        ? { subscriberId: selectedContact._id }
+        : { phoneNumber: templateRecipientPhone }),
       templateName: selectedTemplate.name,
       languageCode: selectedTemplate.language || "en_US",
-      phoneNumberId: conversationPhoneNumberId,
+      phoneNumberId: templateSenderPhoneNumberId,
       components: buildTemplateComponents({
         template: selectedTemplate,
         variables: templateVariables,
@@ -1634,38 +1743,129 @@ export default function ConversationsPage() {
               Filter the inbox by the WhatsApp number that received the message.
             </p>
           </div>
-          <WhatsAppNumberSwitcher showManage />
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              onClick={() => {
+                setTemplateMode("contact");
+                setSelectedTemplateId("");
+                setTemplateVariables({});
+                setTemplateButtonPayloads({});
+                setTemplateHeaderMedia(null);
+                setIsTemplateModalOpen(true);
+              }}
+            >
+              <ContactRound className="size-4" />
+              Start conversation
+            </Button>
+            <WhatsAppNumberSwitcher showManage />
+          </div>
         </section>
-        <section className="mb-3 grid shrink-0 gap-3 md:grid-cols-5">
-          {[
-            ["Total", summary?.total || 0, Inbox],
-            ["Open", summary?.open || 0, MessageCircle],
-            ["Pending", summary?.pending || 0, Clock3],
-            ["Unread", summary?.unread || 0, ShieldAlert],
-            [
-              "Manual",
-              conversationsData?.data.summary.agentManual || 0,
-              UserCheck
-            ]
-          ].map(([label, value, Icon]) => {
-            const StatIcon = Icon as typeof Inbox;
-            return (
-              <div
-                key={String(label)}
-                className="rounded-lg bg-white p-4 shadow-xs"
-              >
-                <div className="flex items-center justify-between">
-                  <p className="text-sm text-muted-foreground">
-                    {String(label)}
-                  </p>
-                  <StatIcon className="size-4 text-primary" />
-                </div>
-                <p className="mt-2 font-heading text-2xl font-semibold">
-                  {String(value)}
-                </p>
-              </div>
-            );
-          })}
+        <section className="mb-3 flex shrink-0 flex-wrap items-center gap-2 rounded-lg bg-white p-2 shadow-xs">
+          <div className="grid min-w-[220px] grid-cols-3 gap-1 rounded-xl bg-muted p-1">
+            {channelOptions.map((option) => {
+              const Icon = option.icon;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => {
+                    setChannel(option.value);
+                    setPage(1);
+                  }}
+                  className={cn(
+                    "flex cursor-pointer items-center justify-center gap-1 rounded-lg px-2 py-2 text-xs font-medium text-muted-foreground transition",
+                    channel === option.value &&
+                      "bg-white text-foreground shadow-xs"
+                  )}
+                >
+                  <Icon className="size-3.5" />
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <Select
+            value={status}
+            onValueChange={(value) => {
+              setStatus(value as ConversationStatus | "all");
+              setPage(1);
+            }}
+          >
+            <SelectTrigger className="h-10 w-[150px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {statusOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={mode}
+            onValueChange={(value) => {
+              setMode(value as ConversationMode | "all");
+              setPage(1);
+            }}
+          >
+            <SelectTrigger className="h-10 w-[160px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {modeOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={assignedTo}
+            onValueChange={(value) => {
+              setAssignedTo(value);
+              setPage(1);
+            }}
+          >
+            <SelectTrigger className="h-10 w-[170px]">
+              <SelectValue placeholder="Assignee" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All agents</SelectItem>
+              {assigneeOptions.map((member) => (
+                <SelectItem key={member.userId._id} value={member.userId._id}>
+                  {member.userId.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Button
+            type="button"
+            size="sm"
+            variant={unreadOnly ? "default" : "outline"}
+            onClick={() => {
+              setUnreadOnly((value) => !value);
+              setPage(1);
+            }}
+          >
+            Unread
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={pendingEscalation ? "default" : "outline"}
+            onClick={() => {
+              setPendingEscalation((value) => !value);
+              setPage(1);
+            }}
+          >
+            Escalations
+          </Button>
         </section>
 
         <section className="grid min-h-0 flex-1 overflow-hidden rounded-xl bg-white shadow-xs xl:grid-cols-[360px_1fr_56px]">
@@ -1683,118 +1883,9 @@ export default function ConversationsPage() {
                   }}
                 />
               </div>
-              <div className="mt-3 grid grid-cols-3 gap-1 rounded-xl bg-muted p-1">
-                {channelOptions.map((option) => {
-                  const Icon = option.icon;
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      onClick={() => {
-                        setChannel(option.value);
-                        setPage(1);
-                      }}
-                      className={cn(
-                        "flex cursor-pointer items-center justify-center gap-1 rounded-lg px-2 py-2 text-xs font-medium text-muted-foreground transition",
-                        channel === option.value &&
-                          "bg-white text-foreground shadow-xs"
-                      )}
-                    >
-                      <Icon className="size-3.5" />
-                      {option.label}
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="mt-3 grid grid-cols-1 gap-2">
-                <Select
-                  value={status}
-                  onValueChange={(value) => {
-                    setStatus(value as ConversationStatus | "all");
-                    setPage(1);
-                  }}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {statusOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                <Select
-                  value={mode}
-                  onValueChange={(value) => {
-                    setMode(value as ConversationMode | "all");
-                    setPage(1);
-                  }}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {modeOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Select
-                  value={assignedTo}
-                  onValueChange={(value) => {
-                    setAssignedTo(value);
-                    setPage(1);
-                  }}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Assignee" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All agents</SelectItem>
-                    {assigneeOptions.map((member) => (
-                      <SelectItem
-                        key={member.userId._id}
-                        value={member.userId._id}
-                      >
-                        {member.userId.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={unreadOnly ? "default" : "outline"}
-                  onClick={() => {
-                    setUnreadOnly((value) => !value);
-                    setPage(1);
-                  }}
-                >
-                  Unread
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={pendingEscalation ? "default" : "outline"}
-                  onClick={() => {
-                    setPendingEscalation((value) => !value);
-                    setPage(1);
-                  }}
-                >
-                  Escalations
-                </Button>
-              </div>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto">
+            <div ref={listScrollRef} className="min-h-0 flex-1 overflow-y-auto">
               {isConversationsLoading ? (
                 <div className="space-y-3 p-3">
                   {Array.from({ length: 6 }).map((_, index) => (
@@ -1823,32 +1914,12 @@ export default function ConversationsPage() {
                   No conversations match these filters.
                 </div>
               )}
-            </div>
-
-            <div className="flex items-center justify-between border-t p-3 text-sm">
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={page <= 1}
-                onClick={() => setPage((value) => Math.max(1, value - 1))}
-              >
-                Previous
-              </Button>
-              <span className="text-muted-foreground">
-                Page {conversationsData?.pagination.page || page} /{" "}
-                {conversationsData?.pagination.totalPages || 1}
-              </span>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={
-                  (conversationsData?.pagination.page || page) >=
-                  (conversationsData?.pagination.totalPages || 1)
-                }
-                onClick={() => setPage((value) => value + 1)}
-              >
-                Next
-              </Button>
+              <div ref={listEndRef} className="h-px" />
+              {isConversationsFetching && page > 1 && (
+                <div className="border-t p-3">
+                  <Skeleton className="h-16 rounded-lg" />
+                </div>
+              )}
             </div>
           </aside>
 
@@ -2055,7 +2126,10 @@ export default function ConversationsPage() {
                         className="h-10 shrink-0 rounded-full px-3"
                         tooltip="Send an approved WhatsApp template"
                         disabled={!selectedId || isSendingTemplate}
-                        onClick={() => setIsTemplateModalOpen(true)}
+                        onClick={() => {
+                          setTemplateMode("conversation");
+                          setIsTemplateModalOpen(true);
+                        }}
                       >
                         <FileText className="mr-2 size-4" />
                         Template
@@ -2097,17 +2171,47 @@ export default function ConversationsPage() {
           </main>
 
           <aside
-            className="group/details relative z-20 hidden min-h-0 w-14 justify-self-end overflow-hidden border-l bg-white shadow-sm transition-[width] duration-200 hover:w-[340px] xl:flex"
-            title="Hover to open conversation details"
+            onMouseEnter={() => setDetailsOpen(true)}
+            className={cn(
+              "relative z-20 hidden min-h-0 justify-self-end overflow-hidden border-l bg-white shadow-sm transition-[width] duration-200 xl:flex",
+              detailsOpen ? "w-[340px]" : "w-14"
+            )}
           >
-            <div className="absolute inset-0 flex flex-col items-center gap-3 pt-5 text-muted-foreground transition-opacity group-hover/details:pointer-events-none group-hover/details:opacity-0">
-              <ContactRound className="size-5 text-primary" />
+            <div
+              className={cn(
+                "absolute inset-0 flex flex-col items-center gap-3 pt-5 text-muted-foreground transition-opacity",
+                detailsOpen && "pointer-events-none opacity-0"
+              )}
+            >
+              <button
+                type="button"
+                className="flex size-9 items-center justify-center rounded-md text-primary hover:bg-primary/10"
+                onClick={() => setDetailsOpen(true)}
+                aria-label="Open conversation details"
+              >
+                <ContactRound className="size-5" />
+              </button>
               <span className="text-[10px] font-medium uppercase tracking-widest [writing-mode:vertical-rl]">
                 Details
               </span>
             </div>
             {contextConversation ? (
-              <div className="min-h-0 w-[340px] flex-1 overflow-y-auto p-4 opacity-0 transition-opacity duration-150 group-hover/details:opacity-100">
+              <div
+                className={cn(
+                  "min-h-0 w-[340px] flex-1 overflow-y-auto p-4 transition-opacity duration-150",
+                  detailsOpen ? "opacity-100" : "pointer-events-none opacity-0"
+                )}
+              >
+                <div className="mb-2 flex justify-end">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setDetailsOpen(false)}
+                  >
+                    Close
+                  </Button>
+                </div>
                 <div className="text-center">
                   <Avatar className="mx-auto size-16">
                     <AvatarFallback className="bg-primary/10 text-xl text-primary">
@@ -2378,10 +2482,24 @@ export default function ConversationsPage() {
           </aside>
         </section>
       </div>
-      <Dialog open={isTemplateModalOpen} onOpenChange={setIsTemplateModalOpen}>
+      <Dialog
+        open={isTemplateModalOpen}
+        onOpenChange={(open) => {
+          setIsTemplateModalOpen(open);
+          if (!open) {
+            setTemplateMode("conversation");
+            setSelectedContactId("");
+            setContactSearch("");
+          }
+        }}
+      >
         <DialogContent className="max-h-[90vh] overflow-hidden sm:max-w-3xl">
           <DialogHeader>
-            <DialogTitle>Send approved template</DialogTitle>
+            <DialogTitle>
+              {templateMode === "contact"
+                ? "Start WhatsApp conversation"
+                : "Send approved template"}
+            </DialogTitle>
             <DialogDescription>
               Queue a WhatsApp template to{" "}
               {templateRecipientPhone || "this subscriber"} without creating a
@@ -2390,6 +2508,52 @@ export default function ConversationsPage() {
           </DialogHeader>
 
           <div className="max-h-[68vh] space-y-5 overflow-y-auto pr-1">
+            {templateMode === "contact" && (
+              <div className="space-y-2">
+                <Label>Contact</Label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-3 size-4 text-muted-foreground" />
+                  <Input
+                    value={contactSearch}
+                    onChange={(event) => setContactSearch(event.target.value)}
+                    placeholder="Search name, phone, or WhatsApp ID"
+                    className="pl-9"
+                  />
+                </div>
+                <Select
+                  value={selectedContactId}
+                  onValueChange={setSelectedContactId}
+                  disabled={isContactsLoading || isSendingTemplate}
+                >
+                  <SelectTrigger>
+                    <SelectValue
+                      placeholder={
+                        isContactsLoading
+                          ? "Loading contacts..."
+                          : "Select a WhatsApp contact"
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {whatsappContacts.map((contact) => (
+                      <SelectItem key={contact._id} value={contact._id}>
+                        {[contact.firstName, contact.lastName]
+                          .filter(Boolean)
+                          .join(" ") ||
+                          contact.phoneNumber ||
+                          contact.waId}{" "}
+                        · {contact.phoneNumber || contact.waId}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {!isContactsLoading && !whatsappContacts.length && (
+                  <p className="text-sm text-muted-foreground">
+                    No WhatsApp contacts found. Add or import contacts first.
+                  </p>
+                )}
+              </div>
+            )}
             <div className="space-y-2">
               <Label>Template</Label>
               <Select
@@ -2411,12 +2575,8 @@ export default function ConversationsPage() {
                     <SelectItem
                       key={template._id}
                       value={template._id}
-                      disabled={templateHasRoutingIssue(template)}
                     >
                       {template.name} · {template.language}
-                      {templateHasRoutingIssue(template)
-                        ? " · Action required"
-                        : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>

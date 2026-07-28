@@ -40,6 +40,65 @@
   }
 }
 
+@keyframes auth-gradient-drift {
+  0% {
+    background-position: 0% 50%;
+    transform: scale(1);
+  }
+  50% {
+    background-position: 100% 50%;
+    transform: scale(1.04);
+  }
+  100% {
+    background-position: 0% 50%;
+    transform: scale(1);
+  }
+}
+
+@keyframes auth-grid-drift {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(28px, 28px, 0);
+  }
+}
+
+.auth-gradient-field {
+  background:
+    radial-gradient(circle at 38% 44%, rgba(110, 231, 183, 0.28), transparent 34%),
+    radial-gradient(circle at 68% 68%, rgba(20, 184, 166, 0.2), transparent 36%),
+    linear-gradient(135deg, #021c18 0%, #064e3b 42%, #0f766e 100%);
+  background-size: 180% 180%;
+  animation: auth-gradient-drift 18s ease-in-out infinite;
+}
+
+.auth-grid-field {
+  background-image:
+    linear-gradient(rgba(236, 253, 245, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(236, 253, 245, 0.08) 1px, transparent 1px);
+  background-size: 28px 28px;
+  animation: auth-grid-drift 14s linear infinite;
+}
+
+.auth-flow-line {
+  animation: auth-flow-drift 14s ease-in-out infinite alternate;
+}
+
+.auth-flow-line-delayed {
+  animation-delay: -6s;
+  animation-duration: 18s;
+}
+
+@keyframes auth-flow-drift {
+  from {
+    transform: translate3d(-2%, -8px, 0) rotate(-7deg);
+  }
+  to {
+    transform: translate3d(4%, 12px, 0) rotate(-4deg);
+  }
+}
+
 :root {
   --background: oklch(0.98 0.01 95);
   --foreground: oklch(0.18 0.02 260);

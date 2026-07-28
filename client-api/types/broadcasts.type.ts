@@ -132,6 +132,11 @@ export interface CreateBroadcastPayload {
   audience: BroadcastAudience;
   components: unknown[];
   phoneNumberId?: string;
+  quickReplyRoutes?: Array<{
+    index: number;
+    label: string;
+    triggerKey: string;
+  }>;
 }
 
 export interface BroadcastListParams {

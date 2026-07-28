@@ -12,6 +12,7 @@ import {
   Package,
   Phone,
   Play,
+  UserRound,
   Video
 } from "lucide-react";
 import { Handle, Position } from "@xyflow/react";
@@ -431,7 +432,7 @@ export function WhatsAppFlowBlockPreview({
   showRouteHandles?: boolean;
 }) {
   const body = stringValue(
-    content.text || content.bodyText,
+    content.text || content.bodyText || content.message,
     "Your message will appear here."
   );
   const footer = stringValue(content.footerText);
@@ -553,7 +554,27 @@ export function WhatsAppFlowBlockPreview({
               </div>
             )}
 
-            {(blockType === "text" || blockType === "buttons") && (
+            {blockType === "handoff_to_agent" && (
+              <div className="mb-1 rounded-lg bg-emerald-50 p-2.5">
+                <div className="flex items-center gap-2">
+                  <span className="flex size-9 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+                    <UserRound className="size-4" />
+                  </span>
+                  <div>
+                    <p className="text-xs font-semibold text-slate-900">
+                      Human agent
+                    </p>
+                    <p className="text-[10px] text-slate-500">
+                      Automation handoff
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {(blockType === "text" ||
+              blockType === "buttons" ||
+              blockType === "handoff_to_agent") && (
               <p className="px-1 pt-1 text-xs leading-relaxed text-slate-800">
                 {body}
               </p>

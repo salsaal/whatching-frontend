@@ -19,6 +19,8 @@ import {
   MessageSquareText,
   MousePointerClick,
   Package,
+  Timer,
+  UserRound,
   Video
 } from "lucide-react";
 
@@ -50,6 +52,7 @@ const iconByType: Record<BotBlockType, React.ElementType> = {
   location_request: LocateFixed,
   address_request: MapPin,
   contacts: ContactRound,
+  handoff_to_agent: UserRound,
   product_carousel: Package,
   generic_carousel: Boxes
 };
@@ -65,13 +68,17 @@ const labelByType: Record<BotBlockType, string> = {
   location_request: "Location Request",
   address_request: "Address Request",
   contacts: "Contacts",
+  handoff_to_agent: "Agent Trigger",
   product_carousel: "Product Carousel",
   generic_carousel: "Generic Carousel"
 };
 
 function BotFlowNode({ id, data, selected }: NodeProps<BotFlowReactNode>) {
   const updateNodeInternals = useUpdateNodeInternals();
-  const Icon = iconByType[data.blockType] || Bot;
+  const isAutomaticFollowUp = Boolean(data.metadata?.automaticFollowUp);
+  const Icon = isAutomaticFollowUp
+    ? Timer
+    : iconByType[data.blockType] || Bot;
   const isDefaultNode = Boolean(data.metadata?.isDefault);
   const outputActions = useMemo(
     () => data.actions.filter((action) => action.type === "go_to_trigger"),
@@ -120,7 +127,9 @@ function BotFlowNode({ id, data, selected }: NodeProps<BotFlowReactNode>) {
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             <Badge variant="outline" className="text-[10px]">
-              {labelByType[data.blockType]}
+              {isAutomaticFollowUp
+                ? `Follow-up · ${labelByType[data.blockType]}`
+                : labelByType[data.blockType]}
             </Badge>
           </div>
         </div>

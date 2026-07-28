@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  RefreshCw,
+  Download,
   Edit3,
   Instagram,
   Plus,
@@ -17,6 +19,10 @@ import { toast } from "sonner";
 import { FaWhatsapp } from "react-icons/fa";
 
 import {
+  getWhatsAppPhoneNumbers,
+  requestCoexistenceContactSync
+} from "@/client-api/functions/organizations";
+import {
   bulkDeleteSubscribers,
   createTag,
   deleteTag,
@@ -26,6 +32,7 @@ import {
   importSubscribers,
   updateSubscriber
 } from "@/client-api/functions/subscribers";
+import { WhatsAppPhoneNumber } from "@/client-api/types/organizations.type";
 import {
   Subscriber,
   SubscriberPayload
@@ -42,6 +49,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -93,6 +101,8 @@ export default function ContactsPage() {
     useState<Subscriber | null>(null);
   const [isTagsModalOpen, setIsTagsModalOpen] = useState(false);
   const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
+  const [selectedSyncNumberId, setSelectedSyncNumberId] = useState("");
+  const [isExporting, setIsExporting] = useState(false);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["subscribers", channel],
@@ -124,6 +134,14 @@ export default function ContactsPage() {
     queryFn: getTags,
     refetchOnMount: "always"
   });
+  const {
+    data: phoneNumbersData,
+    refetch: refetchPhoneNumbers
+  } = useQuery({
+    queryKey: ["whatsapp-phone-numbers", "contacts-sync"],
+    queryFn: getWhatsAppPhoneNumbers,
+    refetchOnMount: "always"
+  });
 
   const subscribers = useMemo(
     () => data?.data?.subscribers || [],
@@ -138,6 +156,19 @@ export default function ContactsPage() {
     () => tagsData?.data.tags || [],
     [tagsData?.data.tags]
   );
+  const syncEligibleNumbers = useMemo(
+    () =>
+      (phoneNumbersData?.data.phoneNumbers || []).filter(
+        (number) =>
+          number.coexistenceEnabled &&
+          number.status === "active" &&
+          number.connectionStatus === "ready"
+      ),
+    [phoneNumbersData?.data.phoneNumbers]
+  );
+  const selectedSyncNumber =
+    syncEligibleNumbers.find((number) => number.id === selectedSyncNumberId) ||
+    syncEligibleNumbers[0];
   const filteredSubscribers = useMemo(() => {
     const value = query.trim().toLowerCase();
 
@@ -205,6 +236,21 @@ export default function ContactsPage() {
       refetchTags();
     }
   });
+  const { mutate: syncCoexistenceContacts, isPending: isSyncingContacts } =
+    useMutation({
+      mutationFn: (phoneNumber: WhatsAppPhoneNumber) =>
+        requestCoexistenceContactSync({ phoneNumberRecordId: phoneNumber.id }),
+      onSuccess: async (response) => {
+        toast.success(response.message || "Contact sync requested.");
+        await Promise.all([refetch(), refetchPhoneNumbers()]);
+      },
+      onError: (error: AxiosError<{ message?: string }>) => {
+        toast.error(
+          error.response?.data?.message ||
+            "Coexistence contacts could not be synced."
+        );
+      }
+    });
 
   const { mutate: saveTag, isPending: isSavingTag } = useMutation({
     mutationFn: async (tag: string) => {
@@ -332,6 +378,69 @@ export default function ContactsPage() {
     );
   };
 
+  const exportContacts = async () => {
+    setIsExporting(true);
+    try {
+      const first = await getAllSubscribers({
+        channel,
+        q: query,
+        page: 1,
+        limit: 100
+      });
+      const pages = Array.from(
+        { length: Math.max(0, first.pagination.totalPages - 1) },
+        (_, index) => index + 2
+      );
+      const remaining = [];
+      for (let index = 0; index < pages.length; index += 5) {
+        const batch = await Promise.all(
+          pages.slice(index, index + 5).map((page) =>
+            getAllSubscribers({ channel, q: query, page, limit: 100 })
+          )
+        );
+        remaining.push(...batch);
+      }
+      const rows = [
+        ...(first.data?.subscribers || []),
+        ...remaining.flatMap((response) => response.data?.subscribers || [])
+      ].filter(
+        (subscriber) =>
+          !selectedTagFilters.length ||
+          selectedTagFilters.every((tag) => subscriber.tags?.includes(tag))
+      );
+      const escapeCsv = (value: unknown) =>
+        `"${String(value ?? "").replace(/"/g, '""')}"`;
+      const csv = [
+        ["First name", "Last name", "Phone", "WhatsApp ID", "Instagram", "Tags"],
+        ...rows.map((subscriber) => [
+          subscriber.firstName,
+          subscriber.lastName,
+          subscriber.phoneNumber,
+          subscriber.waId,
+          subscriber.instagramUsername || subscriber.instagramUserId,
+          subscriber.tags?.join("; ")
+        ])
+      ]
+        .map((row) => row.map(escapeCsv).join(","))
+        .join("\n");
+      const url = URL.createObjectURL(
+        new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" })
+      );
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `whatching-contacts-${new Date()
+        .toISOString()
+        .slice(0, 10)}.csv`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      toast.success(`Exported ${rows.length} contacts.`);
+    } catch {
+      toast.error("Contacts could not be exported.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <AppLayout>
       <div className="mx-auto max-w-7xl space-y-6">
@@ -356,9 +465,50 @@ export default function ContactsPage() {
                 Delete selected
               </Button>
             )}
+            {syncEligibleNumbers.length > 0 && (
+              <div className="flex min-w-0 gap-2">
+                {syncEligibleNumbers.length > 1 && (
+                  <select
+                    value={selectedSyncNumber?.id || ""}
+                    onChange={(event) =>
+                      setSelectedSyncNumberId(event.target.value)
+                    }
+                    className="h-10 rounded-sm border bg-background px-3 text-sm"
+                  >
+                    {syncEligibleNumbers.map((number) => (
+                      <option key={number.id} value={number.id}>
+                        {number.displayPhoneNumber ||
+                          number.verifiedName ||
+                          number.phoneNumberId}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <Button
+                  variant="outline"
+                  disabled={!selectedSyncNumber || isSyncingContacts}
+                  isLoading={isSyncingContacts}
+                  onClick={() =>
+                    selectedSyncNumber &&
+                    syncCoexistenceContacts(selectedSyncNumber)
+                  }
+                >
+                  <RefreshCw className="size-4" />
+                  Sync app contacts
+                </Button>
+              </div>
+            )}
             <Button variant="outline" onClick={() => setIsImportOpen(true)}>
               <Upload className="size-4" />
               Import bulk
+            </Button>
+            <Button
+              variant="outline"
+              isLoading={isExporting}
+              onClick={exportContacts}
+            >
+              <Download className="size-4" />
+              Export CSV
             </Button>
             <Button
               onClick={() => {
@@ -371,6 +521,45 @@ export default function ContactsPage() {
             </Button>
           </div>
         </section>
+
+        {selectedSyncNumber?.coexistenceContactSync && (
+          <section className="rounded-lg border border-primary/15 bg-primary/5 p-4 text-sm shadow-xs">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-medium">
+                  Business App contact sync:{" "}
+                  <span className="capitalize">
+                    {selectedSyncNumber.coexistenceContactSync.status.replace(
+                      /_/g,
+                      " "
+                    )}
+                  </span>
+                </p>
+                <p className="mt-1 text-muted-foreground">
+                  Active {selectedSyncNumber.coexistenceContactSync.contactsActive}
+                  , removed{" "}
+                  {selectedSyncNumber.coexistenceContactSync.contactsRemoved},
+                  skipped{" "}
+                  {selectedSyncNumber.coexistenceContactSync.contactsSkipped}
+                </p>
+              </div>
+              <Badge variant="outline">
+                {selectedSyncNumber.coexistenceContactSync.attemptsRemaining}{" "}
+                attempts left
+              </Badge>
+            </div>
+            {selectedSyncNumber.coexistenceContactSync.lastError && (
+              <p className="mt-3 text-destructive">
+                {selectedSyncNumber.coexistenceContactSync.lastError}
+              </p>
+            )}
+            {selectedSyncNumber.coexistenceContactSync.warning && (
+              <p className="mt-3 text-amber-700">
+                {selectedSyncNumber.coexistenceContactSync.warning}
+              </p>
+            )}
+          </section>
+        )}
 
         <section className="rounded-lg bg-white p-4 shadow-xs">
           <div className="grid gap-4 lg:grid-cols-[360px_minmax(0,1fr)] lg:items-center">

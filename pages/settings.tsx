@@ -60,6 +60,14 @@ const settingsLinks = [
     icon: Brain,
     badge: "AI"
   }
+  // {
+  //   href: "/settings/help",
+  //   title: "Help & support",
+  //   description:
+  //     "Create support tickets and track requests for this workspace.",
+  //   icon: LifeBuoy,
+  //   badge: "Support"
+  // }
 ];
 
 export default function SettingsPage() {
@@ -114,7 +122,7 @@ export default function SettingsPage() {
           </div>
         </section>
 
-        <section className="grid gap-4 md:grid-cols-3">
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {settingsLinks.map((item) => {
             const Icon = item.icon;
             return (

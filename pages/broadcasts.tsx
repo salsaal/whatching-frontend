@@ -52,6 +52,7 @@ import {
   AlertDialogTitle
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -240,6 +241,9 @@ export default function BroadcastsPage() {
   const { selectedPhoneNumberId, effectiveNumber } = useWhatsAppNumberContext();
   const [senderPhoneNumberId, setSenderPhoneNumberId] = useState("");
   const [templateId, setTemplateId] = useState("");
+  const [quickReplyRoutes, setQuickReplyRoutes] = useState<
+    Record<number, string>
+  >({});
   const [variableMappings, setVariableMappings] = useState<
     Record<string, BroadcastVariableMapping>
   >({});
@@ -249,6 +253,7 @@ export default function BroadcastsPage() {
   const [selectedSubscriberIds, setSelectedSubscriberIds] = useState<string[]>(
     []
   );
+  const [subscriberSearch, setSubscriberSearch] = useState("");
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["broadcasts", selectedPhoneNumberId],
@@ -265,8 +270,15 @@ export default function BroadcastsPage() {
     queryFn: getAllTemplates
   });
   const { data: subscribersData } = useQuery({
-    queryKey: ["subscribers"],
-    queryFn: () => getAllSubscribers()
+    queryKey: ["broadcast-subscribers", subscriberSearch],
+    queryFn: () =>
+      getAllSubscribers({
+        channel: "whatsapp",
+        limit: 100,
+        q: subscriberSearch,
+        broadcastEligibility: "eligible"
+      }),
+    enabled: isCreateOpen && audienceMode === "specific"
   });
   const { data: tagsData } = useQuery({
     queryKey: ["subscriber-tags"],
@@ -325,24 +337,26 @@ export default function BroadcastsPage() {
     [selectedTemplate]
   );
   const bodyText = getTemplateBodyText(selectedTemplate);
+  const quickReplyButtons = useMemo(
+    () =>
+      getButtonsComponent(selectedTemplate?.components || [])
+        ?.buttons?.map((button, index) => ({ button, index }))
+        .filter(({ button }) => button.type === "QUICK_REPLY") || [],
+    [selectedTemplate?.components]
+  );
   const senderTriggerKeys = useMemo(
     () => new Set(senderTriggersData?.data?.triggerKeys || []),
     [senderTriggersData?.data?.triggerKeys]
   );
-  const templateHasRoutingIssue = (template: MessageTemplate) => {
-    const quickReplyIndexes =
-      getButtonsComponent(template.components)
-        ?.buttons?.map((button, index) => ({ button, index }))
-        .filter(({ button }) => button.type === "QUICK_REPLY")
-        .map(({ index }) => index) || [];
-    if (!quickReplyIndexes.length) return false;
-    return quickReplyIndexes.some((index) => {
-      const route = template.quickReplyRoutes?.find(
-        (item) => item.index === index
-      );
-      return !route || !senderTriggerKeys.has(route.triggerKey);
-    });
-  };
+  const selectedQuickReplyRoutes = useMemo(
+    () =>
+      quickReplyButtons.map(({ button, index }) => ({
+        index,
+        label: button.text || `Quick reply ${index + 1}`,
+        triggerKey: quickReplyRoutes[index] || ""
+      })),
+    [quickReplyButtons, quickReplyRoutes]
+  );
 
   useEffect(() => {
     if (
@@ -357,6 +371,7 @@ export default function BroadcastsPage() {
   useEffect(() => {
     if (!selectedTemplate) {
       setVariableMappings({});
+      setQuickReplyRoutes({});
       return;
     }
 
@@ -369,6 +384,7 @@ export default function BroadcastsPage() {
         {}
       )
     );
+    setQuickReplyRoutes({});
   }, [bodyVariables, selectedTemplate]);
 
   const { mutate: createDraft, isPending: isCreating } = useMutation({
@@ -380,6 +396,7 @@ export default function BroadcastsPage() {
       setBroadcastName("");
       setTemplateId("");
       setVariableMappings({});
+      setQuickReplyRoutes({});
       setAudienceMode("all");
       setSelectedTags([]);
       setSelectedSubscriberIds([]);
@@ -419,10 +436,15 @@ export default function BroadcastsPage() {
       toast.error("Select the WhatsApp sender number");
       return;
     }
-    if (selectedTemplate && templateHasRoutingIssue(selectedTemplate)) {
-      toast.error(
-        "This template needs quick reply routing for the selected sender number"
-      );
+    if (quickReplyButtons.length && senderTriggersData?.data && !senderTriggersData.data.triggers.length) {
+      toast.error("No flow triggers are available for the selected sender number");
+      return;
+    }
+    const missingQuickReplyRoute = selectedQuickReplyRoutes.find(
+      (route) => !route.triggerKey || !senderTriggerKeys.has(route.triggerKey)
+    );
+    if (missingQuickReplyRoute) {
+      toast.error("Assign every quick reply to a broadcast trigger");
       return;
     }
 
@@ -432,11 +454,7 @@ export default function BroadcastsPage() {
         : audienceMode === "specific"
           ? {
               mode: "specific",
-              subscriberIds: selectedSubscriberIds.filter((subscriberId) =>
-                subscribers.some(
-                  (subscriber) => subscriber._id === subscriberId
-                )
-              )
+              subscriberIds: selectedSubscriberIds
             }
           : { mode: "all" };
 
@@ -451,7 +469,10 @@ export default function BroadcastsPage() {
       templateId,
       audience,
       components,
-      phoneNumberId: senderPhoneNumberId
+      phoneNumberId: senderPhoneNumberId,
+      ...(selectedQuickReplyRoutes.length
+        ? { quickReplyRoutes: selectedQuickReplyRoutes }
+        : {})
     });
   };
 
@@ -624,21 +645,20 @@ export default function BroadcastsPage() {
               </div>
               <div className="space-y-2">
                 <Label>Template</Label>
-                <Select value={templateId} onValueChange={setTemplateId}>
+                <Select
+                  value={templateId}
+                  onValueChange={(value) => {
+                    setTemplateId(value);
+                    setQuickReplyRoutes({});
+                  }}
+                >
                   <SelectTrigger className="h-11 w-full">
                     <SelectValue placeholder="Select template" />
                   </SelectTrigger>
                   <SelectContent>
                     {templates.map((template) => (
-                      <SelectItem
-                        key={template.templateId}
-                        value={template.templateId}
-                        disabled={templateHasRoutingIssue(template)}
-                      >
+                      <SelectItem key={template.templateId} value={template.templateId}>
                         {template.name}
-                        {templateHasRoutingIssue(template)
-                          ? " · Action required"
-                          : ""}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -677,6 +697,86 @@ export default function BroadcastsPage() {
                     {bodyText}
                   </div>
                 )}
+              </div>
+            )}
+
+            {quickReplyButtons.length > 0 && (
+              <div className="rounded-lg border p-4">
+                <div className="mb-3">
+                  <p className="text-sm font-semibold">
+                    Quick reply triggers
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Choose the flow trigger for each quick reply in this
+                    broadcast. Triggers come from the selected sender number,
+                    with the organisation fallback used when no number-specific
+                    flow is assigned.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  {quickReplyButtons.map(({ button, index }) => {
+                    const selectedTriggerKey = quickReplyRoutes[index] || "";
+                    const selectedTriggerMissing =
+                      selectedTriggerKey &&
+                      !senderTriggerKeys.has(selectedTriggerKey);
+
+                    return (
+                      <div
+                        key={`${button.text}-${index}`}
+                        className="grid gap-2 rounded-md bg-muted/40 p-3 sm:grid-cols-[minmax(0,1fr)_minmax(220px,0.9fr)]"
+                      >
+                        <div>
+                          <Label>{button.text || `Quick reply ${index + 1}`}</Label>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Button {index + 1}
+                          </p>
+                        </div>
+                        <Select
+                          value={selectedTriggerKey}
+                          onValueChange={(value) =>
+                            setQuickReplyRoutes((current) => ({
+                              ...current,
+                              [index]: value
+                            }))
+                          }
+                          disabled={!senderPhoneNumberId}
+                        >
+                          <SelectTrigger
+                            className={cn(
+                              "w-full bg-white",
+                              selectedTriggerMissing && "ring-2 ring-amber-400"
+                            )}
+                          >
+                            <SelectValue
+                              placeholder={
+                                senderTriggersData
+                                  ? "Choose flow trigger"
+                                  : "Select sender first"
+                              }
+                            />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {selectedTriggerMissing && (
+                              <SelectItem value={selectedTriggerKey} disabled>
+                                {selectedTriggerKey} (unavailable)
+                              </SelectItem>
+                            )}
+                            {(senderTriggersData?.data?.triggers || []).map(
+                              (trigger) => (
+                                <SelectItem
+                                  key={trigger.triggerKey}
+                                  value={trigger.triggerKey}
+                                >
+                                  {trigger.name} · {trigger.triggerKey}
+                                </SelectItem>
+                              )
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
@@ -858,35 +958,60 @@ export default function BroadcastsPage() {
             )}
 
             {audienceMode === "specific" && (
-              <div className="max-h-56 space-y-2 overflow-y-auto rounded-sm border p-3">
-                {subscribers.length ? (
-                  subscribers.map((subscriber) => (
-                    <label
-                      key={subscriber._id}
-                      className="flex items-center gap-2 text-sm"
-                    >
-                      <Checkbox
-                        checked={selectedSubscriberIds.includes(subscriber._id)}
-                        onCheckedChange={(checked) =>
-                          setSelectedSubscriberIds((current) =>
-                            checked
-                              ? [...current, subscriber._id]
-                              : current.filter(
-                                  (item) => item !== subscriber._id
-                                )
-                          )
-                        }
-                      />
-                      {[subscriber.firstName, subscriber.lastName]
-                        .filter(Boolean)
-                        .join(" ") || subscriber.phoneNumber}
-                    </label>
-                  ))
-                ) : (
-                  <div className="py-6 text-center text-sm text-muted-foreground">
-                    No subscribers found.
+              <div className="rounded-sm border p-3">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
+                    <Input
+                      value={subscriberSearch}
+                      onChange={(event) =>
+                        setSubscriberSearch(event.target.value)
+                      }
+                      placeholder="Search subscriber name or phone"
+                      className="pl-9"
+                    />
                   </div>
-                )}
+                  <Badge variant="outline">
+                    {selectedSubscriberIds.length} selected
+                  </Badge>
+                </div>
+                <div className="max-h-64 space-y-1 overflow-y-auto pr-1">
+                  {subscribers.length ? (
+                    subscribers.map((subscriber) => (
+                      <label
+                        key={subscriber._id}
+                        className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm hover:bg-muted/60"
+                      >
+                        <Checkbox
+                          checked={selectedSubscriberIds.includes(subscriber._id)}
+                          onCheckedChange={(checked) =>
+                            setSelectedSubscriberIds((current) =>
+                              checked
+                                ? [...current, subscriber._id]
+                                : current.filter(
+                                    (item) => item !== subscriber._id
+                                  )
+                            )
+                          }
+                        />
+                        <span className="min-w-0">
+                          <span className="block truncate font-medium">
+                            {[subscriber.firstName, subscriber.lastName]
+                              .filter(Boolean)
+                              .join(" ") || subscriber.phoneNumber}
+                          </span>
+                          <span className="block truncate text-xs text-muted-foreground">
+                            {subscriber.phoneNumber}
+                          </span>
+                        </span>
+                      </label>
+                    ))
+                  ) : (
+                    <div className="py-6 text-center text-sm text-muted-foreground">
+                      No eligible subscribers found.
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 

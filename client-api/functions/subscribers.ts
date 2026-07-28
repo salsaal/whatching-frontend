@@ -15,6 +15,8 @@ export const getAllSubscribers = async (
     channel?: "all" | "whatsapp" | "instagram";
     page?: number;
     limit?: number;
+    q?: string;
+    broadcastEligibility?: "all" | "eligible" | "retained_only";
   } = {}
 ): Promise<SubscribersResponse> => {
   const res = await api.get<SubscribersResponse>(SUBSCRIBER_ENDPOINTS.GET_ALL, {
@@ -23,7 +25,12 @@ export const getAllSubscribers = async (
         ? { channel: params.channel }
         : {}),
       ...(params.page ? { page: params.page } : {}),
-      ...(params.limit ? { limit: params.limit } : {})
+      ...(params.limit ? { limit: params.limit } : {}),
+      ...(params.q?.trim() ? { q: params.q.trim() } : {}),
+      ...(params.broadcastEligibility &&
+      params.broadcastEligibility !== "all"
+        ? { broadcastEligibility: params.broadcastEligibility }
+        : {})
     }
   });
   return res.data;

@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   FilePlus2,
   LinkIcon,
+  MapPin,
   Phone,
   Plus,
   Reply,
@@ -14,17 +15,15 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import { parseAsString, useQueryState } from "nuqs";
 import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-import { getBotCanvasTriggers } from "@/client-api/functions/bot";
 import {
   createDraftTemplate,
   createTemplate,
   submitDraftTemplate,
   updateApprovedTemplate,
-  updateDraftTemplate,
-  updateTemplateQuickReplyRoutes
+  updateDraftTemplate
 } from "@/client-api/functions/templates";
 import { MediaAsset } from "@/client-api/types/media.type";
 import {
@@ -38,10 +37,9 @@ import {
   TemplateHeaderFormat
 } from "@/client-api/types/templates.type";
 import MediaPickerDialog from "@/components/media/MediaPickerDialog";
-import {
-  WhatsAppNumberSwitcher,
-  useWhatsAppNumberContext
-} from "@/components/whatsapp/WhatsAppNumberSwitcher";
+import LocationPickerDialog, {
+  PickedLocation
+} from "@/components/location/LocationPickerDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -239,6 +237,9 @@ export default function TemplateCreateForm({
   const [headerFormat, setHeaderFormat] = useState<HeaderFormatOption>("NONE");
   const [headerText, setHeaderText] = useState("");
   const [headerExampleUrl, setHeaderExampleUrl] = useState("");
+  const [isLocationPickerOpen, setIsLocationPickerOpen] = useState(false);
+  const [pickedLocation, setPickedLocation] =
+    useState<PickedLocation | null>(null);
   const [selectedMediaId, setSelectedMediaId] = useState("");
   const [selectedMediaName, setSelectedMediaName] = useState("");
   const [selectedMediaUrl, setSelectedMediaUrl] = useState("");
@@ -261,8 +262,6 @@ export default function TemplateCreateForm({
   const [footerText, setFooterText] = useState("");
   const [actionMode, setActionMode] = useState<ActionMode>("NONE");
   const [buttons, setButtons] = useState<TemplateButton[]>([]);
-  const { effectiveNumber } = useWhatsAppNumberContext();
-  const [routingPhoneNumberId, setRoutingPhoneNumberId] = useState("");
 
   const variables = useMemo(() => extractVariables(bodyText), [bodyText]);
   const previewBody = useMemo(
@@ -305,50 +304,6 @@ export default function TemplateCreateForm({
     initialTemplate?.status?.toLowerCase() === "pending_review";
   const canEditFields = !isPendingEdit;
   const pageTitle = isEditing ? "Edit template" : "Create template";
-  const hasQuickReplies = buttons.some(
-    (button) => button.type === "QUICK_REPLY"
-  );
-  const triggerQuery = useQuery({
-    queryKey: [
-      "bot-canvas-triggers",
-      routingPhoneNumberId || effectiveNumber?.phoneNumberId
-    ],
-    queryFn: () =>
-      getBotCanvasTriggers(
-        routingPhoneNumberId || effectiveNumber?.phoneNumberId
-      ),
-    enabled: Boolean(
-      hasQuickReplies &&
-        (routingPhoneNumberId || effectiveNumber?.phoneNumberId)
-    ),
-    refetchOnMount: "always",
-    refetchOnWindowFocus: true
-  });
-  const availableTriggers = useMemo(
-    () => triggerQuery.data?.data?.triggers || [],
-    [triggerQuery.data?.data?.triggers]
-  );
-  const availableTriggerKeys = useMemo(
-    () => new Set(availableTriggers.map((trigger) => trigger.triggerKey)),
-    [availableTriggers]
-  );
-  const quickReplyRouteIssues = useMemo(
-    () =>
-      buttons
-        .map((button, index) => ({ button, index }))
-        .filter(({ button }) => button.type === "QUICK_REPLY")
-        .filter(
-          ({ button }) =>
-            !button.triggerKey || !availableTriggerKeys.has(button.triggerKey)
-        ),
-    [availableTriggerKeys, buttons]
-  );
-
-  useEffect(() => {
-    if (!routingPhoneNumberId && effectiveNumber?.phoneNumberId) {
-      setRoutingPhoneNumberId(effectiveNumber.phoneNumberId);
-    }
-  }, [effectiveNumber?.phoneNumberId, routingPhoneNumberId]);
 
   useEffect(() => {
     if (!initialTemplate) return;
@@ -377,18 +332,16 @@ export default function TemplateCreateForm({
     setBodyText(bodyTextValue);
     setFooterText(footer?.text || "");
     setButtons(
-      (buttonsComponent?.buttons || []).map((button, index) => {
-        if (button.type !== "QUICK_REPLY") return button;
-        const route = initialTemplate.quickReplyRoutes?.find(
-          (item) => item.index === index
-        );
-        const triggerKey =
-          route?.triggerKey ||
-          button.triggerKey ||
-          button.flowTriggerKey ||
-          button.payload;
-        return triggerKey ? { ...button, triggerKey } : button;
-      })
+      (buttonsComponent?.buttons || []).map((button) =>
+        button.type === "QUICK_REPLY"
+          ? {
+              ...button,
+              triggerKey: undefined,
+              flowTriggerKey: undefined,
+              payload: undefined
+            }
+          : button
+      )
     );
     setActionMode(buttonsComponent?.buttons?.length ? "ALL" : "NONE");
 
@@ -467,15 +420,6 @@ export default function TemplateCreateForm({
       router.push("/templates");
     }
   });
-
-  const { mutate: saveQuickReplyRoutes, isPending: isSavingRoutes } =
-    useMutation({
-      mutationFn: updateTemplateQuickReplyRoutes,
-      onSuccess: (data) => {
-        upsertTemplate(data.data.template);
-        toast.success("Quick reply routing updated");
-      }
-    });
 
   useEffect(() => {
     setCarouselCards((current) =>
@@ -573,6 +517,11 @@ export default function TemplateCreateForm({
       return null;
     }
 
+    if (headerFormat === "LOCATION" && !headerExampleUrl.trim()) {
+      toast.error("Choose a sample location for the template header");
+      return null;
+    }
+
     const buttonLabels = visibleButtons
       .map((button) => button.text.trim().toLowerCase())
       .filter(Boolean);
@@ -581,25 +530,6 @@ export default function TemplateCreateForm({
 
     if (hasDuplicateLabels) {
       toast.error("Button labels must be unique");
-      return null;
-    }
-
-    const quickReplies = visibleButtonEntries.filter(
-      ({ button }) => button.type === "QUICK_REPLY"
-    );
-    if (quickReplies.length && !routingPhoneNumberId) {
-      toast.error("Select a WhatsApp sender number for quick reply routing");
-      return null;
-    }
-    if (
-      quickReplies.some(
-        ({ button }) =>
-          !button.triggerKey || !availableTriggerKeys.has(button.triggerKey)
-      )
-    ) {
-      toast.error(
-        "Assign every quick reply to a trigger in the selected number's published flow"
-      );
       return null;
     }
 
@@ -727,42 +657,8 @@ export default function TemplateCreateForm({
       language,
       category: category as TemplateCategory,
       allowCategoryChange: true,
-      components,
-      ...(quickReplies.length && routingPhoneNumberId
-        ? { phoneNumberId: routingPhoneNumberId }
-        : {})
+      components
     };
-  };
-
-  const getQuickReplyRoutes = () =>
-    buttons.flatMap((button, index) =>
-      button.type === "QUICK_REPLY" && button.triggerKey
-        ? [
-            {
-              index,
-              label: button.text.trim() || button.triggerKey,
-              triggerKey: button.triggerKey
-            }
-          ]
-        : []
-    );
-
-  const handleSaveQuickReplyRoutes = () => {
-    if (!initialTemplate?.templateId || !routingPhoneNumberId) {
-      toast.error("Select a WhatsApp sender number");
-      return;
-    }
-    if (quickReplyRouteIssues.length) {
-      toast.error("Resolve every quick reply route before saving");
-      return;
-    }
-    saveQuickReplyRoutes({
-      templateId: initialTemplate.templateId,
-      payload: {
-        quickReplyRoutes: getQuickReplyRoutes(),
-        phoneNumberId: routingPhoneNumberId
-      }
-    });
   };
 
   const handleSaveDraft = () => {
@@ -849,19 +745,6 @@ export default function TemplateCreateForm({
               </h1>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row">
-              {isEditing &&
-              !isDraftEdit &&
-              initialTemplate?.templateId &&
-              hasQuickReplies ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  isLoading={isSavingRoutes}
-                  onClick={handleSaveQuickReplyRoutes}
-                >
-                  Save quick reply routing
-                </Button>
-              ) : null}
               {!isEditing || isDraftEdit ? (
                 <Button
                   type="button"
@@ -1082,6 +965,27 @@ export default function TemplateCreateForm({
                     Select media
                   </Button>
                 </div>
+              ) : headerFormat === "LOCATION" ? (
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">
+                      {pickedLocation?.name || "No location selected"}
+                    </p>
+                    <p className="mt-1 truncate text-xs text-muted-foreground">
+                      {pickedLocation?.address ||
+                        "Choose the sample location shown during review."}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={!canEditFields}
+                    onClick={() => setIsLocationPickerOpen(true)}
+                  >
+                    <MapPin className="size-4" />
+                    Choose on map
+                  </Button>
+                </div>
               ) : (
                 <Input
                   value={headerExampleUrl}
@@ -1288,35 +1192,6 @@ export default function TemplateCreateForm({
 
           {actionMode !== "NONE" && (
             <>
-              {(hasQuickReplies || actionMode === "QUICK_REPLY") && (
-                <div className="mt-4 rounded-sm border border-emerald-200 bg-emerald-50/60 p-4">
-                  <Label>Validate quick replies for sender</Label>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Trigger choices come from the published flow assigned to
-                    this number, with the organisation fallback used when no
-                    number-specific flow is assigned.
-                  </p>
-                  <WhatsAppNumberSwitcher
-                    includeAll={false}
-                    value={routingPhoneNumberId}
-                    onValueChange={setRoutingPhoneNumberId}
-                    className="mt-3 w-full bg-white"
-                  />
-                  {triggerQuery.isError && (
-                    <p className="mt-2 text-xs text-destructive">
-                      No published flow triggers are available for this sender.
-                    </p>
-                  )}
-                  {!triggerQuery.isLoading &&
-                    hasQuickReplies &&
-                    quickReplyRouteIssues.length > 0 && (
-                      <p className="mt-2 text-xs font-medium text-amber-700">
-                        Action required: assign a current published trigger to
-                        every quick reply.
-                      </p>
-                    )}
-                </div>
-              )}
               <div className="mt-4 rounded-sm bg-primary/5 p-3 text-sm text-muted-foreground">
                 Click a button type below to add it. You can add{" "}
                 <span className="font-semibold text-foreground">
@@ -1445,50 +1320,9 @@ export default function TemplateCreateForm({
                       />
                     )}
                     {button.type === "QUICK_REPLY" && (
-                      <Select
-                        value={button.triggerKey || ""}
-                        onValueChange={(value) =>
-                          updateButton(index, "triggerKey", value)
-                        }
-                        disabled={
-                          !routingPhoneNumberId ||
-                          triggerQuery.isLoading ||
-                          isSavingRoutes
-                        }
-                      >
-                        <SelectTrigger
-                          className={cn(
-                            "h-10 w-full border-0 bg-white shadow-none",
-                            button.triggerKey &&
-                              !availableTriggerKeys.has(button.triggerKey) &&
-                              "ring-2 ring-amber-400"
-                          )}
-                        >
-                          <SelectValue
-                            placeholder={
-                              triggerQuery.isLoading
-                                ? "Loading flow triggers..."
-                                : "Choose flow trigger"
-                            }
-                          />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {button.triggerKey &&
-                            !availableTriggerKeys.has(button.triggerKey) && (
-                              <SelectItem value={button.triggerKey} disabled>
-                                {button.triggerKey} (unavailable)
-                              </SelectItem>
-                            )}
-                          {availableTriggers.map((trigger) => (
-                            <SelectItem
-                              key={trigger.triggerKey}
-                              value={trigger.triggerKey}
-                            >
-                              {trigger.name} · {trigger.triggerKey}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <div className="flex h-10 items-center rounded-sm bg-white px-3 text-xs text-muted-foreground">
+                        Trigger is selected when creating a broadcast.
+                      </div>
                     )}
 
                     <Button
@@ -1607,6 +1441,17 @@ export default function TemplateCreateForm({
           }
           setIsMediaPickerOpen(false);
           setCarouselMediaIndex(null);
+        }}
+      />
+      <LocationPickerDialog
+        open={isLocationPickerOpen}
+        onOpenChange={setIsLocationPickerOpen}
+        value={pickedLocation || undefined}
+        onSelect={(location) => {
+          setPickedLocation(location);
+          setHeaderExampleUrl(
+            `https://www.google.com/maps/search/?api=1&query=${location.latitude},${location.longitude}`
+          );
         }}
       />
     </form>

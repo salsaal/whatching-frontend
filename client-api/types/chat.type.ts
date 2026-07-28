@@ -300,7 +300,8 @@ export interface TemplateSendComponent {
 }
 
 export interface SendTemplateMessagePayload {
-  phoneNumber: string;
+  phoneNumber?: string;
+  subscriberId?: string;
   countryIso?: string;
   templateName: string;
   languageCode?: string;

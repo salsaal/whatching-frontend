@@ -121,7 +121,12 @@ function Organisations() {
     <div className="min-h-screen bg-[#f7faf8] text-foreground">
       <header className="sticky top-0 z-20 bg-white/95 shadow-xs backdrop-blur">
         <div className="mx-auto flex h-18 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-          <Image src={assets.logo} alt="Whatching" width={150} height={42} />
+          <Image
+            src={assets.whatchingLogo}
+            alt="Whatching"
+            width={150}
+            height={42}
+          />
 
           <div className="flex items-center gap-3">
             <div className="hidden size-10 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary sm:flex">

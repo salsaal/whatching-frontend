@@ -22,6 +22,7 @@ export const ORGANIZATION_ENDPOINTS = {
   CONNECT_META: `${ORGANIZATIONS_BASE}/connect-meta`,
   CONNECT_META_EMBEDDED_SIGNUP: `${ORGANIZATIONS_BASE}/connect-meta/embedded-signup`,
   SYNC_INTEGRATION: `${ORGANIZATIONS_BASE}/integration/sync`,
+  COEXISTENCE_CONTACT_SYNC: `${ORGANIZATIONS_BASE}/integration/contact-sync`,
   WHATSAPP_PHONE_NUMBERS: `${ORGANIZATIONS_BASE}/whatsapp/phone-numbers`,
   WHATSAPP_PHONE_NUMBERS_SYNC: `${ORGANIZATIONS_BASE}/whatsapp/phone-numbers/sync`,
   WHATSAPP_PHONE_NUMBER: (phoneNumberRecordId: string) =>
@@ -36,10 +37,15 @@ export const ORGANIZATION_ENDPOINTS = {
   ADD_AGENT: `${ORGANIZATIONS_BASE}/add-agent`,
   TEAM_MEMBER: (membershipId: string) =>
     `${ORGANIZATIONS_BASE}/team/${membershipId}`,
+  BILLING_START_TRIAL: `${ORGANIZATIONS_BASE}/billing/start-trial`,
   BILLING_SUBSCRIBE: `${ORGANIZATIONS_BASE}/billing/subscribe`,
+  BILLING_CHANGE_PLAN: `${ORGANIZATIONS_BASE}/billing/change-plan`,
   BILLING_TOPUP_WALLET: `${ORGANIZATIONS_BASE}/billing/topup-wallet`,
   BILLING_HISTORY: `${ORGANIZATIONS_BASE}/billing/history`,
-  BILLING_CANCEL: `${ORGANIZATIONS_BASE}/billing/cancel`
+  BILLING_CANCEL: `${ORGANIZATIONS_BASE}/billing/cancel`,
+  SUPPORT_REQUESTS: `${ORGANIZATIONS_BASE}/support-requests`,
+  SUPPORT_REQUEST: (supportRequestId: string) =>
+    `${ORGANIZATIONS_BASE}/support-requests/${supportRequestId}`
 };
 
 const TEMPLATES_BASE = "/templates";
@@ -94,6 +100,10 @@ export const BROADCAST_ENDPOINTS = {
     `${ORGANIZATIONS_BASE}/broadcasts/${broadcastId}/start`,
   CANCEL: (broadcastId: string) =>
     `${ORGANIZATIONS_BASE}/broadcasts/${broadcastId}/cancel`
+};
+
+export const ANALYTICS_ENDPOINTS = {
+  DASHBOARD: `${ORGANIZATIONS_BASE}/analytics/dashboard`
 };
 
 const BOT_BASE = `${ORGANIZATIONS_BASE}/bot`;

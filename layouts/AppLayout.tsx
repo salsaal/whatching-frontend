@@ -8,6 +8,7 @@ import {
   Images,
   Instagram,
   LayoutDashboard,
+  LifeBuoy,
   Loader2,
   LogOut,
   Menu,
@@ -26,9 +27,11 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import {
+  changeSubscriptionPlan,
   getIntegrationStatus,
   getOrganization,
-  purchaseSubscription
+  purchaseSubscription,
+  startFreeTrial
 } from "@/client-api/functions/organizations";
 import {
   AlertDialog,
@@ -62,6 +65,7 @@ interface AppLayoutProps {
 
 const navigation = [
   { label: "Overview", href: "/overview", icon: LayoutDashboard },
+  { label: "Analytics", href: "/analytics", icon: BarChart3 },
   { label: "Templates", href: "/templates", icon: FileText },
   { label: "Broadcasts", href: "/broadcasts", icon: Megaphone },
   { label: "Flows", href: "/flows", icon: Workflow },
@@ -69,7 +73,8 @@ const navigation = [
   { label: "Conversations", href: "/conversations", icon: MessageCircle },
   { label: "Contacts", href: "/contacts", icon: Contact },
   { label: "Media", href: "/media", icon: Images },
-  { label: "Settings", href: "/settings", icon: Settings }
+  { label: "Settings", href: "/settings", icon: Settings },
+  { label: "Help", href: "/settings/help", icon: LifeBuoy }
 ];
 
 const plans = [
@@ -171,11 +176,43 @@ export default function AppLayout({
     onError: () => toast.error("Unable to start subscription checkout")
   });
 
+  const { mutate: changePlan, isPending: isChangingPlan } = useMutation({
+    mutationFn: changeSubscriptionPlan,
+    onSuccess: (data) => {
+      const paymentUrl = data.data?.paymentUrl;
+      if (paymentUrl) {
+        window.location.href = paymentUrl;
+        return;
+      }
+      if (data.data?.organization) {
+        upsertOrganization(data.data.organization);
+      }
+      toast.success(data.message || "Plan updated.");
+      setIsPlansOpen(false);
+    },
+    onError: () => toast.error("Unable to change plan")
+  });
+
+  const { mutate: beginTrial, isPending: isStartingTrial } = useMutation({
+    mutationFn: startFreeTrial,
+    onSuccess: (data) => {
+      if (data.data?.organization) {
+        upsertOrganization(data.data.organization);
+      }
+      toast.success(data.message || "Your 7-day free trial has started.");
+      setIsPlansOpen(false);
+    },
+    onError: () => toast.error("Unable to start the free trial")
+  });
+
   const status =
     integration?.state || activeOrganization?.metaConfig?.status || "pending";
   const isReady = status === "ready";
   const currentPlan = activeOrganization?.planTier || "none";
   const isNoPlan = currentPlan === "none";
+  const isTrialing = activeOrganization?.subscriptionStatus === "trialing";
+  const canStartTrial =
+    isNoPlan && !activeOrganization?.trialConsumedAt;
 
   useEffect(() => {
     if (organizationData?.data.organization) {
@@ -304,7 +341,7 @@ export default function AppLayout({
         <div className="relative flex h-18 items-center px-4">
           {/* Logo */}
           <div className="w-[150px] opacity-0 transition-opacity duration-200 group-hover/sidebar:opacity-100">
-            <Image src={assets.logo} alt="Whatching" width={150} height={42} />
+            <Image src={assets.whatchingLogo} alt="Whatching" width={150} height={42} />
           </div>
 
           {/* Icon */}
@@ -408,7 +445,7 @@ export default function AppLayout({
           <div className="grid gap-5 lg:grid-cols-3">
             {plans.map((plan) => {
               const Icon = plan.icon;
-              const isCurrentPlan = plan.id === currentPlan;
+              const isCurrentPlan = plan.id === currentPlan && !isTrialing;
 
               return (
                 <div
@@ -443,7 +480,9 @@ export default function AppLayout({
                     variant={plan.highlighted ? "default" : "outline"}
                     className="mb-6 w-full"
                     disabled={isCurrentPlan}
-                    isLoading={isSubscribing}
+                    isLoading={
+                      isSubscribing || isChangingPlan || isStartingTrial
+                    }
                     onClick={() => {
                       if (isCurrentPlan) return;
 
@@ -452,14 +491,28 @@ export default function AppLayout({
                         return;
                       }
 
-                      subscribe({ tier: plan.id });
+                      if (canStartTrial) {
+                        beginTrial({ tier: plan.id as "basic" | "pro" });
+                      } else if (isNoPlan || isTrialing) {
+                        subscribe({ tier: plan.id });
+                      } else {
+                        changePlan({ tier: plan.id });
+                      }
                     }}
                   >
                     {isCurrentPlan
                       ? "Current plan"
                       : plan.id === "enterprise"
                         ? "Contact Sales"
-                        : "Get Started"}
+                        : isTrialing
+                          ? `Subscribe to ${plan.name}`
+                          : !isNoPlan
+                          ? currentPlan === "basic" && plan.id === "pro"
+                            ? "Upgrade plan"
+                            : `Downgrade to ${plan.name}`
+                          : canStartTrial
+                            ? "Start free trial"
+                            : "Get Started"}
                   </Button>
 
                   <ul className="space-y-3">
@@ -482,7 +535,7 @@ export default function AppLayout({
           <div className="flex h-full flex-col bg-white">
             <div className="flex h-18 items-center px-5 shadow-xs">
               <Image
-                src={assets.logo}
+                src={assets.whatchingLogo}
                 alt="Whatching"
                 width={150}
                 height={42}

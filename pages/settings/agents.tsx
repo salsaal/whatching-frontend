@@ -10,7 +10,7 @@ import {
   UserPlus,
   UsersRound
 } from "lucide-react";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -19,7 +19,12 @@ import {
   getTeam,
   removeTeamMember
 } from "@/client-api/functions/organizations";
-import { TeamMember } from "@/client-api/types/organizations.type";
+import {
+  PermissionAccessLevel,
+  PermissionAccessState,
+  PermissionGroup,
+  TeamMember
+} from "@/client-api/types/organizations.type";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -34,6 +39,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -59,7 +65,9 @@ const initials = (name?: string) =>
 
 function AgentForm({
   onSubmit,
-  isSaving
+  isSaving,
+  permissionSchema,
+  defaultPermissionAccess
 }: {
   onSubmit: (payload: {
     name: string;
@@ -67,8 +75,11 @@ function AgentForm({
     phoneNumber: string;
     countryIso: string;
     password: string;
+    permissionAccess?: PermissionAccessState;
   }) => void;
   isSaving: boolean;
+  permissionSchema: PermissionGroup[];
+  defaultPermissionAccess: PermissionAccessState;
 }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -76,6 +87,13 @@ function AgentForm({
   const [countryCode, setCountryCode] = useState("+91");
   const [countryIso, setCountryIso] = useState("IN");
   const [password, setPassword] = useState("");
+  const [permissionAccess, setPermissionAccess] = useState<PermissionAccessState>(
+    defaultPermissionAccess
+  );
+
+  useEffect(() => {
+    setPermissionAccess(defaultPermissionAccess || {});
+  }, [defaultPermissionAccess]);
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
@@ -88,7 +106,37 @@ function AgentForm({
       email: email.trim(),
       phoneNumber: buildInternationalPhoneNumber(countryCode, phoneNumber),
       countryIso,
-      password
+      password,
+      ...(permissionSchema.length ? { permissionAccess } : {})
+    });
+  };
+
+  const setGroupAccess = (groupKey: string, access: PermissionAccessLevel) => {
+    setPermissionAccess((current) => ({
+      ...current,
+      [groupKey]: {
+        access,
+        capabilities: current?.[groupKey]?.capabilities || {}
+      }
+    }));
+  };
+
+  const toggleCapability = (groupKey: string, capabilityKey: string) => {
+    setPermissionAccess((current) => {
+      const group = current?.[groupKey] || {
+        access: "none" as const,
+        capabilities: {}
+      };
+      return {
+        ...current,
+        [groupKey]: {
+          ...group,
+          capabilities: {
+            ...group.capabilities,
+            [capabilityKey]: !group.capabilities?.[capabilityKey]
+          }
+        }
+      };
     });
   };
 
@@ -136,6 +184,81 @@ function AgentForm({
           />
         </div>
       </div>
+      {permissionSchema.length > 0 && (
+        <div className="space-y-3 rounded-lg border bg-muted/20 p-4">
+          <div>
+            <p className="text-sm font-medium">Agent permissions</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Owners and admins keep full access. These permissions apply to the
+              new agent account.
+            </p>
+          </div>
+          <div className="grid max-h-72 gap-4 overflow-y-auto pr-1 sm:grid-cols-2">
+            {permissionSchema.map((group) => {
+              const levels = group.accessControl?.levels || [];
+              const capabilities = group.capabilities || [];
+              const selectedAccess =
+                permissionAccess?.[group.key]?.access || "none";
+
+              return (
+                <div
+                  key={group.key}
+                  className="space-y-3 rounded-md border bg-white p-3"
+                >
+                  <div>
+                    <p className="text-sm font-medium">{group.label}</p>
+                    {group.description && (
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {group.description}
+                      </p>
+                    )}
+                  </div>
+                  {levels.length > 0 && (
+                    <select
+                      className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                      value={selectedAccess}
+                      onChange={(event) =>
+                        setGroupAccess(
+                          group.key,
+                          event.target.value as PermissionAccessLevel
+                        )
+                      }
+                    >
+                      {levels.map((level) => (
+                        <option key={level.value} value={level.value}>
+                          {level.label}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  {capabilities.length > 0 && (
+                    <div className="space-y-1">
+                      {capabilities.map((capability) => (
+                        <label
+                          key={capability.key}
+                          className="flex cursor-pointer items-center gap-2 rounded-sm p-1.5 text-sm hover:bg-muted/50"
+                        >
+                          <Checkbox
+                            checked={Boolean(
+                              permissionAccess?.[group.key]?.capabilities?.[
+                                capability.key
+                              ]
+                            )}
+                            onCheckedChange={() =>
+                              toggleCapability(group.key, capability.key)
+                            }
+                          />
+                          <span>{capability.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
       <Button type="submit" className="w-full" isLoading={isSaving}>
         <UserPlus className="size-4" />
         Add agent
@@ -178,6 +301,14 @@ export default function AgentsSettingsPage() {
   });
 
   const team = useMemo(() => data?.data.team || [], [data]);
+  const permissionSchema = useMemo(
+    () => data?.data.permissionSchema || [],
+    [data?.data.permissionSchema]
+  );
+  const defaultPermissionAccess = useMemo(
+    () => data?.data.defaultAgentPermissionAccess || {},
+    [data?.data.defaultAgentPermissionAccess]
+  );
   const agentCount = useMemo(
     () => team.filter((member) => member.role === "agent").length,
     [team]
@@ -298,6 +429,27 @@ export default function AgentsSettingsPage() {
                         </span>
                       )}
                     </div>
+                    {member.role === "agent" &&
+                      member.effectivePermissionGrants?.length ? (
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {member.effectivePermissionGrants
+                            .slice(0, 5)
+                            .map((permission) => (
+                              <Badge
+                                key={permission}
+                                variant="outline"
+                                className="text-[10px]"
+                              >
+                                {permission}
+                              </Badge>
+                            ))}
+                          {member.effectivePermissionGrants.length > 5 && (
+                            <Badge variant="outline" className="text-[10px]">
+                              +{member.effectivePermissionGrants.length - 5}
+                            </Badge>
+                          )}
+                        </div>
+                      ) : null}
                   </div>
                 </div>
                 <Button
@@ -329,7 +481,12 @@ export default function AgentsSettingsPage() {
             The backend creates a verified staff account or links an existing
             Whatching user to this organization as an agent.
           </div>
-          <AgentForm onSubmit={createAgent} isSaving={isAdding} />
+          <AgentForm
+            onSubmit={createAgent}
+            isSaving={isAdding}
+            permissionSchema={permissionSchema}
+            defaultPermissionAccess={defaultPermissionAccess}
+          />
         </DialogContent>
       </Dialog>
 

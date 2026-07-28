@@ -24,6 +24,7 @@ export interface WhatsAppPhoneNumber {
   activeCanvasId?: string;
   coexistenceEnabled?: boolean;
   coexistenceStatus?: "not_enabled" | "enabled" | "disconnected" | "limited";
+  coexistenceContactSync?: CoexistenceContactSyncState;
   lastHealthCheckAt?: string;
   connectedAt?: string;
   createdAt?: string;
@@ -35,6 +36,31 @@ export interface WhatsAppPhoneNumber {
     createdAt?: string;
     lastTriggeredAt?: string;
   }>;
+}
+
+export interface CoexistenceContactSyncState {
+  requestId: string | null;
+  status:
+    | "not_requested"
+    | "requesting"
+    | "requested"
+    | "processing"
+    | "active"
+    | "failed";
+  lastReceivedAt: string | null;
+  lastProcessedAt: string | null;
+  lastError: string | null;
+  contactsActive: number;
+  contactsRemoved: number;
+  contactsSkipped: number;
+  recoveredContactChanges: number;
+  warning: string | null;
+  maxAttempts: number;
+  attemptsUsed: number;
+  attemptsRemaining: number;
+  subscriberLimit?: number;
+  subscribersUsed?: number;
+  subscriberSlotsAvailable?: number | null;
 }
 
 export interface WhatsAppPhoneNumberSummary {
@@ -58,6 +84,21 @@ export interface WhatsAppPhoneNumberResponse {
     phoneNumber: WhatsAppPhoneNumber;
     summary?: WhatsAppPhoneNumberSummary;
   };
+}
+
+export interface CoexistenceContactSyncResponse {
+  status: string;
+  message: string;
+  data: {
+    contactSync: CoexistenceContactSyncState;
+    phoneNumber: WhatsAppPhoneNumber;
+    whatsAppPhoneNumbers: WhatsAppPhoneNumberSummary;
+  };
+}
+
+export interface RequestCoexistenceContactSyncPayload {
+  phoneNumberRecordId?: string;
+  phoneNumberId?: string;
 }
 
 export interface OrganizationsResponse {
@@ -164,6 +205,85 @@ export interface CancelSubscriptionResponse {
   message: string;
 }
 
+export interface ChangePlanResponse {
+  status: string;
+  message?: string;
+  data?: {
+    organization?: Organization;
+    paymentUrl?: string;
+    [key: string]: unknown;
+  };
+}
+
+export interface StartTrialResponse {
+  status: string;
+  message: string;
+  data: {
+    organization: Organization;
+    trial?: {
+      active: boolean;
+      tier: "basic" | "pro";
+      startedAt: string;
+      endsAt: string;
+      days: number;
+      creditCardRequired?: boolean;
+    };
+  };
+}
+
+export type SupportRequestCategory =
+  | "billing"
+  | "integration"
+  | "contact_sync"
+  | "data_recovery"
+  | "plan_limit"
+  | "technical"
+  | "other";
+export type SupportRequestPriority = "low" | "normal" | "high" | "urgent";
+export type SupportRequestStatus =
+  | "open"
+  | "in_review"
+  | "resolved"
+  | "archived";
+
+export interface SupportRequest {
+  _id: string;
+  category: SupportRequestCategory;
+  priority: SupportRequestPriority;
+  status: SupportRequestStatus;
+  subject: string;
+  message: string;
+  createdAt: string;
+  updatedAt: string;
+  resolvedAt?: string;
+}
+
+export interface SupportRequestsResponse {
+  status: string;
+  results: number;
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+  data: { supportRequests: SupportRequest[] };
+}
+
+export interface SupportRequestResponse {
+  status: string;
+  message?: string;
+  data: { supportRequest: SupportRequest };
+}
+
+export interface CreateSupportRequestPayload {
+  category?: SupportRequestCategory;
+  priority?: SupportRequestPriority;
+  subject: string;
+  message: string;
+  context?: Record<string, unknown>;
+}
+
 export interface TeamMember {
   _id: string;
   userId: {
@@ -175,8 +295,45 @@ export interface TeamMember {
   orgId: string;
   role: "owner" | "admin" | "agent" | string;
   status: "active" | "invited" | "disabled" | string;
+  permissionGrants?: string[];
+  effectivePermissionGrants?: string[];
+  permissionAccess?: PermissionAccessState;
+  effectivePermissionAccess?: PermissionAccessState;
   createdAt: string;
   updatedAt: string;
+}
+
+export type PermissionAccessLevel = "none" | "view" | "reply" | "manage";
+
+export interface PermissionLevelDefinition {
+  value: PermissionAccessLevel;
+  label: string;
+  grants?: string[];
+}
+
+export interface PermissionCapability {
+  key: string;
+  label: string;
+  permission: string;
+}
+
+export interface PermissionAccessStateEntry {
+  access: PermissionAccessLevel;
+  capabilities: Record<string, boolean>;
+}
+
+export type PermissionAccessState = Record<string, PermissionAccessStateEntry>;
+
+export interface PermissionGroup {
+  key: string;
+  label: string;
+  description?: string;
+  accessControl?: {
+    type: "level";
+    permissionKeys?: string[];
+    levels?: PermissionLevelDefinition[];
+  };
+  capabilities?: PermissionCapability[];
 }
 
 export interface TeamResponse {
@@ -184,6 +341,8 @@ export interface TeamResponse {
   results: number;
   data: {
     team: TeamMember[];
+    permissionSchema?: PermissionGroup[];
+    defaultAgentPermissionAccess?: PermissionAccessState;
   };
 }
 
@@ -193,6 +352,7 @@ export interface AddAgentPayload {
   phoneNumber: string;
   password: string;
   countryIso?: string;
+  permissionAccess?: PermissionAccessState;
 }
 
 export interface AddAgentResponse {

@@ -177,6 +177,7 @@ export default function FlowsPage() {
       await queryClient.invalidateQueries({
         queryKey: ["whatsapp-phone-numbers", activeOrganization?._id]
       });
+      await invalidate();
     },
     onError: handleError
   });
@@ -285,12 +286,15 @@ export default function FlowsPage() {
             </div>
           ) : canvases.length ? (
             canvases.map((canvas) => {
-              const isActive = canvas.status === "active";
               const isSelectedNumberContext =
                 selectedPhoneNumberId !== ALL_WHATSAPP_NUMBERS &&
                 Boolean(selectedNumber);
               const isAssignedToSelectedNumber =
                 selectedNumber?.activeCanvasId === canvas._id;
+              const isOrgFallback = canvas.status === "active";
+              const isCardActive = isSelectedNumberContext
+                ? isAssignedToSelectedNumber
+                : isOrgFallback;
               const assignedNumbers = numbers.filter(
                 (number) => number.activeCanvasId === canvas._id
               );
@@ -327,27 +331,25 @@ export default function FlowsPage() {
                         </p>
                       </div>
                       <Badge
-                        variant={isActive ? "default" : "secondary"}
+                        variant={isCardActive ? "default" : "secondary"}
                         className="capitalize"
                       >
-                        {canvas.status}
+                        {isCardActive ? "active" : "inactive"}
                       </Badge>
                     </div>
 
-                    {(isActive || assignedNumbers.length > 0) && (
-                      <div className="flex flex-wrap gap-1.5">
-                        {isActive && (
-                          <Badge className="bg-emerald-100 text-emerald-800">
-                            Organisation fallback
-                          </Badge>
-                        )}
-                        {assignedNumbers.map((number) => (
-                          <Badge key={number.id} variant="outline">
-                            {number.displayPhoneNumber || number.phoneNumberId}
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
+                    <div className="flex min-h-6 flex-wrap gap-1.5">
+                      {isOrgFallback && (
+                        <Badge className="bg-emerald-100 text-emerald-800">
+                          Organisation fallback
+                        </Badge>
+                      )}
+                      {assignedNumbers.map((number) => (
+                        <Badge key={number.id} variant="outline">
+                          {number.displayPhoneNumber || number.phoneNumberId}
+                        </Badge>
+                      ))}
+                    </div>
 
                     <div className="grid gap-2 text-sm">
                       <div className="rounded-md bg-muted/50 p-3">
@@ -373,7 +375,7 @@ export default function FlowsPage() {
                         checked={
                           isSelectedNumberContext
                             ? isAssignedToSelectedNumber
-                            : isActive
+                            : isOrgFallback
                         }
                         disabled={
                           isSelectedNumberContext

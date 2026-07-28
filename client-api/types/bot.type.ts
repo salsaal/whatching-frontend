@@ -11,6 +11,7 @@ export type BotBlockType =
   | "location_request"
   | "address_request"
   | "contacts"
+  | "handoff_to_agent"
   | "product_carousel"
   | "generic_carousel";
 
@@ -59,6 +60,11 @@ export interface BotCanvasNode {
   position?: {
     x: number;
     y: number;
+  };
+  followUp?: {
+    enabled: true;
+    delayMinutes: number;
+    targetTriggerKey: string;
   };
   metadata?: Record<string, unknown>;
 }

@@ -21,7 +21,6 @@ interface TemplatesTableProps {
   onEdit: (template: MessageTemplate) => void;
   onLinkMedia?: (template: MessageTemplate) => void;
   deletingId?: string | null;
-  hasRoutingIssue?: (template: MessageTemplate) => boolean;
 }
 
 const formatDate = (date: string) =>
@@ -37,8 +36,7 @@ export default function TemplatesTable({
   onDelete,
   onEdit,
   onLinkMedia,
-  deletingId,
-  hasRoutingIssue
+  deletingId
 }: TemplatesTableProps) {
   if (isLoading) {
     return (
@@ -87,8 +85,7 @@ export default function TemplatesTable({
         </TableHeader>
         <TableBody>
           {templates.map((template) => {
-            const routingIssue = Boolean(hasRoutingIssue?.(template));
-            const actionRequired = routingIssue || templateNeedsMedia(template);
+            const actionRequired = templateNeedsMedia(template);
 
             return (
               <TableRow
@@ -103,11 +100,6 @@ export default function TemplatesTable({
                   {templateNeedsMedia(template) && (
                     <span className="mt-1 inline-flex rounded-sm bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive">
                       Media required
-                    </span>
-                  )}
-                  {routingIssue && (
-                    <span className="mt-1 inline-flex rounded-sm bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
-                      Quick reply routing required
                     </span>
                   )}
                 </TableCell>

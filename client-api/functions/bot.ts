@@ -173,9 +173,9 @@ export const updateBotCanvasStatus = async ({
   canvasId: string;
   status: "active" | "inactive";
 }): Promise<BotCanvasResponse> => {
-  const res = await api.patch<BotCanvasResponse>(
+  const res = await api.post<BotCanvasResponse>(
     BOT_ENDPOINTS.CANVAS_STATUS_BY_ID(canvasId),
-    { status }
+    { action: status === "active" ? "activate" : "deactivate" }
   );
   return res.data;
 };

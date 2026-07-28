@@ -2,6 +2,7 @@ import api from "../axiosInstance";
 import { ORGANIZATION_ENDPOINTS } from "../endpoints";
 import {
   ConnectMetaPayload,
+  CoexistenceContactSyncResponse,
   DeleteOrganizationResponse,
   EmbeddedSignupConnectPayload,
   IntegrationStatusResponse,
@@ -9,8 +10,14 @@ import {
   AddAgentResponse,
   BillingHistoryResponse,
   CancelSubscriptionResponse,
+  ChangePlanResponse,
   OrganizationResponse,
   OrganizationsResponse,
+  RequestCoexistenceContactSyncPayload,
+  CreateSupportRequestPayload,
+  StartTrialResponse,
+  SupportRequestResponse,
+  SupportRequestsResponse,
   SubscribeResponse,
   TeamResponse,
   WhatsAppPhoneNumberResponse,
@@ -86,6 +93,16 @@ export const syncMetaIntegration =
     );
     return res.data;
   };
+
+export const requestCoexistenceContactSync = async (
+  payload: RequestCoexistenceContactSyncPayload = {}
+): Promise<CoexistenceContactSyncResponse> => {
+  const res = await api.post<CoexistenceContactSyncResponse>(
+    ORGANIZATION_ENDPOINTS.COEXISTENCE_CONTACT_SYNC,
+    payload
+  );
+  return res.data;
+};
 
 export const getWhatsAppPhoneNumbers =
   async (): Promise<WhatsAppPhoneNumbersResponse> => {
@@ -180,6 +197,26 @@ export const purchaseSubscription = async (payload: {
   return res.data;
 };
 
+export const startFreeTrial = async (payload: {
+  tier: "basic" | "pro";
+}): Promise<StartTrialResponse> => {
+  const res = await api.post<StartTrialResponse>(
+    ORGANIZATION_ENDPOINTS.BILLING_START_TRIAL,
+    payload
+  );
+  return res.data;
+};
+
+export const changeSubscriptionPlan = async (payload: {
+  tier: "basic" | "pro" | "enterprise" | string;
+}): Promise<ChangePlanResponse> => {
+  const res = await api.post<ChangePlanResponse>(
+    ORGANIZATION_ENDPOINTS.BILLING_CHANGE_PLAN,
+    payload
+  );
+  return res.data;
+};
+
 export const getBillingHistory = async (): Promise<BillingHistoryResponse> => {
   const res = await api.get<BillingHistoryResponse>(
     ORGANIZATION_ENDPOINTS.BILLING_HISTORY
@@ -194,3 +231,23 @@ export const cancelSubscription =
     );
     return res.data;
   };
+
+export const getSupportRequests = async (
+  params: { page?: number; limit?: number; status?: string } = {}
+): Promise<SupportRequestsResponse> => {
+  const res = await api.get<SupportRequestsResponse>(
+    ORGANIZATION_ENDPOINTS.SUPPORT_REQUESTS,
+    { params }
+  );
+  return res.data;
+};
+
+export const createSupportRequest = async (
+  payload: CreateSupportRequestPayload
+): Promise<SupportRequestResponse> => {
+  const res = await api.post<SupportRequestResponse>(
+    ORGANIZATION_ENDPOINTS.SUPPORT_REQUESTS,
+    payload
+  );
+  return res.data;
+};

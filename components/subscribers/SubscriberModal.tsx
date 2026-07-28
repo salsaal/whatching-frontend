@@ -73,7 +73,7 @@ export default function SubscriberModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>
             {subscriber ? "Edit subscriber" : "Add subscriber"}

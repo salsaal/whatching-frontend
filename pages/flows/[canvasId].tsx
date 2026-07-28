@@ -30,11 +30,13 @@ import {
   MapPin,
   MessageSquareText,
   MousePointerClick,
-  Package,
   Plus,
   RefreshCcw,
+  Save,
   Send,
+  Timer,
   Trash2,
+  UserRound,
   Video,
   Workflow,
   XCircle
@@ -46,11 +48,9 @@ import { toast } from "sonner";
 
 import {
   getBotCanvas,
-  getBotSettings,
   getBotStatus,
   publishBotCanvasDraftById,
   saveBotCanvasDraftById,
-  updateBotSettings,
   validateBotCanvasById
 } from "@/client-api/functions/bot";
 import {
@@ -60,8 +60,7 @@ import {
   BotCanvasDraftState,
   BotCanvasEdge,
   BotCanvasNode,
-  BotCanvasNodeContent,
-  BotSettings
+  BotCanvasNodeContent
 } from "@/client-api/types/bot.type";
 import { MediaAsset } from "@/client-api/types/media.type";
 import BotFlowNode, {
@@ -70,6 +69,7 @@ import BotFlowNode, {
 } from "@/components/flows/BotFlowNode";
 import FlowDiagramPreviewDialog from "@/components/flows/FlowDiagramPreviewDialog";
 import { WhatsAppFlowBlockPreview } from "@/components/flows/FlowBlockPreview";
+import LocationPickerDialog from "@/components/location/LocationPickerDialog";
 import MediaPickerDialog from "@/components/media/MediaPickerDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -92,6 +92,7 @@ import { useOrganizationStore } from "@/stores/organizationStore";
 
 type BuilderNodeData = BotFlowNodeData & {
   content: BotCanvasNodeContent;
+  followUp?: BotCanvasNode["followUp"];
 };
 type BuilderNode = BotFlowReactNode & { data: BuilderNodeData };
 type MediaPickerTarget =
@@ -134,7 +135,7 @@ const LIST_MAX_SECTIONS = 10;
 const LIST_MAX_ROWS = 10;
 
 const blockTypes: Array<{
-  type: BotBlockType;
+  type: BotBlockType | "automatic_follow_up";
   label: string;
   description: string;
   icon: React.ElementType;
@@ -176,6 +177,30 @@ const blockTypes: Array<{
     icon: Video
   },
   {
+    type: "contacts",
+    label: "Contacts",
+    description: "Share contact cards",
+    icon: ContactRound
+  },
+  {
+    type: "handoff_to_agent",
+    label: "Agent Trigger",
+    description: "Hand over to a human agent",
+    icon: UserRound
+  },
+  {
+    type: "generic_carousel",
+    label: "Generic Carousel",
+    description: "Media cards with actions",
+    icon: Layers3
+  },
+  {
+    type: "automatic_follow_up",
+    label: "Automatic Follow-up",
+    description: "Send a message after a delay",
+    icon: Timer
+  },
+  {
     type: "location",
     label: "Location",
     description: "Share map coordinates",
@@ -192,24 +217,6 @@ const blockTypes: Array<{
     label: "Address Request",
     description: "Collect an India address",
     icon: MapPin
-  },
-  {
-    type: "contacts",
-    label: "Contacts",
-    description: "Share contact cards",
-    icon: ContactRound
-  },
-  {
-    type: "product_carousel",
-    label: "Product Carousel",
-    description: "Catalog product cards",
-    icon: Package
-  },
-  {
-    type: "generic_carousel",
-    label: "Generic Carousel",
-    description: "Media cards with actions",
-    icon: Layers3
   }
 ];
 
@@ -418,6 +425,12 @@ const defaultContent = (blockType: BotBlockType): BotCanvasNodeContent => {
       ]
     };
   }
+  if (blockType === "handoff_to_agent") {
+    return {
+      message: "I’m connecting you to a human agent now.",
+      reason: "canvas_handoff_to_agent"
+    };
+  }
   if (blockType === "product_carousel") {
     return {
       catalogId: "",
@@ -605,6 +618,9 @@ const summarizeNode = (
     );
     return `Contact: ${name}`;
   }
+  if (blockType === "handoff_to_agent") {
+    return String(content.message || content.text || "Connect to an agent.");
+  }
   return content.catalogId
     ? `Catalog: ${content.catalogId}`
     : "Configure catalog details.";
@@ -641,7 +657,10 @@ const normalizeBackendNode = (rawNode: unknown): BotCanvasNode => {
     position: (node.position || data.position) as
       | { x: number; y: number }
       | undefined,
-    metadata: (data.metadata || node.metadata || {}) as Record<string, unknown>
+    metadata: (data.metadata || node.metadata || {}) as Record<string, unknown>,
+    followUp: (data.followUp || node.followUp) as
+      | BotCanvasNode["followUp"]
+      | undefined
   };
 };
 
@@ -664,6 +683,7 @@ const toReactNode = (rawNode: unknown): BuilderNode => {
       content: node.content || {},
       locked: lockedNodeIds.has(node.id) || Boolean(node.metadata?.locked),
       metadata: node.metadata || {},
+      followUp: node.followUp,
       invalid: false,
       summary: summarizeNode(node.blockType, node.content || {})
     }
@@ -835,6 +855,28 @@ const applyDefaultMarker = (
   }));
 };
 
+const decorateAutomaticFollowUps = (nodes: BuilderNode[]) =>
+  nodes.map((node) => {
+    const source = nodes.find(
+      (candidate) =>
+        candidate.data.followUp?.enabled &&
+        candidate.data.followUp.targetTriggerKey === node.data.triggerKey
+    );
+    if (!source) return node;
+    return {
+      ...node,
+      data: {
+        ...node.data,
+        metadata: {
+          ...node.data.metadata,
+          automaticFollowUp: true,
+          followUpSourceId: source.id,
+          followUpDelayMinutes: source.data.followUp?.delayMinutes || 60
+        }
+      }
+    };
+  });
+
 const defaultCanvasEdges = (): Edge[] => [
   {
     id: "edge_default_opt_out",
@@ -945,8 +987,6 @@ const getDraftStateFromResponse = (
 const getPublishedStateFromResponse = (
   data?: ReturnType<typeof getBotCanvas> extends Promise<infer R> ? R : never
 ) => data?.data?.canvas?.publishedState || data?.data?.publishedState;
-
-const getSettingsFromResponse = (settings?: BotSettings) => settings;
 
 const draftCacheKey = (orgId?: string, canvasId?: string) =>
   orgId && canvasId ? `whatching:bot-flow-draft:${orgId}:${canvasId}` : "";
@@ -1199,6 +1239,13 @@ const localValidate = (nodes: BuilderNode[], edges: Edge[]) => {
       invalidIds.add(node.id);
       messages.push(`${title}: location request message is required.`);
     }
+    if (
+      node.data.blockType === "handoff_to_agent" &&
+      !String(content.message || content.text || "").trim()
+    ) {
+      invalidIds.add(node.id);
+      messages.push(`${title}: agent handoff message is required.`);
+    }
     if (node.data.blockType === "address_request") {
       if (!String(content.bodyText || "").trim()) {
         invalidIds.add(node.id);
@@ -1443,6 +1490,7 @@ function FlowsBuilder() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [previewNodeId, setPreviewNodeId] = useState<string | null>(null);
   const [flowPreviewOpen, setFlowPreviewOpen] = useState(false);
+  const [locationPickerOpen, setLocationPickerOpen] = useState(false);
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
   const [saveState, setSaveState] = useState<
     "idle" | "saving" | "saved" | "error"
@@ -1483,19 +1531,12 @@ function FlowsBuilder() {
     refetchOnMount: "always"
   });
 
-  const { data: settingsData, refetch: refetchSettings } = useQuery({
-    queryKey: ["bot-settings", activeOrganization?._id],
-    queryFn: getBotSettings,
-    enabled: Boolean(activeOrganization?._id)
-  });
-
   const { data: statusData, refetch: refetchStatus } = useQuery({
     queryKey: ["bot-status", activeOrganization?._id],
     queryFn: getBotStatus,
     enabled: Boolean(activeOrganization?._id)
   });
 
-  const settings = getSettingsFromResponse(settingsData?.data?.settings);
   const status = statusData?.data?.status;
   const selectedNode = useMemo(
     () =>
@@ -1560,7 +1601,26 @@ function FlowsBuilder() {
                     action.nextTriggerKey
                   : undefined
             })),
+            followUp: (() => {
+              const target = publishNodes.find(
+                (candidate) =>
+                  candidate.data.metadata?.followUpSourceId === node.id
+              );
+              if (!target) return node.data.followUp;
+              return {
+                enabled: true as const,
+                delayMinutes: Math.max(
+                  1,
+                  Math.min(
+                    1380,
+                    Number(target.data.metadata?.followUpDelayMinutes) || 60
+                  )
+                ),
+                targetTriggerKey: target.data.triggerKey
+              };
+            })(),
             metadata: {
+              ...node.data.metadata,
               locked: node.data.locked || undefined
             }
           }
@@ -1577,15 +1637,6 @@ function FlowsBuilder() {
       saveBotCanvasDraftById({ canvasId, draftState }),
     meta: { showToast: false }
   });
-
-  const { mutate: updateSettingsMutate, isPending: isUpdatingSettings } =
-    useMutation({
-      mutationFn: updateBotSettings,
-      onSuccess: () => {
-        refetchSettings();
-        refetchStatus();
-      }
-    });
 
   const { mutateAsync: publishDraft, isPending: isPublishing } = useMutation({
     mutationFn: () => publishBotCanvasDraftById({ canvasId }),
@@ -1617,9 +1668,11 @@ function FlowsBuilder() {
     const useStarter =
       isBackendDefaultCanvas(loadedNodes, loadedEdges) ||
       isLegacyButtonStarterCanvas(loadedNodes);
-    const nextNodes = applyDefaultMarker(
-      useStarter ? defaultCanvasNodes() : loadedNodes,
-      draft?.defaultTriggerKey
+    const nextNodes = decorateAutomaticFollowUps(
+      applyDefaultMarker(
+        useStarter ? defaultCanvasNodes() : loadedNodes,
+        draft?.defaultTriggerKey
+      )
     );
     const nextEdges = useStarter
       ? defaultCanvasEdges()
@@ -1633,9 +1686,11 @@ function FlowsBuilder() {
   useEffect(() => {
     const published = getPublishedStateFromResponse(publishedData);
     const nextPublishedNodes = published?.nodes?.length
-      ? applyDefaultMarker(
-          published.nodes.map(toReactNode),
-          published.defaultTriggerKey
+      ? decorateAutomaticFollowUps(
+          applyDefaultMarker(
+            published.nodes.map(toReactNode),
+            published.defaultTriggerKey
+          )
         )
       : [];
     setPublishedNodes(nextPublishedNodes);
@@ -1783,6 +1838,44 @@ function FlowsBuilder() {
     },
     [isPublishedMode, nodes, setNodes]
   );
+
+  const addAutomaticFollowUp = useCallback(() => {
+    if (isPublishedMode) {
+      toast.info("Switch to Draft canvas to add a follow-up.");
+      return;
+    }
+    if (!selectedNode) {
+      toast.error("Select the message that should schedule this follow-up.");
+      return;
+    }
+    if (
+      ["OPT_IN", "OPT_OUT"].includes(selectedNode.data.triggerKey) ||
+      selectedNode.data.blockType === "handoff_to_agent"
+    ) {
+      toast.error("This block cannot schedule an automatic follow-up.");
+      return;
+    }
+
+    const node = createNode(
+      "text",
+      {
+        x: selectedNode.position.x + 380,
+        y: selectedNode.position.y + 40
+      },
+      "Automatic Follow-up",
+      {
+        metadata: {
+          automaticFollowUp: true,
+          followUpSourceId: selectedNode.id,
+          followUpDelayMinutes: 60
+        }
+      }
+    );
+    node.data.triggerKey = makeUniqueTrigger("AUTOMATIC_FOLLOW_UP", nodes);
+    setNodes((current) => [...current, node]);
+    setSelectedNodeId(node.id);
+    setRightPanelOpen(true);
+  }, [isPublishedMode, nodes, selectedNode, setNodes]);
 
   const handleDrop = useCallback(
     (event: React.DragEvent<HTMLDivElement>) => {
@@ -2022,13 +2115,6 @@ function FlowsBuilder() {
     setMediaPicker((current) => ({ ...current, open: false }));
   };
 
-  const toggleSetting = (
-    field: keyof Pick<BotSettings, "isBotEnabled" | "isAiEnabled">,
-    checked: boolean
-  ) => {
-    updateSettingsMutate({ [field]: checked });
-  };
-
   return (
     <AppLayout hideHeader fullBleed>
       <div className="flex h-dvh flex-col overflow-hidden border bg-white shadow-xs">
@@ -2076,28 +2162,6 @@ function FlowsBuilder() {
                 <TabsTrigger value="published">Published canvas</TabsTrigger>
               </TabsList>
             </Tabs>
-            <div className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
-              <Switch
-                checked={Boolean(settings?.isBotEnabled)}
-                disabled={isUpdatingSettings}
-                title="Turn the active WhatsApp flow on or off"
-                onCheckedChange={(checked) =>
-                  toggleSetting("isBotEnabled", checked)
-                }
-              />
-              Flow Active
-            </div>
-            <div className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
-              <Switch
-                checked={Boolean(settings?.isAiEnabled)}
-                disabled={isUpdatingSettings}
-                title="Allow AI fallback when no route matches"
-                onCheckedChange={(checked) =>
-                  toggleSetting("isAiEnabled", checked)
-                }
-              />
-              AI Responses
-            </div>
             <Button
               variant="outline"
               onClick={() => {
@@ -2116,7 +2180,7 @@ function FlowsBuilder() {
               {saveState === "saving" ? (
                 <Loader2 className="size-4 animate-spin" />
               ) : (
-                <Send className="size-4" />
+                <Save className="size-4" />
               )}
               Save draft
             </Button>
@@ -2173,16 +2237,23 @@ function FlowsBuilder() {
                   <button
                     key={item.type}
                     type="button"
-                    draggable={!isPublishedMode}
+                    draggable={
+                      !isPublishedMode && item.type !== "automatic_follow_up"
+                    }
                     onDragStart={(event) => {
                       if (isPublishedMode) return;
+                      if (item.type === "automatic_follow_up") return;
                       event.dataTransfer.setData(
                         "application/whatching-block",
                         item.type
                       );
                       event.dataTransfer.effectAllowed = "move";
                     }}
-                    onClick={() => addBlock(item.type)}
+                    onClick={() =>
+                      item.type === "automatic_follow_up"
+                        ? addAutomaticFollowUp()
+                        : addBlock(item.type)
+                    }
                     className={cn(
                       "flex w-full items-start gap-2.5 rounded-xl border bg-white p-2.5 text-left shadow-xs transition hover:border-primary/40 hover:bg-primary/5",
                       isPublishedMode
@@ -2343,6 +2414,7 @@ function FlowsBuilder() {
             openMediaPicker={(type, target = { kind: "node" }) =>
               setMediaPicker({ open: true, type, target })
             }
+            openLocationPicker={() => setLocationPickerOpen(true)}
             status={status}
           />
         </div>
@@ -2356,6 +2428,39 @@ function FlowsBuilder() {
           setMediaPicker((current) => ({ ...current, open }))
         }
         onSelect={selectMedia}
+      />
+      <LocationPickerDialog
+        open={locationPickerOpen}
+        onOpenChange={setLocationPickerOpen}
+        value={{
+          latitude: Number(selectedNode?.data.content.latitude) || undefined,
+          longitude: Number(selectedNode?.data.content.longitude) || undefined,
+          name: String(
+            selectedNode?.data.content.locationName ||
+              selectedNode?.data.content.name ||
+              ""
+          ),
+          address: String(
+            selectedNode?.data.content.locationAddress ||
+              selectedNode?.data.content.address ||
+              ""
+          )
+        }}
+        onSelect={(location) => {
+          if (!selectedNode) return;
+          updateNode(selectedNode.id, (data) => ({
+            ...data,
+            content: {
+              ...data.content,
+              latitude: location.latitude,
+              longitude: location.longitude,
+              name: location.name,
+              locationName: location.name,
+              address: location.address,
+              locationAddress: location.address
+            }
+          }));
+        }}
       />
       <FlowDiagramPreviewDialog
         open={flowPreviewOpen}
@@ -2380,6 +2485,7 @@ function PropertiesPanel({
   togglePreview,
   setDefaultNode,
   openMediaPicker,
+  openLocationPicker,
   status
 }: {
   open: boolean;
@@ -2398,6 +2504,7 @@ function PropertiesPanel({
     type: "IMAGE" | "DOCUMENT" | "VIDEO",
     target?: MediaPickerTarget
   ) => void;
+  openLocationPicker: () => void;
   status?: {
     defaultFlowReady?: boolean;
     optOutFlowReady?: boolean;
@@ -2533,6 +2640,89 @@ function PropertiesPanel({
           {previewOpen ? "Hide preview" : "Show preview"}
         </Button>
 
+        {Boolean(node.data.metadata?.automaticFollowUp) && (
+          <div className="space-y-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
+            <div className="flex items-center gap-2">
+              <Timer className="size-4 text-primary" />
+              <p className="text-sm font-semibold">Automatic follow-up</p>
+            </div>
+            <Field label="Send after">
+              <div className="grid grid-cols-[1fr_110px] gap-2">
+                <Input
+                  type="number"
+                  min={1}
+                  max={1380}
+                  value={Number(
+                    node.data.metadata?.followUpDelayMinutes || 60
+                  )}
+                  disabled={readOnly}
+                  onChange={(event) =>
+                    updateNode(node.id, (data) => ({
+                      ...data,
+                      metadata: {
+                        ...data.metadata,
+                        followUpDelayMinutes: Math.max(
+                          1,
+                          Math.min(1380, Number(event.target.value) || 1)
+                        )
+                      }
+                    }))
+                  }
+                />
+                <span className="flex items-center rounded-md border bg-white px-3 text-sm text-muted-foreground">
+                  minutes
+                </span>
+              </div>
+            </Field>
+            <Field label="Message type">
+              <Select
+                value={node.data.blockType}
+                disabled={readOnly}
+                onValueChange={(value) => {
+                  const blockType = value as BotBlockType;
+                  updateNode(node.id, (data) => ({
+                    ...data,
+                    blockType,
+                    content: defaultContent(blockType),
+                    actions: isRoutingBlock(blockType)
+                      ? blockType === "generic_carousel"
+                        ? getContentActions(
+                            blockType,
+                            defaultContent(blockType)
+                          )
+                        : [makeAction("Option 1")]
+                      : []
+                  }));
+                }}
+              >
+                <SelectTrigger className="w-full bg-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[
+                    ["text", "Text"],
+                    ["image", "Image"],
+                    ["video", "Video"],
+                    ["document", "Document"],
+                    ["buttons", "Buttons"],
+                    ["generic_carousel", "Generic carousel"],
+                    ["location", "Location"],
+                    ["contacts", "Contact"]
+                  ].map(([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <p className="text-xs leading-5 text-muted-foreground">
+              The saved node remains a normal {node.data.blockType} message.
+              Follow-up timing is attached to its source block.
+            </p>
+          </div>
+        )}
+
         <Field label="Block name">
           <Input
             value={node.data.label}
@@ -2549,7 +2739,8 @@ function PropertiesPanel({
           />
         </Field>
 
-        {node.data.triggerKey !== "OPT_IN" &&
+        {!node.data.metadata?.automaticFollowUp &&
+          node.data.triggerKey !== "OPT_IN" &&
           node.data.triggerKey !== "OPT_OUT" && (
             <div className="rounded-lg border bg-muted/30 p-3">
               <div className="flex items-center justify-between gap-3">
@@ -2751,6 +2942,14 @@ function PropertiesPanel({
             </Field>
             <Button
               type="button"
+              disabled={readOnly}
+              onClick={openLocationPicker}
+            >
+              <MapPin className="size-4" />
+              Choose on map
+            </Button>
+            <Button
+              type="button"
               variant="outline"
               disabled={readOnly}
               onClick={() => {
@@ -2834,6 +3033,31 @@ function PropertiesPanel({
                 <span className="font-semibold">country: IN</span>.
               </div>
             )}
+          </div>
+        )}
+
+        {node.data.blockType === "handoff_to_agent" && (
+          <div className="grid gap-3">
+            <Field label="Agent handoff message">
+              <Textarea
+                className="min-h-28"
+                value={String(content.message || content.text || "")}
+                disabled={readOnly}
+                maxLength={1024}
+                onChange={(event) =>
+                  updateContent({ message: event.target.value })
+                }
+              />
+            </Field>
+            <Field label="Handoff reason">
+              <Input
+                value={String(content.reason || "")}
+                disabled={readOnly}
+                onChange={(event) =>
+                  updateContent({ reason: event.target.value })
+                }
+              />
+            </Field>
           </div>
         )}
 
@@ -3326,8 +3550,7 @@ function ListSectionsEditor({
         <div>
           <p className="text-sm font-semibold">List sections and rows</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Meta supports {LIST_MAX_SECTIONS} sections and {LIST_MAX_ROWS} rows
-            total. Rows can include optional descriptions.
+            Sections organize the menu. Rows are the choices customers tap.
           </p>
         </div>
         <Button
@@ -3338,7 +3561,7 @@ function ListSectionsEditor({
           onClick={addSection}
         >
           <Plus className="size-4" />
-          Section
+          Add section
         </Button>
       </div>
 
@@ -3350,15 +3573,18 @@ function ListSectionsEditor({
       {sections.map((section, sectionIndex) => (
         <div
           key={sectionIndex}
-          className="space-y-3 rounded-lg bg-muted/30 p-3"
+          className="space-y-3 rounded-lg border bg-muted/20 p-3"
         >
-          <div className="flex items-start gap-2">
+          <div className="flex items-start justify-between gap-2 border-b pb-3">
             <div className="min-w-0 flex-1">
+              <Label className="mb-1.5 block text-xs">
+                Section {sectionIndex + 1} title
+              </Label>
               <Input
                 value={String(section.title || "")}
                 disabled={readOnly}
                 maxLength={LIST_SECTION_TITLE_MAX}
-                placeholder="Section title"
+                placeholder="Example: Services"
                 onChange={(event) =>
                   updateSection(sectionIndex, { title: event.target.value })
                 }
@@ -3376,7 +3602,7 @@ function ListSectionsEditor({
               disabled={readOnly || sections.length <= 1}
               onClick={() => removeSection(sectionIndex)}
             >
-              Remove
+              Remove section
             </Button>
           </div>
 
@@ -3390,21 +3616,12 @@ function ListSectionsEditor({
               return (
                 <div
                   key={`${replyId}-${rowIndex}`}
-                  className="space-y-2 rounded-md border bg-white p-2"
+                  className="space-y-3 rounded-md bg-white p-3 shadow-xs"
                 >
-                  <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-                    <Input
-                      value={String(row.title || row.label || "")}
-                      disabled={readOnly}
-                      maxLength={LIST_ROW_TITLE_MAX}
-                      placeholder="Row title"
-                      onChange={(event) =>
-                        updateRow(sectionIndex, rowIndex, {
-                          title: event.target.value,
-                          label: event.target.value
-                        })
-                      }
-                    />
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-semibold text-muted-foreground">
+                      Row {rowIndex + 1}
+                    </p>
                     <Button
                       type="button"
                       size="sm"
@@ -3413,28 +3630,44 @@ function ListSectionsEditor({
                       disabled={readOnly || totalRows <= 1}
                       onClick={() => removeRow(sectionIndex, rowIndex)}
                     >
-                      Remove
+                      Remove row
                     </Button>
                   </div>
-                  <p className="text-[11px] text-muted-foreground">
-                    {String(row.title || row.label || "").length}/
-                    {LIST_ROW_TITLE_MAX} characters
-                  </p>
-                  <Input
-                    value={String(row.description || "")}
-                    disabled={readOnly}
-                    maxLength={LIST_ROW_DESCRIPTION_MAX}
-                    placeholder="Optional row description"
-                    onChange={(event) =>
-                      updateRow(sectionIndex, rowIndex, {
-                        description: event.target.value
-                      })
-                    }
-                  />
-                  <p className="text-[11px] text-muted-foreground">
-                    {String(row.description || "").length}/
-                    {LIST_ROW_DESCRIPTION_MAX} characters
-                  </p>
+                  <div>
+                    <Label className="mb-1.5 block text-xs">Row title</Label>
+                    <Input
+                      value={String(row.title || row.label || "")}
+                      disabled={readOnly}
+                      maxLength={LIST_ROW_TITLE_MAX}
+                      placeholder="Example: Track my order"
+                      onChange={(event) =>
+                        updateRow(sectionIndex, rowIndex, {
+                          title: event.target.value,
+                          label: event.target.value
+                        })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <Label className="mb-1.5 block text-xs">
+                      Description <span className="font-normal">(optional)</span>
+                    </Label>
+                    <Input
+                      value={String(row.description || "")}
+                      disabled={readOnly}
+                      maxLength={LIST_ROW_DESCRIPTION_MAX}
+                      placeholder="Short detail shown below the row title"
+                      onChange={(event) =>
+                        updateRow(sectionIndex, rowIndex, {
+                          description: event.target.value
+                        })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <Label className="mb-1.5 block text-xs">
+                      When selected
+                    </Label>
                   <Select
                     value={actionType}
                     disabled={readOnly}
@@ -3459,11 +3692,7 @@ function ListSectionsEditor({
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground">
-                    {actionType === "go_to_trigger"
-                      ? "Output dot visible on canvas for this row"
-                      : "No output dot for this row"}
-                  </p>
+                  </div>
                 </div>
               );
             })}
@@ -3477,7 +3706,7 @@ function ListSectionsEditor({
             onClick={() => addRow(sectionIndex)}
           >
             <Plus className="size-4" />
-            Row
+            Add row to section {sectionIndex + 1}
           </Button>
         </div>
       ))}
