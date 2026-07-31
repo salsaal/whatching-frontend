@@ -1,6 +1,7 @@
 import {
   BarChart3,
   Check,
+  Clock3,
   Megaphone,
   Contact,
   CreditCard,
@@ -17,6 +18,7 @@ import {
   Settings,
   UserRound,
   Workflow,
+  X,
   Zap
 } from "lucide-react";
 import Image from "next/image";
@@ -87,12 +89,22 @@ const plans = [
     features: [
       "Bulk WhatsApp Messaging",
       "5,000 Subscribers",
-      "WhatsApp AI Agent",
-      "Drag & Drop Chatbot Builder",
-      "100,000 AI Message Tokens",
-      "2 Team Members",
       "0% Markup Fees",
-      "WhatsApp Forms"
+      "Owner + 2 Team Members",
+      "Role-Based Team Permissions",
+      "Drag & Drop Chatbot Builder",
+      "WhatsApp AI Agent",
+      "100,000 AI Message Tokens",
+      "Single Phone Number Integration",
+      "Coexistence with WhatsApp Business App",
+      "Messaging Template Management",
+      "Analytics Dashboard",
+      "Unlimited Free Incoming Conversations",
+      "Unlimited Chatbot Sessions",
+      "Multi Agent Shared Inbox",
+      "Automated Follow Up Bot",
+      "WhatsApp Chat Widget",
+      "Dedicated Customer Database"
     ]
   },
   {
@@ -105,12 +117,20 @@ const plans = [
     features: [
       "Includes all Basic features",
       "15,000 Subscribers",
+      "0% Markup Fees",
+      "Up to 2 Phone Numbers per Organization",
+      "Owner + 5 Team Members",
+      "Role-Based Team Permissions",
       "Unlimited AI Message Tokens",
-      "5 Team Members",
-      "Native WhatsApp Form Builder",
-      "Instagram Direct Message Flows",
-      "Accept Payments over WhatsApp",
-      "Role-Based Team Permissions"
+      "Coexistence with WhatsApp Business App",
+      "WhatsApp AI Agent",
+      'Remove "Powered by Whatching" Branding'
+    ],
+    comingSoon: [
+      "Instagram Automations",
+      "Drag & Drop Chatbot Builder for Instagram",
+      "Instagram AI Agent",
+      "Automated Instagram Comments Reply"
     ]
   },
   {
@@ -122,7 +142,7 @@ const plans = [
     features: [
       "Includes all Pro features",
       "High Volume Subscribers",
-      "Custom Business Logic",
+      "Any Custom Business Logic",
       "Unlimited Team Members",
       "More WhatsApp Numbers",
       "Dedicated Account Manager",
@@ -140,6 +160,7 @@ export default function AppLayout({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isPlansOpen, setIsPlansOpen] = useState(false);
   const [isLogoutOpen, setIsLogoutOpen] = useState(false);
+  const [planBannerDismissed, setPlanBannerDismissed] = useState(false);
   const logout = useAuthStore((state) => state.logout);
   const {
     activeOrganization,
@@ -211,8 +232,7 @@ export default function AppLayout({
   const currentPlan = activeOrganization?.planTier || "none";
   const isNoPlan = currentPlan === "none";
   const isTrialing = activeOrganization?.subscriptionStatus === "trialing";
-  const canStartTrial =
-    isNoPlan && !activeOrganization?.trialConsumedAt;
+  const canStartTrial = isNoPlan && !activeOrganization?.trialConsumedAt;
 
   useEffect(() => {
     if (organizationData?.data.organization) {
@@ -238,7 +258,12 @@ export default function AppLayout({
         const Icon = item.icon;
         const isActive =
           router.pathname === item.href ||
-          (item.href !== "/overview" && router.pathname.startsWith(item.href));
+          (item.href === "/settings" &&
+            router.pathname.startsWith("/settings/") &&
+            router.pathname !== "/settings/help") ||
+          (item.href !== "/overview" &&
+            item.href !== "/settings" &&
+            router.pathname.startsWith(`${item.href}/`));
 
         return (
           <Link
@@ -341,7 +366,12 @@ export default function AppLayout({
         <div className="relative flex h-18 items-center px-4">
           {/* Logo */}
           <div className="w-[150px] opacity-0 transition-opacity duration-200 group-hover/sidebar:opacity-100">
-            <Image src={assets.whatchingLogo} alt="Whatching" width={150} height={42} />
+            <Image
+              src={assets.whatchingLogo}
+              alt="Whatching"
+              width={150}
+              height={42}
+            />
           </div>
 
           {/* Icon */}
@@ -426,6 +456,36 @@ export default function AppLayout({
           </header>
         )}
 
+        {!hideHeader && isNoPlan && !planBannerDismissed && (
+          <div className="px-4 pt-3 sm:px-6 lg:px-8">
+            <div className="mx-auto flex max-w-7xl items-center gap-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+              <Zap className="size-4 shrink-0 text-amber-600" />
+              <p className="min-w-0 flex-1">
+                Choose a plan to unlock broadcasts, automation, analytics, and
+                team features.
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                className="h-8 shrink-0"
+                onClick={() => setIsPlansOpen(true)}
+              >
+                View plans
+              </Button>
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="size-8 shrink-0 text-amber-900"
+                tooltip="Dismiss"
+                onClick={() => setPlanBannerDismissed(true)}
+              >
+                <X className="size-4" />
+              </Button>
+            </div>
+          </div>
+        )}
+
         <main className={cn(fullBleed ? "p-0" : "px-4 py-6 sm:px-6 lg:px-8")}>
           {children}
         </main>
@@ -438,7 +498,8 @@ export default function AppLayout({
               Explore plans
             </DialogTitle>
             <DialogDescription>
-              Choose an infrastructure plan for this organisation.
+              Choose an infrastructure plan for this organisation. All listed
+              prices are inclusive of GST.
             </DialogDescription>
           </DialogHeader>
 
@@ -507,12 +568,12 @@ export default function AppLayout({
                         : isTrialing
                           ? `Subscribe to ${plan.name}`
                           : !isNoPlan
-                          ? currentPlan === "basic" && plan.id === "pro"
-                            ? "Upgrade plan"
-                            : `Downgrade to ${plan.name}`
-                          : canStartTrial
-                            ? "Start free trial"
-                            : "Get Started"}
+                            ? currentPlan === "basic" && plan.id === "pro"
+                              ? "Upgrade plan"
+                              : `Downgrade to ${plan.name}`
+                            : canStartTrial
+                              ? "Start free trial"
+                              : "Get Started"}
                   </Button>
 
                   <ul className="space-y-3">
@@ -523,6 +584,23 @@ export default function AppLayout({
                       </li>
                     ))}
                   </ul>
+                  {"comingSoon" in plan && plan.comingSoon?.length ? (
+                    <div className="mt-5 border-t pt-5">
+                      <p className="mb-3 text-sm font-semibold">
+                        Coming Pretty Soon
+                      </p>
+                      <ul className="space-y-3">
+                        {plan.comingSoon.map((feature) => (
+                          <li key={feature} className="flex gap-2 text-sm">
+                            <Clock3 className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                            <span className="text-muted-foreground">
+                              {feature}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
                 </div>
               );
             })}

@@ -15,7 +15,7 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import { parseAsString, useQueryState } from "nuqs";
 import { useEffect, useMemo, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import {
@@ -25,6 +25,7 @@ import {
   updateApprovedTemplate,
   updateDraftTemplate
 } from "@/client-api/functions/templates";
+import { getMediaById } from "@/client-api/functions/media";
 import { MediaAsset } from "@/client-api/types/media.type";
 import {
   CreateTemplatePayload,
@@ -238,8 +239,9 @@ export default function TemplateCreateForm({
   const [headerText, setHeaderText] = useState("");
   const [headerExampleUrl, setHeaderExampleUrl] = useState("");
   const [isLocationPickerOpen, setIsLocationPickerOpen] = useState(false);
-  const [pickedLocation, setPickedLocation] =
-    useState<PickedLocation | null>(null);
+  const [pickedLocation, setPickedLocation] = useState<PickedLocation | null>(
+    null
+  );
   const [selectedMediaId, setSelectedMediaId] = useState("");
   const [selectedMediaName, setSelectedMediaName] = useState("");
   const [selectedMediaUrl, setSelectedMediaUrl] = useState("");
@@ -262,6 +264,12 @@ export default function TemplateCreateForm({
   const [footerText, setFooterText] = useState("");
   const [actionMode, setActionMode] = useState<ActionMode>("NONE");
   const [buttons, setButtons] = useState<TemplateButton[]>([]);
+
+  const { data: selectedMediaData } = useQuery({
+    queryKey: ["media", selectedMediaId],
+    queryFn: () => getMediaById(selectedMediaId),
+    enabled: Boolean(selectedMediaId)
+  });
 
   const variables = useMemo(() => extractVariables(bodyText), [bodyText]);
   const previewBody = useMemo(
@@ -328,7 +336,8 @@ export default function TemplateCreateForm({
     setSelectedMediaName(
       header?.mediaId || initialTemplate.defaultMediaId ? "Linked media" : ""
     );
-    setSelectedMediaUrl(header?.example?.header_handle?.[0] || "");
+    const headerHandle = header?.example?.header_handle?.[0] || "";
+    setSelectedMediaUrl(/^https?:\/\//i.test(headerHandle) ? headerHandle : "");
     setBodyText(bodyTextValue);
     setFooterText(footer?.text || "");
     setButtons(
@@ -373,6 +382,13 @@ export default function TemplateCreateForm({
     });
     setBodyExamples(nextExamples);
   }, [initialTemplate, setCategory, setLanguage]);
+
+  useEffect(() => {
+    const media = selectedMediaData?.data.media;
+    if (!media || media._id !== selectedMediaId) return;
+    setSelectedMediaName(media.name);
+    setSelectedMediaUrl(media.cloudinaryUrl);
+  }, [selectedMediaData?.data.media, selectedMediaId]);
 
   const { mutate, isPending } = useMutation({
     mutationFn: createTemplate,
@@ -944,26 +960,44 @@ export default function TemplateCreateForm({
           {headerFormat !== "NONE" && headerFormat !== "TEXT" && (
             <div className="mt-4 rounded-sm border p-3">
               {["IMAGE", "VIDEO", "DOCUMENT"].includes(headerFormat) ? (
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-sm font-medium">
-                      {selectedMediaName || "No media selected"}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Select media from your organisation media library.
-                    </p>
+                <div className="space-y-3">
+                  {selectedMediaUrl && headerFormat === "IMAGE" && (
+                    <img
+                      src={selectedMediaUrl}
+                      alt={selectedMediaName || "Template header"}
+                      className="aspect-[1.91/1] w-full rounded-sm object-cover"
+                    />
+                  )}
+                  {selectedMediaUrl && headerFormat === "VIDEO" && (
+                    <video
+                      src={selectedMediaUrl}
+                      className="aspect-video w-full rounded-sm bg-black object-contain"
+                      controls
+                    />
+                  )}
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">
+                        {selectedMediaName || "No media selected"}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {selectedMediaId
+                          ? "This media is linked to the template."
+                          : "Select media from your organisation media library."}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={!canEditFields}
+                      onClick={() => {
+                        setCarouselMediaIndex(null);
+                        setIsMediaPickerOpen(true);
+                      }}
+                    >
+                      {selectedMediaId ? "Change media" : "Select media"}
+                    </Button>
                   </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={!canEditFields}
-                    onClick={() => {
-                      setCarouselMediaIndex(null);
-                      setIsMediaPickerOpen(true);
-                    }}
-                  >
-                    Select media
-                  </Button>
                 </div>
               ) : headerFormat === "LOCATION" ? (
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

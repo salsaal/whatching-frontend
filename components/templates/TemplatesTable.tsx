@@ -137,15 +137,17 @@ export default function TemplatesTable({
                       template.source !== "draft" && (
                         <Button
                           variant="ghost"
-                          size="icon"
-                          className="size-9 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                          tooltip="Link the required header media"
+                          size="sm"
+                          className="h-9 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          tooltip="Add the required media to this template"
+                          aria-label={`Add required media to ${template.name}`}
                           onClick={(event) => {
                             event.stopPropagation();
                             onLinkMedia?.(template);
                           }}
                         >
                           <ImagePlus className="size-4" />
+                          Add media
                         </Button>
                       )}
                     <Button

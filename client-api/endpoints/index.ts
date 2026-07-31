@@ -27,6 +27,10 @@ export const ORGANIZATION_ENDPOINTS = {
   WHATSAPP_PHONE_NUMBERS_SYNC: `${ORGANIZATIONS_BASE}/whatsapp/phone-numbers/sync`,
   WHATSAPP_PHONE_NUMBER: (phoneNumberRecordId: string) =>
     `${ORGANIZATIONS_BASE}/whatsapp/phone-numbers/${phoneNumberRecordId}`,
+  WHATSAPP_OUTBOUND_READINESS: (phoneNumberRecordId: string) =>
+    `${ORGANIZATIONS_BASE}/whatsapp/phone-numbers/${phoneNumberRecordId}/outbound-readiness`,
+  WHATSAPP_OUTBOUND_READINESS_TEST: (phoneNumberRecordId: string) =>
+    `${ORGANIZATIONS_BASE}/whatsapp/phone-numbers/${phoneNumberRecordId}/outbound-readiness/test`,
   WHATSAPP_PHONE_NUMBER_SET_DEFAULT: (phoneNumberRecordId: string) =>
     `${ORGANIZATIONS_BASE}/whatsapp/phone-numbers/${phoneNumberRecordId}/set-default`,
   WHATSAPP_PHONE_NUMBER_ACTIVATE: (phoneNumberRecordId: string) =>
@@ -37,6 +41,8 @@ export const ORGANIZATION_ENDPOINTS = {
   ADD_AGENT: `${ORGANIZATIONS_BASE}/add-agent`,
   TEAM_MEMBER: (membershipId: string) =>
     `${ORGANIZATIONS_BASE}/team/${membershipId}`,
+  TEAM_MEMBER_PERMISSIONS: (membershipId: string) =>
+    `${ORGANIZATIONS_BASE}/team/${membershipId}/permissions`,
   BILLING_START_TRIAL: `${ORGANIZATIONS_BASE}/billing/start-trial`,
   BILLING_SUBSCRIBE: `${ORGANIZATIONS_BASE}/billing/subscribe`,
   BILLING_CHANGE_PLAN: `${ORGANIZATIONS_BASE}/billing/change-plan`,
@@ -98,6 +104,8 @@ export const BROADCAST_ENDPOINTS = {
     `${ORGANIZATIONS_BASE}/broadcasts/${broadcastId}`,
   START: (broadcastId: string) =>
     `${ORGANIZATIONS_BASE}/broadcasts/${broadcastId}/start`,
+  MESSAGING_LIMIT_RETRY: (broadcastId: string) =>
+    `${ORGANIZATIONS_BASE}/broadcasts/${broadcastId}/messaging-limit-retry`,
   CANCEL: (broadcastId: string) =>
     `${ORGANIZATIONS_BASE}/broadcasts/${broadcastId}/cancel`
 };

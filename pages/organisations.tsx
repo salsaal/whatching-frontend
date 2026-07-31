@@ -310,7 +310,7 @@ function Organisations() {
               <Input
                 value={name}
                 onChange={(event) => setName(event.target.value)}
-                placeholder="Zaki GYM"
+                placeholder="Acme Support"
                 autoFocus
               />
             </div>

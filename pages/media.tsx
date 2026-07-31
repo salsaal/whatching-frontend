@@ -69,6 +69,12 @@ const getUploadFileType = (file: File): MediaFileType => {
   return "document";
 };
 
+const allowedImageTypes = new Set([
+  "image/jpeg",
+  "image/jpg",
+  "image/png"
+]);
+
 export default function MediaPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [activeTab, setActiveTab] = useState<MediaFileType>("image");
@@ -136,6 +142,18 @@ export default function MediaPage() {
 
   const handleUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
+    const unsupportedImage = files.find(
+      (file) =>
+        file.type.startsWith("image/") && !allowedImageTypes.has(file.type)
+    );
+
+    if (unsupportedImage) {
+      setUploadError(
+        `${unsupportedImage.name} is not supported. Images must be JPEG, JPG, or PNG.`
+      );
+      event.target.value = "";
+      return;
+    }
 
     const oversizedFile = files.find((file) => {
       const fileType = getUploadFileType(file);
@@ -220,7 +238,7 @@ export default function MediaPage() {
               ref={fileInputRef}
               type="file"
               multiple
-              accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
+              accept=".jpeg,.jpg,.png,video/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
               className="hidden"
               onChange={handleUpload}
             />

@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   Loader2,
   Mail,
+  Pencil,
   Phone,
   ShieldCheck,
   Trash2,
@@ -17,7 +18,8 @@ import { toast } from "sonner";
 import {
   addAgent,
   getTeam,
-  removeTeamMember
+  removeTeamMember,
+  updateTeamMemberPermissions
 } from "@/client-api/functions/organizations";
 import {
   PermissionAccessLevel,
@@ -87,9 +89,8 @@ function AgentForm({
   const [countryCode, setCountryCode] = useState("+91");
   const [countryIso, setCountryIso] = useState("IN");
   const [password, setPassword] = useState("");
-  const [permissionAccess, setPermissionAccess] = useState<PermissionAccessState>(
-    defaultPermissionAccess
-  );
+  const [permissionAccess, setPermissionAccess] =
+    useState<PermissionAccessState>(defaultPermissionAccess);
 
   useEffect(() => {
     setPermissionAccess(defaultPermissionAccess || {});
@@ -286,11 +287,115 @@ function TeamSkeleton() {
   );
 }
 
+function PermissionEditor({
+  member,
+  permissionSchema,
+  isSaving,
+  onSave
+}: {
+  member: TeamMember;
+  permissionSchema: PermissionGroup[];
+  isSaving: boolean;
+  onSave: (permissionAccess: PermissionAccessState) => void;
+}) {
+  const [permissionAccess, setPermissionAccess] =
+    useState<PermissionAccessState>(member.permissionAccess || {});
+
+  useEffect(() => {
+    setPermissionAccess(member.permissionAccess || {});
+  }, [member]);
+
+  return (
+    <div className="space-y-4">
+      <div className="grid max-h-[55vh] gap-4 overflow-y-auto pr-1 sm:grid-cols-2">
+        {permissionSchema.map((group) => {
+          const levels = group.accessControl?.levels || [];
+          const capabilities = group.capabilities || [];
+          return (
+            <div
+              key={group.key}
+              className="space-y-3 rounded-md border bg-white p-3"
+            >
+              <div>
+                <p className="text-sm font-medium">{group.label}</p>
+                {group.description && (
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {group.description}
+                  </p>
+                )}
+              </div>
+              {levels.length > 0 && (
+                <select
+                  className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                  value={permissionAccess[group.key]?.access || "none"}
+                  onChange={(event) =>
+                    setPermissionAccess((current) => ({
+                      ...current,
+                      [group.key]: {
+                        access: event.target.value as PermissionAccessLevel,
+                        capabilities:
+                          current[group.key]?.capabilities || {}
+                      }
+                    }))
+                  }
+                >
+                  {levels.map((level) => (
+                    <option key={level.value} value={level.value}>
+                      {level.label}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {capabilities.map((capability) => (
+                <label
+                  key={capability.key}
+                  className="flex cursor-pointer items-center gap-2 rounded-sm p-1.5 text-sm hover:bg-muted/50"
+                >
+                  <Checkbox
+                    checked={Boolean(
+                      permissionAccess[group.key]?.capabilities?.[
+                        capability.key
+                      ]
+                    )}
+                    onCheckedChange={() =>
+                      setPermissionAccess((current) => ({
+                        ...current,
+                        [group.key]: {
+                          access: current[group.key]?.access || "none",
+                          capabilities: {
+                            ...current[group.key]?.capabilities,
+                            [capability.key]: !current[group.key]
+                              ?.capabilities?.[capability.key]
+                          }
+                        }
+                      }))
+                    }
+                  />
+                  <span>{capability.label}</span>
+                </label>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+      <Button
+        type="button"
+        className="w-full"
+        isLoading={isSaving}
+        onClick={() => onSave(permissionAccess)}
+      >
+        Save permissions
+      </Button>
+    </div>
+  );
+}
+
 export default function AgentsSettingsPage() {
   const activeOrganization = useOrganizationStore(
     (state) => state.activeOrganization
   );
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<TeamMember | null>(null);
   const [removeTarget, setRemoveTarget] = useState<TeamMember | null>(null);
 
   const { data, isLoading, refetch } = useQuery({
@@ -331,6 +436,15 @@ export default function AgentsSettingsPage() {
       await refetch();
     }
   });
+  const { mutate: savePermissions, isPending: isSavingPermissions } =
+    useMutation({
+      mutationFn: updateTeamMemberPermissions,
+      onSuccess: async () => {
+        toast.success("Agent permissions updated.");
+        setEditTarget(null);
+        await refetch();
+      }
+    });
 
   return (
     <AppLayout>
@@ -430,42 +544,54 @@ export default function AgentsSettingsPage() {
                       )}
                     </div>
                     {member.role === "agent" &&
-                      member.effectivePermissionGrants?.length ? (
-                        <div className="mt-2 flex flex-wrap gap-1.5">
-                          {member.effectivePermissionGrants
-                            .slice(0, 5)
-                            .map((permission) => (
-                              <Badge
-                                key={permission}
-                                variant="outline"
-                                className="text-[10px]"
-                              >
-                                {permission}
-                              </Badge>
-                            ))}
-                          {member.effectivePermissionGrants.length > 5 && (
-                            <Badge variant="outline" className="text-[10px]">
-                              +{member.effectivePermissionGrants.length - 5}
+                    member.effectivePermissionGrants?.length ? (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {member.effectivePermissionGrants
+                          .slice(0, 5)
+                          .map((permission) => (
+                            <Badge
+                              key={permission}
+                              variant="outline"
+                              className="text-[10px]"
+                            >
+                              {permission}
                             </Badge>
-                          )}
-                        </div>
-                      ) : null}
+                          ))}
+                        {member.effectivePermissionGrants.length > 5 && (
+                          <Badge variant="outline" className="text-[10px]">
+                            +{member.effectivePermissionGrants.length - 5}
+                          </Badge>
+                        )}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
-                <Button
-                  variant="outline"
-                  className="text-destructive hover:text-destructive"
-                  disabled={member.role === "owner"}
-                  tooltip={
-                    member.role === "owner"
-                      ? "The organization owner cannot be removed"
-                      : "Remove this member's organization access"
-                  }
-                  onClick={() => setRemoveTarget(member)}
-                >
-                  <Trash2 className="size-4" />
-                  Remove
-                </Button>
+                <div className="flex gap-2">
+                  {member.role === "agent" && (
+                    <Button
+                      variant="outline"
+                      tooltip="Edit this agent's permissions"
+                      onClick={() => setEditTarget(member)}
+                    >
+                      <Pencil className="size-4" />
+                      Edit
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    className="text-destructive hover:text-destructive"
+                    disabled={member.role === "owner"}
+                    tooltip={
+                      member.role === "owner"
+                        ? "The organization owner cannot be removed"
+                        : "Remove this member's organization access"
+                    }
+                    onClick={() => setRemoveTarget(member)}
+                  >
+                    <Trash2 className="size-4" />
+                    Remove
+                  </Button>
+                </div>
               </div>
             ))}
           </section>
@@ -487,6 +613,33 @@ export default function AgentsSettingsPage() {
             permissionSchema={permissionSchema}
             defaultPermissionAccess={defaultPermissionAccess}
           />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(editTarget)}
+        onOpenChange={(open) => !open && setEditTarget(null)}
+      >
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              Edit permissions for {editTarget?.userId?.name || "agent"}
+            </DialogTitle>
+          </DialogHeader>
+          {editTarget && (
+            <PermissionEditor
+              key={editTarget._id}
+              member={editTarget}
+              permissionSchema={permissionSchema}
+              isSaving={isSavingPermissions}
+              onSave={(permissionAccess) =>
+                savePermissions({
+                  membershipId: editTarget._id,
+                  permissionAccess
+                })
+              }
+            />
+          )}
         </DialogContent>
       </Dialog>
 

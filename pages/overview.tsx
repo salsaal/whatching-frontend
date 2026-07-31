@@ -2,26 +2,38 @@ import {
   AlertCircle,
   Bot,
   CheckCircle2,
+  CreditCard,
   Loader2,
   RefreshCw,
   Send,
   Smartphone,
   Users,
-  Wallet
+  Gauge
 } from "lucide-react";
 import { useRouter } from "next/router";
 import Script from "next/script";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import {
   connectMetaEmbeddedSignup,
-  syncMetaIntegration
+  getWhatsAppOutboundReadiness,
+  getWhatsAppPhoneNumbers,
+  syncMetaIntegration,
+  testWhatsAppOutboundReadiness
 } from "@/client-api/functions/organizations";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
+} from "@/components/ui/dialog";
 import AppLayout from "@/layouts/AppLayout";
 import WhatsAppNumbersPanel from "@/components/whatsapp/WhatsAppNumbersPanel";
+import { buildMetaPaymentMethodUrl } from "@/lib/metaBilling";
 import { useOrganizationStore } from "@/stores/organizationStore";
 
 interface EmbeddedSignupSession {
@@ -145,6 +157,10 @@ export default function OverviewPage() {
   const [isFacebookSdkReady, setIsFacebookSdkReady] = useState(false);
   const [signupSession, setSignupSession] =
     useState<EmbeddedSignupSession | null>(null);
+  const [isPaymentPromptOpen, setIsPaymentPromptOpen] = useState(false);
+  const [paymentMethodUrl, setPaymentMethodUrl] = useState<string | null>(null);
+  const [verificationPhoneNumberRecordId, setVerificationPhoneNumberRecordId] =
+    useState("");
   const [lastSignupError, setLastSignupError] = useState("");
   const pendingAuthResponseRef = useRef<FacebookAuthResponse | null>(null);
   const signupSessionRef = useRef<EmbeddedSignupSession | null>(null);
@@ -162,6 +178,85 @@ export default function OverviewPage() {
   const isMetaReady =
     integration?.state === "ready" ||
     activeOrganization?.metaConfig?.status === "ready";
+  const { data: phoneNumbersData } = useQuery({
+    queryKey: ["whatsapp-phone-numbers", activeOrgId],
+    queryFn: getWhatsAppPhoneNumbers,
+    enabled: Boolean(activeOrgId && isMetaReady),
+    refetchOnMount: "always"
+  });
+  const verificationNumber = useMemo(() => {
+    const phoneNumbers = phoneNumbersData?.data.phoneNumbers || [];
+    return (
+      phoneNumbers.find(
+        (number) =>
+          (number._id || number.id) === verificationPhoneNumberRecordId
+      ) ||
+      phoneNumbers.find(
+        (number) =>
+          number.phoneNumberId === integration?.phoneNumberId &&
+          number.status === "active" &&
+          number.connectionStatus === "ready"
+      ) ||
+      phoneNumbers.find(
+        (number) =>
+          number.isDefault &&
+          number.status === "active" &&
+          number.connectionStatus === "ready"
+      ) ||
+      phoneNumbers.find(
+        (number) =>
+          number.status === "active" && number.connectionStatus === "ready"
+      )
+    );
+  }, [
+    integration?.phoneNumberId,
+    phoneNumbersData?.data.phoneNumbers,
+    verificationPhoneNumberRecordId
+  ]);
+  const readinessRecordId =
+    verificationNumber?._id || verificationNumber?.id || "";
+  const {
+    data: readinessData,
+    isLoading: isReadinessLoading,
+    refetch: refetchReadiness
+  } = useQuery({
+    queryKey: ["whatsapp-outbound-readiness", readinessRecordId],
+    queryFn: () => getWhatsAppOutboundReadiness(readinessRecordId),
+    enabled: Boolean(readinessRecordId),
+    refetchInterval: 4000,
+    refetchOnWindowFocus: true
+  });
+  const readiness = readinessData?.data.readiness;
+  const canStartBroadcast =
+    readinessData?.data.canStartBroadcast === true ||
+    readiness?.status === "ready";
+  const effectivePaymentMethodUrl =
+    (readinessData?.data.blocker?.details?.paymentSetupUrl as
+      | string
+      | undefined) ||
+    paymentMethodUrl ||
+    buildMetaPaymentMethodUrl({
+      businessId: activeOrganization?.metaConfig?.clientBusinessId,
+      wabaId:
+        verificationNumber?.wabaId || activeOrganization?.metaConfig?.wabaId
+    });
+
+  const { mutate: runReadinessTest, isPending: isTestingReadiness } =
+    useMutation({
+      mutationFn: () => {
+        if (!readinessRecordId) {
+          throw new Error("No active WhatsApp number is available.");
+        }
+        return testWhatsAppOutboundReadiness(readinessRecordId);
+      },
+      onSuccess: async (response) => {
+        toast.success(
+          response.message ||
+            "Broadcast verification started. Waiting for Meta's delivery status."
+        );
+        await refetchReadiness();
+      }
+    });
 
   const updateIntegrationFromOrganization = (
     organization: typeof activeOrganization
@@ -184,6 +279,14 @@ export default function OverviewPage() {
       mutationFn: connectMetaEmbeddedSignup,
       onSuccess: async (data) => {
         const organization = data.data.organization;
+        const connectedPhoneNumberId = signupSessionRef.current?.phoneNumberId;
+        const connectedPaymentUrl = buildMetaPaymentMethodUrl({
+          businessId:
+            organization.metaConfig?.clientBusinessId ||
+            signupSessionRef.current?.businessId,
+          wabaId:
+            organization.metaConfig?.wabaId || signupSessionRef.current?.wabaId
+        });
 
         upsertOrganization(organization);
         updateIntegrationFromOrganization(organization);
@@ -191,6 +294,11 @@ export default function OverviewPage() {
         signupSessionRef.current = null;
         pendingAuthResponseRef.current = null;
         toast.success("Meta integration connected");
+        toast.info(
+          "We initiated broadcast verification. Whatching will create a one-time template and send it to the configured test number to verify payment setup. The test costs approximately Rs. 0.115."
+        );
+        setPaymentMethodUrl(connectedPaymentUrl);
+        setIsPaymentPromptOpen(Boolean(connectedPaymentUrl));
         if (data.data.subscribedAppsWarning) {
           toast.warning(data.data.subscribedAppsWarning);
         }
@@ -206,6 +314,30 @@ export default function OverviewPage() {
             queryKey: ["whatsapp-phone-numbers", activeOrgId]
           })
         ]);
+
+        try {
+          const phoneNumbers = await getWhatsAppPhoneNumbers();
+          const connectedNumber = phoneNumbers.data.phoneNumbers.find(
+            (number) => number.phoneNumberId === connectedPhoneNumberId
+          );
+          if (connectedNumber) {
+            const connectedRecordId = connectedNumber._id || connectedNumber.id;
+            setVerificationPhoneNumberRecordId(connectedRecordId);
+            const verification =
+              await testWhatsAppOutboundReadiness(connectedRecordId);
+            await queryClient.invalidateQueries({
+              queryKey: ["whatsapp-outbound-readiness", connectedRecordId]
+            });
+            toast.info(
+              verification.message ||
+                "Broadcast verification is waiting for Meta's delivery status."
+            );
+          }
+        } catch {
+          toast.warning(
+            "The number is connected, but broadcast verification could not start yet. Add the payment method and retry from Broadcasts."
+          );
+        }
       },
       onError: () => {
         pendingAuthResponseRef.current = null;
@@ -279,9 +411,13 @@ export default function OverviewPage() {
       icon: Bot
     },
     {
-      label: "Wallet balance",
-      value: `Rs. ${activeOrganization?.walletBalance || 0}`,
-      icon: Wallet
+      label: "Daily message limit",
+      value:
+        activeOrganization?.metaConfig?.messagingLimitCount?.toLocaleString(
+          "en-IN"
+        ) || "Not available",
+      icon: Gauge,
+      tooltip: "Business-initiated conversations in a rolling 24-hour period."
     },
     {
       label: "Templates queued",
@@ -430,7 +566,7 @@ export default function OverviewPage() {
                 {activeOrganization?.name || "Organisation overview"}
               </h1>
               <p className="mt-2 text-sm text-muted-foreground">
-                Track your WhatsApp workspace activity, usage, wallet, and setup
+                Track your WhatsApp workspace activity, usage, limits, and setup
                 progress.
               </p>
             </div>
@@ -469,7 +605,14 @@ export default function OverviewPage() {
               >
                 <div className="flex items-center justify-between gap-4">
                   <div>
-                    <p className="text-sm text-muted-foreground">
+                    <p
+                      className={
+                        stat.tooltip
+                          ? "cursor-help text-sm text-muted-foreground underline decoration-dotted"
+                          : "text-sm text-muted-foreground"
+                      }
+                      title={stat.tooltip}
+                    >
                       {stat.label}
                     </p>
                     <p className="mt-2 font-heading text-2xl font-semibold">
@@ -606,11 +749,147 @@ export default function OverviewPage() {
             </div>
           </div>
         </section>
+        {isMetaReady && verificationNumber && (
+          <section className="rounded-lg border bg-white p-5 shadow-xs">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  {canStartBroadcast ? (
+                    <CheckCircle2 className="size-5 text-primary" />
+                  ) : (
+                    <Send className="size-5 text-amber-600" />
+                  )}
+                  <h2 className="font-heading text-lg font-semibold">
+                    Broadcast setup
+                  </h2>
+                </div>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {canStartBroadcast
+                    ? "This WhatsApp number is verified and ready to create broadcasts."
+                    : readinessData?.data.blocker?.message ||
+                      readiness?.failureMessage ||
+                      "Verify one paid business message before broadcasts are enabled. The test costs approximately Rs. 0.115."}
+                </p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Status:{" "}
+                  {isReadinessLoading
+                    ? "checking"
+                    : String(readiness?.status || "not tested").replace(
+                        /_/g,
+                        " "
+                      )}
+                </p>
+              </div>
+              {!canStartBroadcast && (
+                <div className="flex shrink-0 flex-wrap gap-2">
+                  {effectivePaymentMethodUrl && (
+                    <Button variant="outline" asChild>
+                      <a
+                        href={effectivePaymentMethodUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex gap-2 items-center"
+                      >
+                        <CreditCard className="size-4" />
+                        Add payment method
+                      </a>
+                    </Button>
+                  )}
+                  {readiness?.status !== "testing" && (
+                    <Button
+                      disabled={isTestingReadiness}
+                      onClick={() => runReadinessTest()}
+                    >
+                      {isTestingReadiness ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <RefreshCw className="size-4" />
+                      )}
+                      {readiness?.status === "template_pending"
+                        ? "Check approval and continue"
+                        : "Verify broadcasts"}
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
+          </section>
+        )}
         <WhatsAppNumbersPanel
           onAddNumber={startEmbeddedSignup}
           addingNumber={isConnectingMeta}
         />
       </div>
+      <Dialog open={isPaymentPromptOpen} onOpenChange={setIsPaymentPromptOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add your WhatsApp payment method</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm leading-6 text-muted-foreground">
+            <p>
+              Your number is connected. Whatching creates a one-time system
+              template and sends it to the configured test recipient. It costs
+              approximately Rs. 0.115.
+            </p>
+            <div className="rounded-sm bg-muted/60 p-3">
+              <p className="font-medium capitalize text-foreground">
+                {isReadinessLoading
+                  ? "Checking broadcast setup"
+                  : canStartBroadcast
+                    ? "Broadcasts are ready"
+                    : String(readiness?.status || "not tested").replace(
+                        /_/g,
+                        " "
+                      )}
+              </p>
+              {!canStartBroadcast && (
+                <p className="mt-1 text-xs leading-5">
+                  {readinessData?.data.blocker?.message ||
+                    readiness?.failureMessage ||
+                    "Add the payment method, then run verification. Broadcast creation unlocks after Meta confirms the test message."}
+                </p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsPaymentPromptOpen(false)}
+            >
+              Later
+            </Button>
+            {!canStartBroadcast && effectivePaymentMethodUrl && (
+              <Button asChild>
+                <a
+                  href={effectivePaymentMethodUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex gap-2 items-center"
+                >
+                  <CreditCard className="size-4" />
+                  Add payment method
+                </a>
+              </Button>
+            )}
+            {/* {!canStartBroadcast && readiness?.status !== "testing" && (
+              <Button
+                disabled={!readinessRecordId || isTestingReadiness}
+                onClick={() => runReadinessTest()}
+              >
+                {isTestingReadiness ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="size-4" />
+                )}
+                {readiness?.status === "template_pending"
+                  ? "Check approval"
+                  : "Verify broadcasts"}
+              </Button>
+            )} */}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }

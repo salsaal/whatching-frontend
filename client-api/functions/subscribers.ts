@@ -27,8 +27,7 @@ export const getAllSubscribers = async (
       ...(params.page ? { page: params.page } : {}),
       ...(params.limit ? { limit: params.limit } : {}),
       ...(params.q?.trim() ? { q: params.q.trim() } : {}),
-      ...(params.broadcastEligibility &&
-      params.broadcastEligibility !== "all"
+      ...(params.broadcastEligibility && params.broadcastEligibility !== "all"
         ? { broadcastEligibility: params.broadcastEligibility }
         : {})
     }

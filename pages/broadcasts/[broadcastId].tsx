@@ -8,6 +8,7 @@ import {
   Clock3,
   Eye,
   MessageCircle,
+  RotateCcw,
   Send,
   ShieldAlert,
   Users,
@@ -15,9 +16,13 @@ import {
 } from "lucide-react";
 import { useMemo } from "react";
 import { useRouter } from "next/router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
-import { getBroadcastById } from "@/client-api/functions/broadcasts";
+import {
+  consentToBroadcastMessagingLimitRetry,
+  getBroadcastById
+} from "@/client-api/functions/broadcasts";
 import { BroadcastStats } from "@/client-api/types/broadcasts.type";
 import { Button } from "@/components/ui/button";
 import {
@@ -54,6 +59,8 @@ const statusClasses: Record<string, string> = {
   draft: "bg-muted text-muted-foreground",
   scheduled: "bg-blue-50 text-blue-700",
   processing: "bg-amber-50 text-amber-700",
+  in_progress: "bg-amber-50 text-amber-700",
+  paused_limit: "bg-orange-50 text-orange-700",
   completed: "bg-primary/10 text-primary",
   failed: "bg-destructive/10 text-destructive",
   canceled: "bg-muted text-muted-foreground"
@@ -137,6 +144,7 @@ const getTimelineRows = (broadcast: {
 
 export default function BroadcastMetricsPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const broadcastId = Array.isArray(router.query.broadcastId)
     ? router.query.broadcastId[0]
     : router.query.broadcastId;
@@ -145,7 +153,17 @@ export default function BroadcastMetricsPage() {
     queryKey: ["broadcast", broadcastId],
     queryFn: () => getBroadcastById(broadcastId as string),
     enabled: Boolean(broadcastId),
-    refetchOnMount: "always"
+    refetchOnMount: "always",
+    refetchInterval: 3000
+  });
+  const { mutate: retryUnfinished, isPending: isRetrying } = useMutation({
+    mutationFn: consentToBroadcastMessagingLimitRetry,
+    onSuccess: async (response) => {
+      toast.success(response.message);
+      await queryClient.invalidateQueries({
+        queryKey: ["broadcast", broadcastId]
+      });
+    }
   });
 
   const broadcast = data?.data.broadcast;
@@ -210,6 +228,21 @@ export default function BroadcastMetricsPage() {
                     : ""}
                 </p>
               )}
+              {(broadcast?.lastError ||
+                broadcast?.messagingLimitRetry?.lastFailureMessage) && (
+                <div className="mt-4 max-w-3xl rounded-sm border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">
+                  <p className="font-medium">Broadcast error</p>
+                  <p className="mt-1">
+                    {broadcast.lastError ||
+                      broadcast.messagingLimitRetry?.lastFailureMessage}
+                  </p>
+                  {broadcast.messagingLimitRetry?.lastFailureCode && (
+                    <p className="mt-1 text-xs">
+                      Code: {broadcast.messagingLimitRetry.lastFailureCode}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="flex items-center gap-3">
@@ -227,6 +260,21 @@ export default function BroadcastMetricsPage() {
                   {broadcast.status}
                 </span>
               )}
+              {broadcast?.status === "paused_limit" &&
+                broadcast.messagingLimitRetry?.status ===
+                  "awaiting_consent" && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={isRetrying}
+                    onClick={() => retryUnfinished(broadcast._id)}
+                  >
+                    <RotateCcw
+                      className={cn("size-4", isRetrying && "animate-spin")}
+                    />
+                    Retry unfinished
+                  </Button>
+                )}
             </div>
           </div>
         </section>
@@ -399,6 +447,7 @@ export default function BroadcastMetricsPage() {
                         <TableHead>Sent</TableHead>
                         <TableHead>Delivered</TableHead>
                         <TableHead>Read</TableHead>
+                        <TableHead>Failure reason</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -441,6 +490,27 @@ export default function BroadcastMetricsPage() {
                           <TableCell>
                             {formatDate(
                               recipient.readAt || recipient.messageId?.readAt
+                            )}
+                          </TableCell>
+                          <TableCell className="max-w-72">
+                            {recipient.errorMessage ||
+                            recipient.messageId?.errorMessage ? (
+                              <div className="text-sm text-destructive">
+                                <p>
+                                  {recipient.errorMessage ||
+                                    recipient.messageId?.errorMessage}
+                                </p>
+                                {(recipient.errorCode ||
+                                  recipient.messageId?.errorCode) && (
+                                  <p className="mt-1 text-xs">
+                                    Code:{" "}
+                                    {recipient.errorCode ||
+                                      recipient.messageId?.errorCode}
+                                  </p>
+                                )}
+                              </div>
+                            ) : (
+                              "-"
                             )}
                           </TableCell>
                         </TableRow>

@@ -90,7 +90,7 @@ export default function CustomApp({ Component, pageProps }: AppProps) {
       {/* <SessionProvider session={pageProps.session}> */}
       <QueryClientProvider client={queryClient}>
         <NuqsAdapter>
-          <Toaster richColors position="bottom-left" />
+          <Toaster richColors position="bottom-right" />
           <RouteGuard>
             <Component {...pageProps} />
           </RouteGuard>

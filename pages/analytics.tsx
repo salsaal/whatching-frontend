@@ -183,7 +183,10 @@ export default function AnalyticsPage() {
               {cardItems.map((item) => {
                 const Icon = item.icon;
                 return (
-                  <div key={item.label} className="rounded-lg bg-white p-5 shadow-xs">
+                  <div
+                    key={item.label}
+                    className="rounded-lg bg-white p-5 shadow-xs"
+                  >
                     <div className="flex items-center justify-between">
                       <p className="text-sm text-muted-foreground">
                         {item.label}
@@ -234,7 +237,10 @@ export default function AnalyticsPage() {
             </section>
 
             <section className="grid gap-4 lg:grid-cols-3">
-              <DonutCard title="Conversation status" data={conversationStatus} />
+              <DonutCard
+                title="Conversation status"
+                data={conversationStatus}
+              />
               <DonutCard title="Bot vs agent" data={messageSources} />
               <DonutCard title="Channel distribution" data={channels} />
             </section>
@@ -334,7 +340,9 @@ export default function AnalyticsPage() {
                       {dashboard.recentBroadcasts.map((broadcast) => (
                         <tr key={broadcast.id} className="border-t">
                           <td className="py-3 font-medium">{broadcast.name}</td>
-                          <td className="py-3 capitalize">{broadcast.status}</td>
+                          <td className="py-3 capitalize">
+                            {broadcast.status}
+                          </td>
                           <td className="py-3">{broadcast.stats.delivered}</td>
                           <td className="py-3">{broadcast.stats.read}</td>
                           <td className="py-3 text-right text-destructive">
@@ -355,10 +363,24 @@ export default function AnalyticsPage() {
                   </h2>
                 </div>
                 <div className="space-y-3 text-sm">
-                  <HealthRow label="WhatsApp" value={dashboard.integrationHealth.whatsapp.status} />
-                  <HealthRow label="Active numbers" value={dashboard.integrationHealth.whatsapp.activePhoneNumbers} />
-                  <HealthRow label="Instagram" value={dashboard.integrationHealth.instagram.status} />
-                  <HealthRow label="Alerts" value={dashboard.integrationHealth.alerts.length} />
+                  <HealthRow
+                    label="WhatsApp"
+                    value={dashboard.integrationHealth.whatsapp.status}
+                  />
+                  <HealthRow
+                    label="Active numbers"
+                    value={
+                      dashboard.integrationHealth.whatsapp.activePhoneNumbers
+                    }
+                  />
+                  <HealthRow
+                    label="Instagram"
+                    value={dashboard.integrationHealth.instagram.status}
+                  />
+                  <HealthRow
+                    label="Alerts"
+                    value={dashboard.integrationHealth.alerts.length}
+                  />
                 </div>
               </div>
             </section>
@@ -385,7 +407,12 @@ function DonutCard({
         <div className="h-36">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
-              <Pie data={data} innerRadius={42} outerRadius={62} dataKey="value">
+              <Pie
+                data={data}
+                innerRadius={42}
+                outerRadius={62}
+                dataKey="value"
+              >
                 {data.map((entry, index) => (
                   <Cell key={entry.name} fill={colors[index % colors.length]} />
                 ))}
@@ -396,7 +423,10 @@ function DonutCard({
         </div>
         <div className="space-y-2">
           {data.map((item, index) => (
-            <div key={item.name} className="flex items-center justify-between gap-2 text-sm">
+            <div
+              key={item.name}
+              className="flex items-center justify-between gap-2 text-sm"
+            >
               <span className="inline-flex items-center gap-2 text-muted-foreground">
                 <span
                   className="size-2 rounded-full"
@@ -404,7 +434,12 @@ function DonutCard({
                 />
                 {item.name}
               </span>
-              <span className={cn("font-medium", total === 0 && "text-muted-foreground")}>
+              <span
+                className={cn(
+                  "font-medium",
+                  total === 0 && "text-muted-foreground"
+                )}
+              >
                 {numberFormat.format(item.value)}
               </span>
             </div>

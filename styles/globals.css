@@ -1,5 +1,9 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+
+.gm-style img {
+  max-width: none;
+}
 /*
   ---break---
 */
@@ -21,6 +25,9 @@
 
 .font-body {
   font-family: var(--font-inter), sans-serif;
+}
+.overflow-wrap-anywhere {
+  overflow-wrap: anywhere;
 }
 /*
   The default border color has changed to `currentcolor` in Tailwind CSS v4,
@@ -66,8 +73,16 @@
 
 .auth-gradient-field {
   background:
-    radial-gradient(circle at 38% 44%, rgba(110, 231, 183, 0.28), transparent 34%),
-    radial-gradient(circle at 68% 68%, rgba(20, 184, 166, 0.2), transparent 36%),
+    radial-gradient(
+      circle at 38% 44%,
+      rgba(110, 231, 183, 0.28),
+      transparent 34%
+    ),
+    radial-gradient(
+      circle at 68% 68%,
+      rgba(20, 184, 166, 0.2),
+      transparent 36%
+    ),
     linear-gradient(135deg, #021c18 0%, #064e3b 42%, #0f766e 100%);
   background-size: 180% 180%;
   animation: auth-gradient-drift 18s ease-in-out infinite;

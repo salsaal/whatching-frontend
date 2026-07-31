@@ -4,11 +4,15 @@ import { createJSONStorage, persist } from "zustand/middleware";
 export interface OrganizationMetaConfig {
   status?: "pending" | "ready" | "failed" | string;
   businessAccountName?: string;
+  clientBusinessId?: string;
   connectedAt?: string;
   displayPhoneNumber?: string;
   lastHealthCheckAt?: string;
   phoneNumberId?: string;
   wabaId?: string;
+  messagingLimitTier?: string;
+  messagingLimitCount?: number;
+  messagingLimitScope?: "business_portfolio";
 }
 
 export interface OrganizationUsage {

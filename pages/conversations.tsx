@@ -47,6 +47,7 @@ import {
   updateConversationStatus
 } from "@/client-api/functions/chat";
 import { getTeam } from "@/client-api/functions/organizations";
+import { getBotCanvasTriggers } from "@/client-api/functions/bot";
 import {
   getAllSubscribers,
   updateSubscriber
@@ -1049,6 +1050,9 @@ export default function ConversationsPage() {
   const [selectedContactId, setSelectedContactId] = useState("");
   const [contactSearch, setContactSearch] = useState("");
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const detailsCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
   const [templateMediaPickerOpen, setTemplateMediaPickerOpen] = useState(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [templateVariables, setTemplateVariables] = useState<
@@ -1153,17 +1157,16 @@ export default function ConversationsPage() {
       }),
     enabled: Boolean(activeOrganization?._id && isTemplateModalOpen)
   });
-
   const {
     data: conversationsData,
     isFetching: isConversationsFetching,
     isLoading: isConversationsLoading
   } = useQuery({
-      queryKey: ["conversations", activeOrganization?._id, queryParams],
-      queryFn: () => getConversations(queryParams),
-      enabled: Boolean(activeOrganization?._id),
-      staleTime: 30_000
-    });
+    queryKey: ["conversations", activeOrganization?._id, queryParams],
+    queryFn: () => getConversations(queryParams),
+    enabled: Boolean(activeOrganization?._id),
+    staleTime: 30_000
+  });
 
   useEffect(() => {
     setPage(1);
@@ -1176,7 +1179,9 @@ export default function ConversationsPage() {
     setLoadedConversations((current) => {
       if (page === 1) return nextPageConversations;
 
-      const byId = new Map(current.map((conversation) => [conversation._id, conversation]));
+      const byId = new Map(
+        current.map((conversation) => [conversation._id, conversation])
+      );
       nextPageConversations.forEach((conversation) => {
         byId.set(conversation._id, conversation);
       });
@@ -1521,6 +1526,15 @@ export default function ConversationsPage() {
     [selectedTemplate]
   );
   const selectedTemplateMediaHeader = getTemplateMediaHeader(selectedTemplate);
+  const personalizedTemplateBody = useMemo(
+    () =>
+      (selectedTemplateBody?.text || "").replace(
+        /{{(\d+)}}/g,
+        (placeholder, key: string) =>
+          templateVariables[key]?.trim() || placeholder
+      ),
+    [selectedTemplateBody?.text, templateVariables]
+  );
   const messages = useMemo(
     () => messagesData?.data.messages || [],
     [messagesData]
@@ -1552,6 +1566,20 @@ export default function ConversationsPage() {
         ? selectedPhoneNumberId
         : undefined
       : conversationSenderPhoneNumberId;
+  const { data: templateTriggersData } = useQuery({
+    queryKey: ["bot-canvas-triggers", templateSenderPhoneNumberId],
+    queryFn: () => getBotCanvasTriggers(templateSenderPhoneNumberId as string),
+    enabled: Boolean(
+      isTemplateModalOpen &&
+        templateSenderPhoneNumberId &&
+        selectedTemplateQuickReplies.length
+    ),
+    refetchOnMount: "always"
+  });
+  const templateTriggerKeys = useMemo(
+    () => new Set(templateTriggersData?.data?.triggerKeys || []),
+    [templateTriggersData?.data?.triggerKeys]
+  );
   const replyWindow = contextConversation?.replyWindow;
   const canReply = Boolean(replyWindow?.isOpen && selectedId);
   const isInstagramConversation = contextConversation?.channel === "instagram";
@@ -1695,6 +1723,21 @@ export default function ConversationsPage() {
       );
       return;
     }
+    const quickReplyRoutes = selectedTemplateQuickReplies.map(
+      ({ button, index }) => ({
+        index,
+        label: button.text || `Quick reply ${index + 1}`,
+        triggerKey: templateButtonPayloads[String(index)] || ""
+      })
+    );
+    const invalidQuickReplyRoute = quickReplyRoutes.find(
+      (route) =>
+        !route.triggerKey || !templateTriggerKeys.has(route.triggerKey)
+    );
+    if (invalidQuickReplyRoute) {
+      toast.error("Assign every quick reply to an active flow trigger.");
+      return;
+    }
 
     sendTemplateMutate({
       ...(templateMode === "contact" && selectedContact
@@ -1706,9 +1749,10 @@ export default function ConversationsPage() {
       components: buildTemplateComponents({
         template: selectedTemplate,
         variables: templateVariables,
-        buttonPayloads: templateButtonPayloads,
+        buttonPayloads: {},
         headerMedia: templateHeaderMedia
-      })
+      }),
+      ...(quickReplyRoutes.length ? { quickReplyRoutes } : {})
     });
   };
 
@@ -2171,7 +2215,20 @@ export default function ConversationsPage() {
           </main>
 
           <aside
-            onMouseEnter={() => setDetailsOpen(true)}
+            onMouseEnter={() => {
+              if (detailsCloseTimerRef.current) {
+                clearTimeout(detailsCloseTimerRef.current);
+              }
+              setDetailsOpen(true);
+            }}
+            onMouseLeave={() => {
+              detailsCloseTimerRef.current = setTimeout(() => {
+                const openDropdown = document.querySelector(
+                  '[role="listbox"][data-state="open"], [role="menu"][data-state="open"]'
+                );
+                if (!openDropdown) setDetailsOpen(false);
+              }, 250);
+            }}
             className={cn(
               "relative z-20 hidden min-h-0 justify-self-end overflow-hidden border-l bg-white shadow-sm transition-[width] duration-200 xl:flex",
               detailsOpen ? "w-[340px]" : "w-14"
@@ -2572,10 +2629,7 @@ export default function ConversationsPage() {
                 </SelectTrigger>
                 <SelectContent>
                   {approvedTemplates.map((template) => (
-                    <SelectItem
-                      key={template._id}
-                      value={template._id}
-                    >
+                    <SelectItem key={template._id} value={template._id}>
                       {template.name} · {template.language}
                     </SelectItem>
                   ))}
@@ -2659,7 +2713,7 @@ export default function ConversationsPage() {
                   )}
                   <div className="space-y-2 rounded-lg bg-white p-3 text-sm">
                     <p className="whitespace-pre-wrap font-medium">
-                      {selectedTemplateBody?.text || "No body text configured."}
+                      {personalizedTemplateBody || "No body text configured."}
                     </p>
                     {selectedTemplateFooter?.text && (
                       <p className="border-t pt-2 text-xs text-muted-foreground">
@@ -2679,10 +2733,9 @@ export default function ConversationsPage() {
                       </div>
                     ) : null}
                   </div>
-                </div>
 
                 {selectedTemplateVariables.length ? (
-                  <div className="space-y-3">
+                  <div className="mt-4 space-y-3 border-t pt-4">
                     <div>
                       <Label>Body variables</Label>
                       <p className="text-sm text-muted-foreground">
@@ -2711,12 +2764,12 @@ export default function ConversationsPage() {
                 ) : null}
 
                 {selectedTemplateQuickReplies.length ? (
-                  <div className="space-y-3">
+                  <div className="mt-4 space-y-3 border-t pt-4">
                     <div>
-                      <Label>Quick reply payloads</Label>
+                      <Label>Quick reply triggers</Label>
                       <p className="text-sm text-muted-foreground">
-                        Optional payloads are sent when the user taps a quick
-                        reply button.
+                        Choose the active flow trigger to run when the user taps
+                        each quick reply.
                       </p>
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2">
@@ -2731,22 +2784,44 @@ export default function ConversationsPage() {
                               index {index}
                             </span>
                           </Label>
-                          <Input
+                          <Select
                             value={templateButtonPayloads[String(index)] || ""}
                             disabled={isSendingTemplate}
-                            placeholder="Optional payload"
-                            onChange={(event) =>
+                            onValueChange={(value) =>
                               setTemplateButtonPayloads((current) => ({
                                 ...current,
-                                [String(index)]: event.target.value
+                                [String(index)]: value
                               }))
                             }
-                          />
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue
+                                placeholder={
+                                  templateSenderPhoneNumberId
+                                    ? "Choose flow trigger"
+                                    : "Select sender first"
+                                }
+                              />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {(templateTriggersData?.data?.triggers || []).map(
+                                (trigger) => (
+                                  <SelectItem
+                                    key={trigger.triggerKey}
+                                    value={trigger.triggerKey}
+                                  >
+                                    {trigger.name} · {trigger.triggerKey}
+                                  </SelectItem>
+                                )
+                              )}
+                            </SelectContent>
+                          </Select>
                         </div>
                       ))}
                     </div>
                   </div>
                 ) : null}
+                </div>
               </>
             )}
           </div>

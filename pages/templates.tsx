@@ -331,7 +331,7 @@ export default function TemplatesPage() {
                       })
                     }
                     className={cn(
-                      "inline-flex h-10 shrink-0 cursor-pointer items-center gap-2 rounded-sm px-3 text-sm font-medium text-muted-foreground transition hover:-translate-y-0.5 hover:bg-accent hover:text-accent-foreground",
+                      "inline-flex h-10 shrink-0 cursor-pointer items-center gap-2 rounded-sm px-3 text-sm font-medium text-muted-foreground transition hover:bg-accent hover:text-accent-foreground",
                       active && "bg-primary/10 text-primary shadow-xs"
                     )}
                   >

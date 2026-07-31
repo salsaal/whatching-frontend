@@ -2,6 +2,7 @@ import api from "../axiosInstance";
 import { BROADCAST_ENDPOINTS } from "../endpoints";
 import {
   BroadcastResponse,
+  BroadcastRetryResponse,
   BroadcastListParams,
   BroadcastsResponse,
   CreateBroadcastPayload,
@@ -57,6 +58,16 @@ export const cancelBroadcast = async (
 ): Promise<ApiResponse> => {
   const res = await api.post<ApiResponse>(
     BROADCAST_ENDPOINTS.CANCEL(broadcastId)
+  );
+  return res.data;
+};
+
+export const consentToBroadcastMessagingLimitRetry = async (
+  broadcastId: string
+): Promise<BroadcastRetryResponse> => {
+  const res = await api.post<BroadcastRetryResponse>(
+    BROADCAST_ENDPOINTS.MESSAGING_LIMIT_RETRY(broadcastId),
+    { consent: true }
   );
   return res.data;
 };

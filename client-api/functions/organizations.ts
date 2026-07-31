@@ -13,6 +13,7 @@ import {
   ChangePlanResponse,
   OrganizationResponse,
   OrganizationsResponse,
+  PermissionAccessState,
   RequestCoexistenceContactSyncPayload,
   CreateSupportRequestPayload,
   StartTrialResponse,
@@ -21,7 +22,8 @@ import {
   SubscribeResponse,
   TeamResponse,
   WhatsAppPhoneNumberResponse,
-  WhatsAppPhoneNumbersResponse
+  WhatsAppPhoneNumbersResponse,
+  WhatsAppOutboundReadinessResponse
 } from "../types/organizations.type";
 
 export const getMyOrganizations = async (): Promise<OrganizationsResponse> => {
@@ -112,6 +114,26 @@ export const getWhatsAppPhoneNumbers =
     return res.data;
   };
 
+export const getWhatsAppOutboundReadiness = async (
+  phoneNumberRecordId: string
+): Promise<WhatsAppOutboundReadinessResponse> => {
+  const res = await api.get<WhatsAppOutboundReadinessResponse>(
+    ORGANIZATION_ENDPOINTS.WHATSAPP_OUTBOUND_READINESS(phoneNumberRecordId)
+  );
+  return res.data;
+};
+
+export const testWhatsAppOutboundReadiness = async (
+  phoneNumberRecordId: string
+): Promise<WhatsAppOutboundReadinessResponse> => {
+  const res = await api.post<WhatsAppOutboundReadinessResponse>(
+    ORGANIZATION_ENDPOINTS.WHATSAPP_OUTBOUND_READINESS_TEST(
+      phoneNumberRecordId
+    )
+  );
+  return res.data;
+};
+
 export const syncWhatsAppPhoneNumbers =
   async (): Promise<WhatsAppPhoneNumbersResponse> => {
     const res = await api.post<WhatsAppPhoneNumbersResponse>(
@@ -185,6 +207,19 @@ export const addAgent = async (
 
 export const removeTeamMember = async (membershipId: string): Promise<void> => {
   await api.delete(ORGANIZATION_ENDPOINTS.TEAM_MEMBER(membershipId));
+};
+
+export const updateTeamMemberPermissions = async ({
+  membershipId,
+  permissionAccess
+}: {
+  membershipId: string;
+  permissionAccess: PermissionAccessState;
+}): Promise<void> => {
+  await api.patch(
+    ORGANIZATION_ENDPOINTS.TEAM_MEMBER_PERMISSIONS(membershipId),
+    { permissionAccess }
+  );
 };
 
 export const purchaseSubscription = async (payload: {

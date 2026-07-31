@@ -36,8 +36,7 @@ export default function HelpPage() {
   const activeOrganization = useOrganizationStore(
     (state) => state.activeOrganization
   );
-  const [category, setCategory] =
-    useState<SupportRequestCategory>("technical");
+  const [category, setCategory] = useState<SupportRequestCategory>("technical");
   const [priority, setPriority] = useState<SupportRequestPriority>("normal");
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
@@ -85,7 +84,9 @@ export default function HelpPage() {
           </div>
           <div>
             <p className="text-sm font-medium text-primary">Settings</p>
-            <h1 className="font-heading text-3xl font-semibold">Help & support</h1>
+            <h1 className="font-heading text-3xl font-semibold">
+              Help & support
+            </h1>
             <p className="mt-1 text-sm text-muted-foreground">
               Send a support request and track its status.
             </p>
@@ -160,7 +161,9 @@ export default function HelpPage() {
           </form>
 
           <section className="rounded-lg bg-white p-5 shadow-xs">
-            <h2 className="font-heading text-lg font-semibold">Recent tickets</h2>
+            <h2 className="font-heading text-lg font-semibold">
+              Recent tickets
+            </h2>
             <div className="mt-4 space-y-3">
               {isLoading ? (
                 Array.from({ length: 3 }).map((_, index) => (

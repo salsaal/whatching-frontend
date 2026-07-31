@@ -303,14 +303,10 @@ export default function FlowsPage() {
               );
               const detail = canvasDetailById.get(canvas._id);
               const nodeCount =
-                canvas.draftState?.nodes?.length ||
-                canvas.publishedState?.nodes?.length ||
-                detail?.draftState?.nodes?.length ||
-                detail?.publishedState?.nodes?.length ||
-                (canvas as { canvas?: BotCanvasRecord }).canvas?.draftState
-                  ?.nodes?.length ||
+                canvas.publishedState?.nodes?.length ??
+                detail?.publishedState?.nodes?.length ??
                 (canvas as { canvas?: BotCanvasRecord }).canvas?.publishedState
-                  ?.nodes?.length ||
+                  ?.nodes?.length ??
                 0;
               return (
                 <Card

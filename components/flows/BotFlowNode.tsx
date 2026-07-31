@@ -24,8 +24,13 @@ import {
   Video
 } from "lucide-react";
 
-import { BotAction, BotBlockType } from "@/client-api/types/bot.type";
+import {
+  BotAction,
+  BotBlockType,
+  BotCanvasNodeContent
+} from "@/client-api/types/bot.type";
 import { Badge } from "@/components/ui/badge";
+import { WhatsAppFlowBlockPreview } from "@/components/flows/FlowBlockPreview";
 import { cn } from "@/lib/utils";
 
 export interface BotFlowNodeData extends Record<string, unknown> {
@@ -33,6 +38,7 @@ export interface BotFlowNodeData extends Record<string, unknown> {
   triggerKey: string;
   blockType: BotBlockType;
   actions: BotAction[];
+  content?: BotCanvasNodeContent;
   metadata?: Record<string, unknown>;
   locked?: boolean;
   invalid?: boolean;
@@ -75,10 +81,8 @@ const labelByType: Record<BotBlockType, string> = {
 
 function BotFlowNode({ id, data, selected }: NodeProps<BotFlowReactNode>) {
   const updateNodeInternals = useUpdateNodeInternals();
-  const isAutomaticFollowUp = Boolean(data.metadata?.automaticFollowUp);
-  const Icon = isAutomaticFollowUp
-    ? Timer
-    : iconByType[data.blockType] || Bot;
+  const hasAutomaticFollowUp = Boolean(data.metadata?.automaticFollowUp);
+  const Icon = iconByType[data.blockType] || Bot;
   const isDefaultNode = Boolean(data.metadata?.isDefault);
   const outputActions = useMemo(
     () => data.actions.filter((action) => action.type === "go_to_trigger"),
@@ -93,6 +97,43 @@ function BotFlowNode({ id, data, selected }: NodeProps<BotFlowReactNode>) {
     updateNodeInternals(id);
   }, [id, outputHandleKey, updateNodeInternals]);
 
+  if (
+    (data.blockType === "buttons" || data.blockType === "list") &&
+    data.content
+  ) {
+    return (
+      <div
+        className={cn(
+          "relative w-[320px] rounded-xl transition",
+          selected && "ring-2 ring-primary/30",
+          data.invalid && "ring-2 ring-destructive/30"
+        )}
+      >
+        {hasAutomaticFollowUp && (
+          <div
+            className="absolute -right-2 -top-2 z-20 flex size-7 items-center justify-center rounded-full border-2 border-white bg-primary text-white shadow-sm"
+            title="Automatic follow-up configured"
+          >
+            <Timer className="size-3.5" />
+          </div>
+        )}
+        <Handle
+          id="in"
+          type="target"
+          position={Position.Left}
+          className="!left-[-1px] !size-3.5 !border-2 !border-white !bg-primary !shadow-sm"
+        />
+        <WhatsAppFlowBlockPreview
+          blockType={data.blockType}
+          content={data.content}
+          actions={data.actions}
+          showClose={false}
+          showRouteHandles
+        />
+      </div>
+    );
+  }
+
   return (
     <div
       className={cn(
@@ -102,6 +143,14 @@ function BotFlowNode({ id, data, selected }: NodeProps<BotFlowReactNode>) {
         data.invalid && "border-destructive ring-2 ring-destructive/15"
       )}
     >
+      {hasAutomaticFollowUp && (
+        <div
+          className="absolute -right-2 -top-2 z-20 flex size-7 items-center justify-center rounded-full border-2 border-white bg-primary text-white shadow-sm"
+          title="Automatic follow-up configured"
+        >
+          <Timer className="size-3.5" />
+        </div>
+      )}
       {isDefaultNode && (
         <div className="absolute left-1/2 top-0 z-10 -translate-x-1/2 -translate-y-1/2 rounded-full border border-primary bg-primary px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white shadow-sm">
           Default
@@ -127,9 +176,7 @@ function BotFlowNode({ id, data, selected }: NodeProps<BotFlowReactNode>) {
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             <Badge variant="outline" className="text-[10px]">
-              {isAutomaticFollowUp
-                ? `Follow-up · ${labelByType[data.blockType]}`
-                : labelByType[data.blockType]}
+              {labelByType[data.blockType]}
             </Badge>
           </div>
         </div>

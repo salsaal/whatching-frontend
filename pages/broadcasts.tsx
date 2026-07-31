@@ -4,9 +4,11 @@ import {
   CalendarClock,
   CalendarIcon,
   Clock,
+  CreditCard,
   Eye,
   Megaphone,
   Plus,
+  RotateCcw,
   Search,
   Send,
   XCircle
@@ -18,12 +20,17 @@ import { toast } from "sonner";
 
 import {
   cancelBroadcast,
+  consentToBroadcastMessagingLimitRetry,
   createBroadcast,
   getAllBroadcasts,
   getBroadcastById,
   startBroadcast
 } from "@/client-api/functions/broadcasts";
 import { getBotCanvasTriggers } from "@/client-api/functions/bot";
+import {
+  getWhatsAppOutboundReadiness,
+  testWhatsAppOutboundReadiness
+} from "@/client-api/functions/organizations";
 import { getAllSubscribers, getTags } from "@/client-api/functions/subscribers";
 import { getAllTemplates } from "@/client-api/functions/templates";
 import {
@@ -77,8 +84,15 @@ import {
   SelectValue
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import AppLayout from "@/layouts/AppLayout";
+import {
+  hasBroadcastRetryPreference,
+  setBroadcastRetryPreference
+} from "@/lib/broadcastRetryPreference";
+import { buildMetaPaymentMethodUrl } from "@/lib/metaBilling";
 import { cn } from "@/lib/utils";
+import { useOrganizationStore } from "@/stores/organizationStore";
 
 const formatDate = (date?: string | null) =>
   date
@@ -117,6 +131,8 @@ const statusClasses: Record<string, string> = {
   draft: "bg-muted text-muted-foreground",
   scheduled: "bg-blue-50 text-blue-700",
   processing: "bg-amber-50 text-amber-700",
+  in_progress: "bg-amber-50 text-amber-700",
+  paused_limit: "bg-orange-50 text-orange-700",
   completed: "bg-primary/10 text-primary",
   failed: "bg-destructive/10 text-destructive",
   canceled: "bg-muted text-muted-foreground"
@@ -231,6 +247,9 @@ const buildBroadcastComponents = (
 
 export default function BroadcastsPage() {
   const router = useRouter();
+  const activeOrganization = useOrganizationStore(
+    (state) => state.activeOrganization
+  );
   const [query, setQuery] = useState("");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [selectedBroadcastId, setSelectedBroadcastId] = useState("");
@@ -254,6 +273,28 @@ export default function BroadcastsPage() {
     []
   );
   const [subscriberSearch, setSubscriberSearch] = useState("");
+  const [retryOnMessagingLimit, setRetryOnMessagingLimit] = useState(true);
+  const paymentMethodUrl = buildMetaPaymentMethodUrl({
+    businessId: activeOrganization?.metaConfig?.clientBusinessId,
+    wabaId: effectiveNumber?.wabaId || activeOrganization?.metaConfig?.wabaId
+  });
+  const senderRecordId = effectiveNumber?._id || effectiveNumber?.id || "";
+  const {
+    data: readinessData,
+    isLoading: isReadinessLoading,
+    refetch: refetchReadiness
+  } = useQuery({
+    queryKey: ["whatsapp-outbound-readiness", senderRecordId],
+    queryFn: () => getWhatsAppOutboundReadiness(senderRecordId),
+    enabled: Boolean(senderRecordId),
+    refetchInterval: 4000,
+    refetchOnWindowFocus: true
+  });
+  const canCreateBroadcast =
+    readinessData?.data.canStartBroadcast === true ||
+    readinessData?.data.readiness.status === "ready";
+  const readiness = readinessData?.data.readiness;
+  const readinessBlocker = readinessData?.data.blocker;
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["broadcasts", selectedPhoneNumberId],
@@ -263,7 +304,8 @@ export default function BroadcastsPage() {
           ? { phoneNumberId: selectedPhoneNumberId }
           : {})
       }),
-    refetchOnMount: "always"
+    refetchOnMount: "always",
+    refetchInterval: 5000
   });
   const { data: templatesData } = useQuery({
     queryKey: ["templates"],
@@ -294,7 +336,8 @@ export default function BroadcastsPage() {
     useQuery({
       queryKey: ["broadcast", selectedBroadcastId],
       queryFn: () => getBroadcastById(selectedBroadcastId),
-      enabled: Boolean(selectedBroadcastId)
+      enabled: Boolean(selectedBroadcastId),
+      refetchInterval: selectedBroadcastId ? 3000 : false
     });
 
   const broadcasts = useMemo(
@@ -337,6 +380,23 @@ export default function BroadcastsPage() {
     [selectedTemplate]
   );
   const bodyText = getTemplateBodyText(selectedTemplate);
+  const personalizedBodyText = useMemo(
+    () =>
+      bodyText.replace(/{{(\d+)}}/g, (placeholder, key: string) => {
+        const mapping = variableMappings[key] || defaultVariableMapping(key);
+        if (mapping.source === "literal") {
+          return mapping.literal.trim() || placeholder;
+        }
+        return (
+          mapping.fallback.trim() ||
+          subscriberFieldOptions.find((option) => option.value === mapping.path)
+            ?.label ||
+          mapping.path ||
+          placeholder
+        );
+      }),
+    [bodyText, variableMappings]
+  );
   const quickReplyButtons = useMemo(
     () =>
       getButtonsComponent(selectedTemplate?.components || [])
@@ -390,6 +450,10 @@ export default function BroadcastsPage() {
   const { mutate: createDraft, isPending: isCreating } = useMutation({
     mutationFn: createBroadcast,
     onSuccess: (response) => {
+      setBroadcastRetryPreference(
+        response.data.broadcast._id,
+        retryOnMessagingLimit
+      );
       toast.success("Broadcast draft created");
       setIsCreateOpen(false);
       setSelectedBroadcastId(response.data.broadcast._id);
@@ -400,9 +464,45 @@ export default function BroadcastsPage() {
       setAudienceMode("all");
       setSelectedTags([]);
       setSelectedSubscriberIds([]);
+      setRetryOnMessagingLimit(true);
       refetch();
     }
   });
+  const { mutate: runReadinessTest, isPending: isTestingReadiness } =
+    useMutation({
+      mutationFn: () => testWhatsAppOutboundReadiness(senderRecordId),
+      onSuccess: async (response) => {
+        toast.success(
+          response.message ||
+            "Broadcast verification started. Waiting for Meta's delivery status."
+        );
+        await refetchReadiness();
+      }
+    });
+  const { mutate: consentToRetry, isPending: isConsentingToRetry } =
+    useMutation({
+      mutationFn: consentToBroadcastMessagingLimitRetry,
+      onSuccess: async (response) => {
+        toast.success(response.message);
+        setBroadcastRetryPreference(response.data.broadcastId, false);
+        await Promise.all([refetch(), refetchSelectedBroadcast()]);
+      },
+      onError: (_error, broadcastId) => {
+        setBroadcastRetryPreference(broadcastId, false);
+      }
+    });
+
+  useEffect(() => {
+    const retryCandidate = broadcasts.find(
+      (broadcast) =>
+        broadcast.status === "paused_limit" &&
+        broadcast.messagingLimitRetry?.status === "awaiting_consent" &&
+        hasBroadcastRetryPreference(broadcast._id)
+    );
+    if (retryCandidate && !isConsentingToRetry) {
+      consentToRetry(retryCandidate._id);
+    }
+  }, [broadcasts, consentToRetry, isConsentingToRetry]);
 
   const { mutate: startSelected, isPending: isStarting } = useMutation({
     mutationFn: startBroadcast,
@@ -428,6 +528,10 @@ export default function BroadcastsPage() {
   const handleCreate = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
+    if (!canCreateBroadcast) {
+      toast.error("Complete outbound verification before creating broadcasts.");
+      return;
+    }
     if (!broadcastName.trim() || !templateId) {
       toast.error("Broadcast name and template are required");
       return;
@@ -436,8 +540,14 @@ export default function BroadcastsPage() {
       toast.error("Select the WhatsApp sender number");
       return;
     }
-    if (quickReplyButtons.length && senderTriggersData?.data && !senderTriggersData.data.triggers.length) {
-      toast.error("No flow triggers are available for the selected sender number");
+    if (
+      quickReplyButtons.length &&
+      senderTriggersData?.data &&
+      !senderTriggersData.data.triggers.length
+    ) {
+      toast.error(
+        "No flow triggers are available for the selected sender number"
+      );
       return;
     }
     const missingQuickReplyRoute = selectedQuickReplyRoutes.find(
@@ -518,11 +628,91 @@ export default function BroadcastsPage() {
               delivery.
             </p>
           </div>
-          <Button onClick={() => setIsCreateOpen(true)}>
-            <Plus className="size-4" />
-            New broadcast
-          </Button>
+          <div className="flex flex-row flex-wrap items-center gap-2">
+            {paymentMethodUrl ? (
+              <Button variant="outline" className="whitespace-nowrap" asChild>
+                <a
+                  href={paymentMethodUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex gap-2 items-center"
+                >
+                  <CreditCard className="size-4" />
+                  Add payment method
+                </a>
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                disabled
+                tooltip="Connect a WhatsApp Business account before adding its payment method"
+              >
+                <CreditCard className="size-4" />
+                Add payment method
+              </Button>
+            )}
+            {canCreateBroadcast && (
+              <Button onClick={() => setIsCreateOpen(true)}>
+                <Plus className="size-4" />
+                New broadcast
+              </Button>
+            )}
+          </div>
         </section>
+
+        {!canCreateBroadcast && senderRecordId && (
+          <section className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-semibold text-amber-950">
+                  {isReadinessLoading
+                    ? "Checking broadcast setup"
+                    : readiness?.status === "testing"
+                      ? "Broadcast verification pending"
+                      : readiness?.status === "template_pending"
+                        ? "Verification template awaiting approval"
+                        : "Complete broadcast setup"}
+                </p>
+                <p className="mt-1 max-w-3xl text-sm text-amber-900/80">
+                  {readinessBlocker?.message ||
+                    readiness?.failureMessage ||
+                    "We send a one-time test template to verify that this sender can start paid business messages. The test costs approximately Rs. 0.115."}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {paymentMethodUrl && (
+                  <Button variant="outline" asChild>
+                    <a
+                      href={paymentMethodUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex gap-2 items-center"
+                    >
+                      <CreditCard className="size-4" />
+                      Add payment method
+                    </a>
+                  </Button>
+                )}
+                {readiness?.status !== "testing" && (
+                  <Button
+                    disabled={isTestingReadiness}
+                    onClick={() => runReadinessTest()}
+                  >
+                    <RotateCcw
+                      className={cn(
+                        "size-4",
+                        isTestingReadiness && "animate-spin"
+                      )}
+                    />
+                    {readiness?.status === "template_pending"
+                      ? "Check approval and continue"
+                      : "Run verification"}
+                  </Button>
+                )}
+              </div>
+            </div>
+          </section>
+        )}
 
         <section className="rounded-lg bg-white p-4 shadow-xs">
           <div className="relative w-full lg:max-w-md">
@@ -560,7 +750,23 @@ export default function BroadcastsPage() {
                 <tbody>
                   {filteredBroadcasts.map((broadcast) => (
                     <tr key={broadcast._id} className="border-t">
-                      <td className="p-4 font-medium">{broadcast.name}</td>
+                      <td className="p-4">
+                        <p className="font-medium">{broadcast.name}</p>
+                        {(broadcast.lastError ||
+                          broadcast.messagingLimitRetry
+                            ?.lastFailureMessage) && (
+                          <p
+                            className="mt-1 max-w-64 truncate text-xs text-destructive"
+                            title={
+                              broadcast.lastError ||
+                              broadcast.messagingLimitRetry?.lastFailureMessage
+                            }
+                          >
+                            {broadcast.lastError ||
+                              broadcast.messagingLimitRetry?.lastFailureMessage}
+                          </p>
+                        )}
+                      </td>
                       <td className="p-4">{broadcast.template?.name || "-"}</td>
                       <td className="p-4">
                         <span
@@ -597,6 +803,19 @@ export default function BroadcastsPage() {
                           >
                             <Eye className="size-4" />
                           </Button>
+                          {broadcast.status === "paused_limit" &&
+                            broadcast.messagingLimitRetry?.status ===
+                              "awaiting_consent" && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                tooltip="Consent to retry unfinished recipients after Meta's recovery period"
+                                disabled={isConsentingToRetry}
+                                onClick={() => consentToRetry(broadcast._id)}
+                              >
+                                <RotateCcw className="size-4" />
+                              </Button>
+                            )}
                           {["draft", "scheduled", "processing"].includes(
                             broadcast.status
                           ) && (
@@ -657,7 +876,10 @@ export default function BroadcastsPage() {
                   </SelectTrigger>
                   <SelectContent>
                     {templates.map((template) => (
-                      <SelectItem key={template.templateId} value={template.templateId}>
+                      <SelectItem
+                        key={template.templateId}
+                        value={template.templateId}
+                      >
                         {template.name}
                       </SelectItem>
                     ))}
@@ -694,222 +916,231 @@ export default function BroadcastsPage() {
                 </div>
                 {bodyText && (
                   <div className="mt-3 rounded-md bg-white p-3 text-sm leading-6 text-muted-foreground shadow-xs">
-                    {bodyText}
+                    {personalizedBodyText}
                   </div>
                 )}
-              </div>
-            )}
+                {quickReplyButtons.length > 0 && (
+                  <div className="mt-4 border-t pt-4">
+                    <div className="mb-3">
+                      <p className="text-sm font-semibold">
+                        Quick reply triggers
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Choose the flow trigger for each quick reply in this
+                        broadcast. Triggers come from the selected sender
+                        number, with the organisation fallback used when no
+                        number-specific flow is assigned.
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      {quickReplyButtons.map(({ button, index }) => {
+                        const selectedTriggerKey =
+                          quickReplyRoutes[index] || "";
+                        const selectedTriggerMissing =
+                          selectedTriggerKey &&
+                          !senderTriggerKeys.has(selectedTriggerKey);
 
-            {quickReplyButtons.length > 0 && (
-              <div className="rounded-lg border p-4">
-                <div className="mb-3">
-                  <p className="text-sm font-semibold">
-                    Quick reply triggers
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Choose the flow trigger for each quick reply in this
-                    broadcast. Triggers come from the selected sender number,
-                    with the organisation fallback used when no number-specific
-                    flow is assigned.
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  {quickReplyButtons.map(({ button, index }) => {
-                    const selectedTriggerKey = quickReplyRoutes[index] || "";
-                    const selectedTriggerMissing =
-                      selectedTriggerKey &&
-                      !senderTriggerKeys.has(selectedTriggerKey);
-
-                    return (
-                      <div
-                        key={`${button.text}-${index}`}
-                        className="grid gap-2 rounded-md bg-muted/40 p-3 sm:grid-cols-[minmax(0,1fr)_minmax(220px,0.9fr)]"
-                      >
-                        <div>
-                          <Label>{button.text || `Quick reply ${index + 1}`}</Label>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            Button {index + 1}
-                          </p>
-                        </div>
-                        <Select
-                          value={selectedTriggerKey}
-                          onValueChange={(value) =>
-                            setQuickReplyRoutes((current) => ({
-                              ...current,
-                              [index]: value
-                            }))
-                          }
-                          disabled={!senderPhoneNumberId}
-                        >
-                          <SelectTrigger
-                            className={cn(
-                              "w-full bg-white",
-                              selectedTriggerMissing && "ring-2 ring-amber-400"
-                            )}
+                        return (
+                          <div
+                            key={`${button.text}-${index}`}
+                            className="grid gap-2 rounded-md bg-muted/40 p-3 sm:grid-cols-[minmax(0,1fr)_minmax(220px,0.9fr)]"
                           >
-                            <SelectValue
-                              placeholder={
-                                senderTriggersData
-                                  ? "Choose flow trigger"
-                                  : "Select sender first"
-                              }
-                            />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {selectedTriggerMissing && (
-                              <SelectItem value={selectedTriggerKey} disabled>
-                                {selectedTriggerKey} (unavailable)
-                              </SelectItem>
-                            )}
-                            {(senderTriggersData?.data?.triggers || []).map(
-                              (trigger) => (
-                                <SelectItem
-                                  key={trigger.triggerKey}
-                                  value={trigger.triggerKey}
-                                >
-                                  {trigger.name} · {trigger.triggerKey}
-                                </SelectItem>
-                              )
-                            )}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {bodyVariables.length > 0 && (
-              <div className="rounded-lg border p-4">
-                <div className="mb-3">
-                  <p className="text-sm font-semibold">Template variables</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Map each WhatsApp placeholder to subscriber data or a fixed
-                    value. The number of fields here must match the template.
-                  </p>
-                </div>
-                <div className="space-y-3">
-                  {bodyVariables.map((key) => {
-                    const mapping =
-                      variableMappings[key] || defaultVariableMapping(key);
-                    const sample = getTemplateBodyExample(
-                      selectedTemplate,
-                      key
-                    );
-
-                    return (
-                      <div key={key} className="rounded-md bg-muted/40 p-3">
-                        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                          <Label>{`{{${key}}}`}</Label>
-                          {sample && (
-                            <span className="text-xs text-muted-foreground">
-                              Sample: {sample}
-                            </span>
-                          )}
-                        </div>
-                        <div className="grid gap-2 lg:grid-cols-[180px_1fr_1fr]">
-                          <Select
-                            value={mapping.source}
-                            onValueChange={(value) =>
-                              setVariableMappings((current) => ({
-                                ...current,
-                                [key]: {
-                                  ...mapping,
-                                  source: value as BroadcastVariableSource,
-                                  path:
-                                    value === "subscriber_field"
-                                      ? "firstName"
-                                      : ""
-                                }
-                              }))
-                            }
-                          >
-                            <SelectTrigger className="w-full">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="subscriber_field">
-                                Subscriber field
-                              </SelectItem>
-                              <SelectItem value="metadata_field">
-                                Metadata field
-                              </SelectItem>
-                              <SelectItem value="literal">
-                                Fixed value
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
-
-                          {mapping.source === "subscriber_field" ? (
+                            <div>
+                              <Label>
+                                {button.text || `Quick reply ${index + 1}`}
+                              </Label>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                Button {index + 1}
+                              </p>
+                            </div>
                             <Select
-                              value={mapping.path || "firstName"}
+                              value={selectedTriggerKey}
                               onValueChange={(value) =>
-                                setVariableMappings((current) => ({
+                                setQuickReplyRoutes((current) => ({
                                   ...current,
-                                  [key]: { ...mapping, path: value }
+                                  [index]: value
                                 }))
                               }
+                              disabled={!senderPhoneNumberId}
                             >
-                              <SelectTrigger className="w-full">
-                                <SelectValue />
+                              <SelectTrigger
+                                className={cn(
+                                  "w-full bg-white",
+                                  selectedTriggerMissing &&
+                                    "ring-2 ring-amber-400"
+                                )}
+                              >
+                                <SelectValue
+                                  placeholder={
+                                    senderTriggersData
+                                      ? "Choose flow trigger"
+                                      : "Select sender first"
+                                  }
+                                />
                               </SelectTrigger>
                               <SelectContent>
-                                {subscriberFieldOptions.map((option) => (
+                                {selectedTriggerMissing && (
                                   <SelectItem
-                                    key={option.value}
-                                    value={option.value}
+                                    value={selectedTriggerKey}
+                                    disabled
                                   >
-                                    {option.label}
+                                    {selectedTriggerKey} (unavailable)
                                   </SelectItem>
-                                ))}
+                                )}
+                                {(senderTriggersData?.data?.triggers || []).map(
+                                  (trigger) => (
+                                    <SelectItem
+                                      key={trigger.triggerKey}
+                                      value={trigger.triggerKey}
+                                    >
+                                      {trigger.name} · {trigger.triggerKey}
+                                    </SelectItem>
+                                  )
+                                )}
                               </SelectContent>
                             </Select>
-                          ) : (
-                            <Input
-                              value={
-                                mapping.source === "literal"
-                                  ? mapping.literal
-                                  : mapping.path
-                              }
-                              placeholder={
-                                mapping.source === "literal"
-                                  ? "Fixed text"
-                                  : "metadata.path"
-                              }
-                              onChange={(event) =>
-                                setVariableMappings((current) => ({
-                                  ...current,
-                                  [key]: {
-                                    ...mapping,
-                                    ...(mapping.source === "literal"
-                                      ? { literal: event.target.value }
-                                      : { path: event.target.value })
-                                  }
-                                }))
-                              }
-                            />
-                          )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
-                          <Input
-                            value={mapping.fallback}
-                            placeholder="Fallback optional"
-                            disabled={mapping.source === "literal"}
-                            onChange={(event) =>
-                              setVariableMappings((current) => ({
-                                ...current,
-                                [key]: {
-                                  ...mapping,
-                                  fallback: event.target.value
+                {bodyVariables.length > 0 && (
+                  <div className="mt-4 border-t pt-4">
+                    <div className="mb-3">
+                      <p className="text-sm font-semibold">
+                        Template variables
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Map each WhatsApp placeholder to subscriber data or a
+                        fixed value. The number of fields here must match the
+                        template.
+                      </p>
+                    </div>
+                    <div className="space-y-3">
+                      {bodyVariables.map((key) => {
+                        const mapping =
+                          variableMappings[key] || defaultVariableMapping(key);
+                        const sample = getTemplateBodyExample(
+                          selectedTemplate,
+                          key
+                        );
+
+                        return (
+                          <div key={key} className="rounded-md bg-muted/40 p-3">
+                            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                              <Label>{`{{${key}}}`}</Label>
+                              {sample && (
+                                <span className="text-xs text-muted-foreground">
+                                  Sample: {sample}
+                                </span>
+                              )}
+                            </div>
+                            <div className="grid gap-2 lg:grid-cols-[180px_1fr_1fr]">
+                              <Select
+                                value={mapping.source}
+                                onValueChange={(value) =>
+                                  setVariableMappings((current) => ({
+                                    ...current,
+                                    [key]: {
+                                      ...mapping,
+                                      source: value as BroadcastVariableSource,
+                                      path:
+                                        value === "subscriber_field"
+                                          ? "firstName"
+                                          : ""
+                                    }
+                                  }))
                                 }
-                              }))
-                            }
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                              >
+                                <SelectTrigger className="w-full">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="subscriber_field">
+                                    Subscriber field
+                                  </SelectItem>
+                                  <SelectItem value="metadata_field">
+                                    Metadata field
+                                  </SelectItem>
+                                  <SelectItem value="literal">
+                                    Fixed value
+                                  </SelectItem>
+                                </SelectContent>
+                              </Select>
+
+                              {mapping.source === "subscriber_field" ? (
+                                <Select
+                                  value={mapping.path || "firstName"}
+                                  onValueChange={(value) =>
+                                    setVariableMappings((current) => ({
+                                      ...current,
+                                      [key]: { ...mapping, path: value }
+                                    }))
+                                  }
+                                >
+                                  <SelectTrigger className="w-full">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {subscriberFieldOptions.map((option) => (
+                                      <SelectItem
+                                        key={option.value}
+                                        value={option.value}
+                                      >
+                                        {option.label}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              ) : (
+                                <Input
+                                  value={
+                                    mapping.source === "literal"
+                                      ? mapping.literal
+                                      : mapping.path
+                                  }
+                                  placeholder={
+                                    mapping.source === "literal"
+                                      ? "Fixed text"
+                                      : "metadata.path"
+                                  }
+                                  onChange={(event) =>
+                                    setVariableMappings((current) => ({
+                                      ...current,
+                                      [key]: {
+                                        ...mapping,
+                                        ...(mapping.source === "literal"
+                                          ? { literal: event.target.value }
+                                          : { path: event.target.value })
+                                      }
+                                    }))
+                                  }
+                                />
+                              )}
+
+                              <Input
+                                value={mapping.fallback}
+                                placeholder="Fallback optional"
+                                disabled={mapping.source === "literal"}
+                                onChange={(event) =>
+                                  setVariableMappings((current) => ({
+                                    ...current,
+                                    [key]: {
+                                      ...mapping,
+                                      fallback: event.target.value
+                                    }
+                                  }))
+                                }
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -983,7 +1214,9 @@ export default function BroadcastsPage() {
                         className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm hover:bg-muted/60"
                       >
                         <Checkbox
-                          checked={selectedSubscriberIds.includes(subscriber._id)}
+                          checked={selectedSubscriberIds.includes(
+                            subscriber._id
+                          )}
                           onCheckedChange={(checked) =>
                             setSelectedSubscriberIds((current) =>
                               checked
@@ -1014,6 +1247,25 @@ export default function BroadcastsPage() {
                 </div>
               </div>
             )}
+
+            <div className="flex items-start justify-between gap-4 rounded-lg border bg-muted/20 p-4">
+              <div>
+                <Label htmlFor="broadcast-limit-retry">
+                  Retry after a Meta messaging-limit pause
+                </Label>
+                <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">
+                  If Meta pauses this campaign because the business messaging
+                  limit was reached, automatically grant consent to retry the
+                  unfinished recipients after the backend recovery period. This
+                  does not retry recipients that failed for other reasons.
+                </p>
+              </div>
+              <Switch
+                id="broadcast-limit-retry"
+                checked={retryOnMessagingLimit}
+                onCheckedChange={setRetryOnMessagingLimit}
+              />
+            </div>
 
             <DialogFooter>
               <Button

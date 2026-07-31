@@ -28,7 +28,7 @@ import { AxiosError } from "axios";
 const signupSchema = z
   .object({
     firstName: z.string().min(2, "First name is required"),
-    lastName: z.string().min(2, "Last name is required"),
+    lastName: z.string().trim().optional(),
     email: z.string().email("Invalid email"),
     phone: z.string().min(8, "Invalid phone number"),
     password: z.string().min(8, "Minimum 8 characters"),
@@ -71,7 +71,7 @@ export default function SignupPage() {
 
   const onSubmit = (data: SignupForm) => {
     mutate({
-      name: `${data.firstName} ${data.lastName}`,
+      name: [data.firstName, data.lastName].filter(Boolean).join(" "),
       email: data.email,
       phoneNumber: buildInternationalPhoneNumber(countryCode, data.phone),
       countryIso,
@@ -147,7 +147,7 @@ export default function SignupPage() {
               <div className="relative">
                 <User className="absolute left-3 top-3.5 size-4 text-muted-foreground" />
                 <Input
-                  placeholder="Last name"
+                  placeholder="Last name (optional)"
                   className="pl-9"
                   {...register("lastName")}
                 />

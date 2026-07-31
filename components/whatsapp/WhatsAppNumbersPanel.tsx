@@ -191,7 +191,7 @@ export default function WhatsAppNumbersPanel({
               </div>
 
               {number.activeAlerts?.length ? (
-                <div className="mt-3 flex gap-2 rounded-md bg-amber-50 p-2.5 text-xs text-amber-800">
+                <div className="mt-3 flex gap-2 rounded-md bg-amber-50 p-2.5 text-xs text-amber-800 overflow-wrap-anywhere">
                   <ShieldAlert className="size-4 shrink-0" />
                   <span>{number.activeAlerts[0].message}</span>
                 </div>

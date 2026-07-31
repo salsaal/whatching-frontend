@@ -102,7 +102,7 @@ export default function SubscriberModal({
               <Input
                 value={firstName}
                 onChange={(event) => setFirstName(event.target.value)}
-                placeholder="Zaki"
+                placeholder="John"
                 className="mt-2"
               />
             </div>
@@ -114,7 +114,7 @@ export default function SubscriberModal({
               <Input
                 value={lastName}
                 onChange={(event) => setLastName(event.target.value)}
-                placeholder="Afzal"
+                placeholder="Doe"
                 className="mt-2"
               />
             </div>

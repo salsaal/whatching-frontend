@@ -307,6 +307,11 @@ export interface SendTemplateMessagePayload {
   languageCode?: string;
   components?: TemplateSendComponent[];
   phoneNumberId?: string;
+  quickReplyRoutes?: Array<{
+    index: number;
+    label?: string;
+    triggerKey: string;
+  }>;
 }
 
 export interface SendTemplateMessageResponse {

@@ -228,7 +228,7 @@ function WhatsAppListPreview({
           {stringValue(content.buttonText, "Choose an option")}
         </p>
       </div>
-      <div className="max-h-40 overflow-y-auto p-2">
+      <div className="p-2">
         {sections.length ? (
           sections.map((section, sectionIndex) => {
             const rows = Array.isArray(section.rows)

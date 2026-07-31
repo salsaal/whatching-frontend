@@ -25,6 +25,7 @@ export interface BroadcastAudience {
 export interface BroadcastStats {
   totalRecipients: number;
   queuedRecipients: number;
+  deferredRecipients: number;
   sentRecipients: number;
   deliveredRecipients: number;
   readRecipients: number;
@@ -52,6 +53,16 @@ export interface Broadcast {
   scheduledTimezone?: string | null;
   scheduledLocalTime?: string | null;
   lastError?: string;
+  messagingLimitRetry?: {
+    status: "awaiting_consent" | "scheduled" | "processing";
+    detectedAt: string;
+    eligibleAt: string;
+    consentedAt?: string;
+    scheduledAt?: string;
+    attempt: number;
+    lastFailureCode?: string;
+    lastFailureMessage?: string;
+  };
   createdBy?: {
     _id: string;
     name: string;
@@ -100,6 +111,10 @@ export interface BroadcastResponse {
       deliveredAt?: string;
       readAt?: string;
       metaMessageId?: string;
+      errorCode?: string;
+      errorMessage?: string;
+      deferredAt?: string;
+      failedAt?: string;
       subscriberId?: {
         _id: string;
         phoneNumber: string;
@@ -115,6 +130,9 @@ export interface BroadcastResponse {
         deliveredAt?: string;
         readAt?: string;
         metaMessageId?: string;
+        failedAt?: string;
+        errorCode?: string;
+        errorMessage?: string;
       };
     }>;
     recipientsPagination?: {
@@ -162,5 +180,18 @@ export interface StartBroadcastResponse {
     scheduledTimezone: string | null;
     scheduledLocalTime: string | null;
     warnings: string[];
+  };
+}
+
+export interface BroadcastRetryResponse {
+  status: string;
+  message: string;
+  data: {
+    broadcastId: string;
+    broadcastStatus: "paused_limit";
+    retryStatus: "scheduled";
+    retryAttempt: number;
+    retryScheduledAt: string;
+    consentedAt: string;
   };
 }

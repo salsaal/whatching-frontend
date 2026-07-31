@@ -66,6 +66,12 @@ export default function MediaPickerDialog({
   const visibleMedia = useMemo(
     () =>
       media.filter((item) => {
+        if (
+          item.fileType === "image" &&
+          !/\.(jpe?g|png)(?:$|[?#])/i.test(item.cloudinaryUrl || item.name)
+        ) {
+          return false;
+        }
         if (requiredType) {
           return item.fileType === mediaTypeByHeaderFormat[requiredType];
         }

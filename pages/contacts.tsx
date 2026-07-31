@@ -85,6 +85,32 @@ const contactChannelOptions: Array<{
   { value: "instagram", label: "Instagram", icon: Instagram }
 ];
 
+const getContactSyncState = (number?: WhatsAppPhoneNumber) => {
+  if (!number) return undefined;
+  if (number.coexistenceContactSync) return number.coexistenceContactSync;
+
+  const status = number.coexistenceContactSyncStatus || "not_requested";
+  return {
+    requestId: number.coexistenceContactSyncRequestId || null,
+    status,
+    lastReceivedAt: number.coexistenceContactSyncLastReceivedAt || null,
+    lastProcessedAt: number.coexistenceContactSyncLastProcessedAt || null,
+    lastError: number.coexistenceContactSyncLastError || null,
+    contactsActive: number.coexistenceContactsAdded || 0,
+    contactsRemoved: number.coexistenceContactsRemoved || 0,
+    contactsSkipped: number.coexistenceContactsSkipped || 0,
+    recoveredContactChanges: 0,
+    warning: null,
+    maxAttempts: 1,
+    attemptsUsed: number.coexistenceContactSyncRequestAttempts || 0,
+    attemptsRemaining:
+      status === "not_requested" &&
+      (number.coexistenceContactSyncRequestAttempts || 0) === 0
+        ? 1
+        : 0
+  };
+};
+
 export default function ContactsPage() {
   const [query, setQuery] = useState("");
   const [channel, setChannel] = useState<ContactChannel>("all");
@@ -134,10 +160,7 @@ export default function ContactsPage() {
     queryFn: getTags,
     refetchOnMount: "always"
   });
-  const {
-    data: phoneNumbersData,
-    refetch: refetchPhoneNumbers
-  } = useQuery({
+  const { data: phoneNumbersData, refetch: refetchPhoneNumbers } = useQuery({
     queryKey: ["whatsapp-phone-numbers", "contacts-sync"],
     queryFn: getWhatsAppPhoneNumbers,
     refetchOnMount: "always"
@@ -156,7 +179,7 @@ export default function ContactsPage() {
     () => tagsData?.data.tags || [],
     [tagsData?.data.tags]
   );
-  const syncEligibleNumbers = useMemo(
+  const coexistenceNumbers = useMemo(
     () =>
       (phoneNumbersData?.data.phoneNumbers || []).filter(
         (number) =>
@@ -166,9 +189,23 @@ export default function ContactsPage() {
       ),
     [phoneNumbersData?.data.phoneNumbers]
   );
+  const syncEligibleNumbers = useMemo(
+    () =>
+      coexistenceNumbers.filter((number) => {
+        const sync = getContactSyncState(number);
+        return sync?.status === "not_requested" && sync.attemptsUsed === 0;
+      }),
+    [coexistenceNumbers]
+  );
   const selectedSyncNumber =
     syncEligibleNumbers.find((number) => number.id === selectedSyncNumberId) ||
     syncEligibleNumbers[0];
+  const selectedCoexistenceNumber =
+    coexistenceNumbers.find((number) => number.id === selectedSyncNumberId) ||
+    coexistenceNumbers[0];
+  const selectedContactSyncState = getContactSyncState(
+    selectedCoexistenceNumber
+  );
   const filteredSubscribers = useMemo(() => {
     const value = query.trim().toLowerCase();
 
@@ -394,9 +431,11 @@ export default function ContactsPage() {
       const remaining = [];
       for (let index = 0; index < pages.length; index += 5) {
         const batch = await Promise.all(
-          pages.slice(index, index + 5).map((page) =>
-            getAllSubscribers({ channel, q: query, page, limit: 100 })
-          )
+          pages
+            .slice(index, index + 5)
+            .map((page) =>
+              getAllSubscribers({ channel, q: query, page, limit: 100 })
+            )
         );
         remaining.push(...batch);
       }
@@ -411,7 +450,14 @@ export default function ContactsPage() {
       const escapeCsv = (value: unknown) =>
         `"${String(value ?? "").replace(/"/g, '""')}"`;
       const csv = [
-        ["First name", "Last name", "Phone", "WhatsApp ID", "Instagram", "Tags"],
+        [
+          "First name",
+          "Last name",
+          "Phone",
+          "WhatsApp ID",
+          "Instagram",
+          "Tags"
+        ],
         ...rows.map((subscriber) => [
           subscriber.firstName,
           subscriber.lastName,
@@ -494,7 +540,7 @@ export default function ContactsPage() {
                   }
                 >
                   <RefreshCw className="size-4" />
-                  Sync app contacts
+                  Sync WhatsApp Business contacts
                 </Button>
               </div>
             )}
@@ -522,44 +568,37 @@ export default function ContactsPage() {
           </div>
         </section>
 
-        {selectedSyncNumber?.coexistenceContactSync && (
-          <section className="rounded-lg border border-primary/15 bg-primary/5 p-4 text-sm shadow-xs">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="font-medium">
-                  Business App contact sync:{" "}
-                  <span className="capitalize">
-                    {selectedSyncNumber.coexistenceContactSync.status.replace(
-                      /_/g,
-                      " "
-                    )}
-                  </span>
-                </p>
-                <p className="mt-1 text-muted-foreground">
-                  Active {selectedSyncNumber.coexistenceContactSync.contactsActive}
-                  , removed{" "}
-                  {selectedSyncNumber.coexistenceContactSync.contactsRemoved},
-                  skipped{" "}
-                  {selectedSyncNumber.coexistenceContactSync.contactsSkipped}
-                </p>
+        {selectedContactSyncState &&
+          selectedContactSyncState.status !== "not_requested" && (
+            <section className="rounded-lg border border-primary/15 bg-primary/5 p-4 text-sm shadow-xs">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="font-medium">
+                    Business App contact sync:{" "}
+                    <span className="capitalize">
+                      {selectedContactSyncState.status.replace(/_/g, " ")}
+                    </span>
+                  </p>
+                  <p className="mt-1 text-muted-foreground">
+                    Active {selectedContactSyncState.contactsActive}, removed{" "}
+                    {selectedContactSyncState.contactsRemoved}, skipped{" "}
+                    {selectedContactSyncState.contactsSkipped}
+                  </p>
+                </div>
+                <Badge variant="outline">One-time sync</Badge>
               </div>
-              <Badge variant="outline">
-                {selectedSyncNumber.coexistenceContactSync.attemptsRemaining}{" "}
-                attempts left
-              </Badge>
-            </div>
-            {selectedSyncNumber.coexistenceContactSync.lastError && (
-              <p className="mt-3 text-destructive">
-                {selectedSyncNumber.coexistenceContactSync.lastError}
-              </p>
-            )}
-            {selectedSyncNumber.coexistenceContactSync.warning && (
-              <p className="mt-3 text-amber-700">
-                {selectedSyncNumber.coexistenceContactSync.warning}
-              </p>
-            )}
-          </section>
-        )}
+              {selectedContactSyncState.lastError && (
+                <p className="mt-3 text-destructive">
+                  {selectedContactSyncState.lastError}
+                </p>
+              )}
+              {selectedContactSyncState.warning && (
+                <p className="mt-3 text-amber-700">
+                  {selectedContactSyncState.warning}
+                </p>
+              )}
+            </section>
+          )}
 
         <section className="rounded-lg bg-white p-4 shadow-xs">
           <div className="grid gap-4 lg:grid-cols-[360px_minmax(0,1fr)] lg:items-center">

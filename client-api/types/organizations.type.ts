@@ -21,14 +21,27 @@ export interface WhatsAppPhoneNumber {
   qualityRating?: string;
   qualityStatus?: string;
   messagingLimitTier?: string;
+  messagingLimitCount?: number;
+  messagingLimitScope?: "business_portfolio";
+  clientBusinessId?: string;
   activeCanvasId?: string;
   coexistenceEnabled?: boolean;
   coexistenceStatus?: "not_enabled" | "enabled" | "disconnected" | "limited";
   coexistenceContactSync?: CoexistenceContactSyncState;
+  coexistenceContactSyncRequestId?: string;
+  coexistenceContactSyncStatus?: CoexistenceContactSyncState["status"];
+  coexistenceContactSyncRequestAttempts?: number;
+  coexistenceContactSyncLastReceivedAt?: string;
+  coexistenceContactSyncLastProcessedAt?: string;
+  coexistenceContactSyncLastError?: string;
+  coexistenceContactsAdded?: number;
+  coexistenceContactsRemoved?: number;
+  coexistenceContactsSkipped?: number;
   lastHealthCheckAt?: string;
   connectedAt?: string;
   createdAt?: string;
   updatedAt?: string;
+  outboundReadiness?: WhatsAppOutboundReadinessState;
   activeAlerts?: Array<{
     code: string;
     severity: "info" | "warning" | "critical";
@@ -36,6 +49,45 @@ export interface WhatsAppPhoneNumber {
     createdAt?: string;
     lastTriggeredAt?: string;
   }>;
+}
+
+export type WhatsAppOutboundReadinessStatus =
+  | "not_tested"
+  | "template_pending"
+  | "testing"
+  | "ready"
+  | "failed"
+  | "inconclusive";
+
+export interface WhatsAppOutboundReadinessState {
+  status: WhatsAppOutboundReadinessStatus;
+  templateName?: string;
+  templateLanguage?: string;
+  providerStatus?: "sent" | "delivered" | "read" | "failed";
+  providerStatusAt?: string;
+  requestedAt?: string;
+  verifiedAt?: string;
+  failedAt?: string;
+  failureCategory?: string;
+  failureCode?: string;
+  failureMessage?: string;
+}
+
+export interface WhatsAppOutboundReadinessResponse {
+  status: string;
+  message?: string;
+  data: {
+    phoneNumberId: string;
+    senderPhoneNumberId: string;
+    readiness: WhatsAppOutboundReadinessState;
+    canStartBroadcast?: boolean;
+    blocker?: {
+      code: string;
+      statusCode: number;
+      message: string;
+      details?: Record<string, unknown> & { paymentSetupUrl?: string };
+    } | null;
+  };
 }
 
 export interface CoexistenceContactSyncState {
