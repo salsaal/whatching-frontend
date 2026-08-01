@@ -127,9 +127,7 @@ export const testWhatsAppOutboundReadiness = async (
   phoneNumberRecordId: string
 ): Promise<WhatsAppOutboundReadinessResponse> => {
   const res = await api.post<WhatsAppOutboundReadinessResponse>(
-    ORGANIZATION_ENDPOINTS.WHATSAPP_OUTBOUND_READINESS_TEST(
-      phoneNumberRecordId
-    )
+    ORGANIZATION_ENDPOINTS.WHATSAPP_OUTBOUND_READINESS_TEST(phoneNumberRecordId)
   );
   return res.data;
 };

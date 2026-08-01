@@ -1,6 +1,7 @@
 "use client";
 
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useEffect, useRef } from "react";
+import { useInfiniteQuery, useMutation } from "@tanstack/react-query";
 import { LifeBuoy, Send } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { toast } from "sonner";
@@ -33,6 +34,7 @@ const categories: Array<{ value: SupportRequestCategory; label: string }> = [
 ];
 
 export default function HelpPage() {
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const activeOrganization = useOrganizationStore(
     (state) => state.activeOrganization
   );
@@ -41,9 +43,24 @@ export default function HelpPage() {
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
 
-  const { data, isLoading, refetch } = useQuery({
+  const {
+    data,
+    isLoading,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+    refetch
+  } = useInfiniteQuery({
     queryKey: ["support-requests", activeOrganization?._id],
-    queryFn: () => getSupportRequests({ limit: 10 }),
+    queryFn: ({ pageParam }) =>
+      getSupportRequests({ page: pageParam, limit: 10 }),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      const currentPage = lastPage.pagination.page;
+      return currentPage < lastPage.pagination.totalPages
+        ? currentPage + 1
+        : undefined;
+    },
     enabled: Boolean(activeOrganization?._id)
   });
 
@@ -73,7 +90,25 @@ export default function HelpPage() {
     });
   };
 
-  const requests = data?.data?.supportRequests || [];
+  const requests =
+    data?.pages.flatMap((page) => page.data?.supportRequests || []) || [];
+
+  useEffect(() => {
+    const sentinel = loadMoreRef.current;
+    if (!sentinel || !hasNextPage) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !isFetchingNextPage) {
+          fetchNextPage();
+        }
+      },
+      { rootMargin: "160px 0px" }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
 
   return (
     <AppLayout>
@@ -188,6 +223,13 @@ export default function HelpPage() {
               ) : (
                 <p className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
                   No support requests yet.
+                </p>
+              )}
+              <div ref={loadMoreRef} className="h-px" />
+              {isFetchingNextPage && <Skeleton className="h-20" />}
+              {!hasNextPage && requests.length > 0 && (
+                <p className="text-center text-xs text-muted-foreground">
+                  All tickets are loaded.
                 </p>
               )}
             </div>

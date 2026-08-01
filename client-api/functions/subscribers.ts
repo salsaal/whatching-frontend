@@ -16,6 +16,7 @@ export const getAllSubscribers = async (
     page?: number;
     limit?: number;
     q?: string;
+    tag?: string;
     broadcastEligibility?: "all" | "eligible" | "retained_only";
   } = {}
 ): Promise<SubscribersResponse> => {
@@ -27,6 +28,7 @@ export const getAllSubscribers = async (
       ...(params.page ? { page: params.page } : {}),
       ...(params.limit ? { limit: params.limit } : {}),
       ...(params.q?.trim() ? { q: params.q.trim() } : {}),
+      ...(params.tag?.trim() ? { tag: params.tag.trim() } : {}),
       ...(params.broadcastEligibility && params.broadcastEligibility !== "all"
         ? { broadcastEligibility: params.broadcastEligibility }
         : {})

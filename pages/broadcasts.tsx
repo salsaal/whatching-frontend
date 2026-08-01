@@ -13,9 +13,13 @@ import {
   Send,
   XCircle
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/router";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery
+} from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import {
@@ -126,6 +130,8 @@ const hourOptions = Array.from({ length: 24 }, (_, index) =>
   String(index).padStart(2, "0")
 );
 const minuteOptions = ["00", "15", "30", "45"];
+const BROADCASTS_PAGE_SIZE = 30;
+const BROADCAST_SUBSCRIBERS_PAGE_SIZE = 50;
 
 const statusClasses: Record<string, string> = {
   draft: "bg-muted text-muted-foreground",
@@ -247,6 +253,8 @@ const buildBroadcastComponents = (
 
 export default function BroadcastsPage() {
   const router = useRouter();
+  const broadcastLoadMoreRef = useRef<HTMLDivElement | null>(null);
+  const subscriberLoadMoreRef = useRef<HTMLDivElement | null>(null);
   const activeOrganization = useOrganizationStore(
     (state) => state.activeOrganization
   );
@@ -296,14 +304,31 @@ export default function BroadcastsPage() {
   const readiness = readinessData?.data.readiness;
   const readinessBlocker = readinessData?.data.blocker;
 
-  const { data, isLoading, refetch } = useQuery({
-    queryKey: ["broadcasts", selectedPhoneNumberId],
-    queryFn: () =>
+  const {
+    data,
+    isLoading,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+    refetch
+  } = useInfiniteQuery({
+    queryKey: ["broadcasts", selectedPhoneNumberId, query.trim()],
+    queryFn: ({ pageParam }) =>
       getAllBroadcasts({
+        page: pageParam,
+        limit: BROADCASTS_PAGE_SIZE,
+        q: query,
         ...(selectedPhoneNumberId !== ALL_WHATSAPP_NUMBERS
           ? { phoneNumberId: selectedPhoneNumberId }
           : {})
       }),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      const currentPage = lastPage.pagination.page;
+      return currentPage < lastPage.pagination.totalPages
+        ? currentPage + 1
+        : undefined;
+    },
     refetchOnMount: "always",
     refetchInterval: 5000
   });
@@ -311,15 +336,28 @@ export default function BroadcastsPage() {
     queryKey: ["templates"],
     queryFn: getAllTemplates
   });
-  const { data: subscribersData } = useQuery({
+  const {
+    data: subscribersData,
+    isFetchingNextPage: isFetchingMoreSubscribers,
+    hasNextPage: hasMoreSubscribers,
+    fetchNextPage: fetchMoreSubscribers
+  } = useInfiniteQuery({
     queryKey: ["broadcast-subscribers", subscriberSearch],
-    queryFn: () =>
+    queryFn: ({ pageParam }) =>
       getAllSubscribers({
         channel: "whatsapp",
-        limit: 100,
+        page: pageParam,
+        limit: BROADCAST_SUBSCRIBERS_PAGE_SIZE,
         q: subscriberSearch,
         broadcastEligibility: "eligible"
       }),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      const currentPage = lastPage.pagination.page;
+      return currentPage < lastPage.pagination.totalPages
+        ? currentPage + 1
+        : undefined;
+    },
     enabled: isCreateOpen && audienceMode === "specific"
   });
   const { data: tagsData } = useQuery({
@@ -341,8 +379,8 @@ export default function BroadcastsPage() {
     });
 
   const broadcasts = useMemo(
-    () => data?.data.broadcasts || [],
-    [data?.data.broadcasts]
+    () => data?.pages.flatMap((page) => page.data.broadcasts || []) || [],
+    [data?.pages]
   );
   const templates = useMemo(
     () =>
@@ -353,22 +391,13 @@ export default function BroadcastsPage() {
   );
   const subscribers = useMemo(
     () =>
-      (subscribersData?.data.subscribers || []).filter((subscriber) =>
-        Boolean(subscriber.phoneNumber)
-      ),
-    [subscribersData?.data.subscribers]
+      (subscribersData?.pages.flatMap((page) => page.data.subscribers || []) ||
+        []
+      ).filter((subscriber) => Boolean(subscriber.phoneNumber)),
+    [subscribersData?.pages]
   );
   const tags = useMemo(() => tagsData?.data.tags || [], [tagsData?.data.tags]);
-  const filteredBroadcasts = useMemo(() => {
-    const value = query.trim().toLowerCase();
-    if (!value) return broadcasts;
-
-    return broadcasts.filter((broadcast) =>
-      [broadcast.name, broadcast.status, broadcast.template?.name]
-        .filter(Boolean)
-        .some((item) => String(item).toLowerCase().includes(value))
-    );
-  }, [broadcasts, query]);
+  const filteredBroadcasts = broadcasts;
 
   const selectedBroadcast = selectedBroadcastData?.data.broadcast;
   const selectedTemplate = useMemo(
@@ -503,6 +532,45 @@ export default function BroadcastsPage() {
       consentToRetry(retryCandidate._id);
     }
   }, [broadcasts, consentToRetry, isConsentingToRetry]);
+
+  useEffect(() => {
+    const sentinel = broadcastLoadMoreRef.current;
+    if (!sentinel || !hasNextPage) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !isFetchingNextPage) {
+          fetchNextPage();
+        }
+      },
+      { rootMargin: "240px 0px" }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
+
+  useEffect(() => {
+    const sentinel = subscriberLoadMoreRef.current;
+    if (!sentinel || !hasMoreSubscribers || audienceMode !== "specific") return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !isFetchingMoreSubscribers) {
+          fetchMoreSubscribers();
+        }
+      },
+      { rootMargin: "120px 0px" }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [
+    audienceMode,
+    fetchMoreSubscribers,
+    hasMoreSubscribers,
+    isFetchingMoreSubscribers
+  ]);
 
   const { mutate: startSelected, isPending: isStarting } = useMutation({
     mutationFn: startBroadcast,
@@ -835,6 +903,19 @@ export default function BroadcastsPage() {
                   ))}
                 </tbody>
               </table>
+              <div ref={broadcastLoadMoreRef} className="h-px" />
+              {isFetchingNextPage && (
+                <div className="space-y-3 border-t p-3">
+                  {Array.from({ length: 3 }).map((_, index) => (
+                    <Skeleton key={index} className="h-12" />
+                  ))}
+                </div>
+              )}
+              {!hasNextPage && broadcasts.length > 0 && (
+                <p className="border-t p-4 text-center text-xs text-muted-foreground">
+                  All matching broadcasts are loaded.
+                </p>
+              )}
             </div>
           ) : (
             <div className="flex min-h-72 flex-col items-center justify-center p-8 text-center">
@@ -1243,6 +1324,19 @@ export default function BroadcastsPage() {
                     <div className="py-6 text-center text-sm text-muted-foreground">
                       No eligible subscribers found.
                     </div>
+                  )}
+                  <div ref={subscriberLoadMoreRef} className="h-px" />
+                  {isFetchingMoreSubscribers && (
+                    <div className="space-y-2 p-2">
+                      {Array.from({ length: 3 }).map((_, index) => (
+                        <Skeleton key={index} className="h-12" />
+                      ))}
+                    </div>
+                  )}
+                  {!hasMoreSubscribers && subscribers.length > 0 && (
+                    <p className="py-2 text-center text-xs text-muted-foreground">
+                      All eligible subscribers are loaded.
+                    </p>
                   )}
                 </div>
               </div>

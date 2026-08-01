@@ -31,7 +31,13 @@ import {
   useState
 } from "react";
 import { AxiosError } from "axios";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  InfiniteData,
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient
+} from "@tanstack/react-query";
 import { io, Socket } from "socket.io-client";
 import { toast } from "sonner";
 
@@ -129,6 +135,8 @@ const channelOptions: Array<{
   { value: "whatsapp", label: "WhatsApp", icon: FaWhatsapp },
   { value: "instagram", label: "Instagram", icon: Instagram }
 ];
+
+const CONTACT_SEARCH_PAGE_SIZE = 50;
 
 const formatDateTime = (value?: string | null) =>
   value
@@ -1007,10 +1015,13 @@ function ThreadSkeleton() {
 export default function ConversationsPage() {
   const queryClient = useQueryClient();
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const messagesStartRef = useRef<HTMLDivElement | null>(null);
+  const messageScrollRef = useRef<HTMLDivElement | null>(null);
   const replyInputRef = useRef<HTMLTextAreaElement | null>(null);
   const selectedIdRef = useRef("");
   const listScrollRef = useRef<HTMLDivElement | null>(null);
   const listEndRef = useRef<HTMLDivElement | null>(null);
+  const contactLoadMoreRef = useRef<HTMLDivElement | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const joinedConversationRef = useRef("");
   const replyContextCacheRef = useRef<Record<string, ReplyContext>>({});
@@ -1143,18 +1154,32 @@ export default function ConversationsPage() {
     queryFn: getAllTemplates,
     enabled: Boolean(activeOrganization?._id && isTemplateModalOpen)
   });
-  const { data: contactsData, isLoading: isContactsLoading } = useQuery({
+  const {
+    data: contactsData,
+    isLoading: isContactsLoading,
+    isFetchingNextPage: isFetchingMoreContacts,
+    hasNextPage: hasMoreContacts,
+    fetchNextPage: fetchMoreContacts
+  } = useInfiniteQuery({
     queryKey: [
       "conversation-start-contacts",
       activeOrganization?._id,
       contactSearch
     ],
-    queryFn: () =>
+    queryFn: ({ pageParam }) =>
       getAllSubscribers({
         channel: "whatsapp",
-        limit: 100,
+        page: pageParam,
+        limit: CONTACT_SEARCH_PAGE_SIZE,
         q: contactSearch
       }),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      const currentPage = lastPage.pagination.page;
+      return currentPage < lastPage.pagination.totalPages
+        ? currentPage + 1
+        : undefined;
+    },
     enabled: Boolean(activeOrganization?._id && isTemplateModalOpen)
   });
   const {
@@ -1240,9 +1265,44 @@ export default function ConversationsPage() {
     return () => observer.disconnect();
   }, [hasMoreConversations, isConversationsFetching]);
 
-  const { data: messagesData, isLoading: isMessagesLoading } = useQuery({
+  useEffect(() => {
+    const sentinel = contactLoadMoreRef.current;
+    if (!sentinel || !hasMoreContacts || templateMode !== "contact") return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !isFetchingMoreContacts) {
+          fetchMoreContacts();
+        }
+      },
+      { rootMargin: "120px 0px" }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [
+    fetchMoreContacts,
+    hasMoreContacts,
+    isFetchingMoreContacts,
+    templateMode
+  ]);
+
+  const {
+    data: messagesData,
+    isLoading: isMessagesLoading,
+    isFetchingNextPage: isFetchingOlderMessages,
+    hasNextPage: hasOlderMessages,
+    fetchNextPage: fetchOlderMessages
+  } = useInfiniteQuery({
     queryKey: ["conversation-messages", activeOrganization?._id, selectedId],
-    queryFn: () => getConversationMessages({ conversationId: selectedId }),
+    queryFn: ({ pageParam }) =>
+      getConversationMessages({
+        conversationId: selectedId,
+        before: pageParam
+      }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) =>
+      lastPage.pagination.hasMore ? lastPage.pagination.nextCursor : undefined,
     enabled: Boolean(activeOrganization?._id && selectedId),
     staleTime: 15_000
   });
@@ -1261,6 +1321,24 @@ export default function ConversationsPage() {
       queryClient.invalidateQueries({ queryKey: ["chat-bootstrap"] })
     ]);
   };
+
+  useEffect(() => {
+    const sentinel = messagesStartRef.current;
+    const root = messageScrollRef.current;
+    if (!sentinel || !root || !hasOlderMessages) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !isFetchingOlderMessages) {
+          fetchOlderMessages();
+        }
+      },
+      { root, rootMargin: "120px 0px 0px 0px" }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [fetchOlderMessages, hasOlderMessages, isFetchingOlderMessages]);
 
   useEffect(() => {
     const orgId = activeOrganization?._id;
@@ -1351,24 +1429,36 @@ export default function ConversationsPage() {
       (payload: { conversationId?: string; message?: ChatMessage }) => {
         const incomingMessage = payload.message;
         if (payload.conversationId && incomingMessage) {
-          queryClient.setQueryData<ConversationMessagesResponse>(
+          queryClient.setQueryData<
+            InfiniteData<ConversationMessagesResponse>
+          >(
             ["conversation-messages", orgId, payload.conversationId],
             (current) => {
               if (!current) return current;
+              const latestPage = current.pages[0];
+              if (!latestPage) return current;
               if (
-                current.data.messages.some(
-                  (message) => message._id === incomingMessage._id
+                current.pages.some((page) =>
+                  page.data.messages.some(
+                    (message) => message._id === incomingMessage._id
+                  )
                 )
               ) {
                 return current;
               }
               return {
                 ...current,
-                results: current.results + 1,
-                data: {
-                  ...current.data,
-                  messages: [...current.data.messages, incomingMessage]
-                }
+                pages: [
+                  {
+                    ...latestPage,
+                    results: latestPage.results + 1,
+                    data: {
+                      ...latestPage.data,
+                      messages: [...latestPage.data.messages, incomingMessage]
+                    }
+                  },
+                  ...current.pages.slice(1)
+                ]
               };
             }
           );
@@ -1497,10 +1587,12 @@ export default function ConversationsPage() {
   );
   const whatsappContacts = useMemo(
     () =>
-      (contactsData?.data.subscribers || []).filter(
+      (contactsData?.pages.flatMap((page) => page.data.subscribers || []) ||
+        []
+      ).filter(
         (subscriber: Subscriber) => subscriber.phoneNumber || subscriber.waId
       ),
-    [contactsData?.data.subscribers]
+    [contactsData?.pages]
   );
   const selectedContact =
     whatsappContacts.find((contact) => contact._id === selectedContactId) ||
@@ -1536,9 +1628,14 @@ export default function ConversationsPage() {
     [selectedTemplateBody?.text, templateVariables]
   );
   const messages = useMemo(
-    () => messagesData?.data.messages || [],
-    [messagesData]
+    () =>
+      messagesData?.pages
+        .slice()
+        .reverse()
+        .flatMap((page) => page.data.messages || []) || [],
+    [messagesData?.pages]
   );
+  const latestMessageId = messages[messages.length - 1]?._id || "";
   const messagesById = useMemo(() => {
     const byId = new Map<string, ChatMessage>();
     const byMetaId = new Map<string, ChatMessage>();
@@ -1731,8 +1828,7 @@ export default function ConversationsPage() {
       })
     );
     const invalidQuickReplyRoute = quickReplyRoutes.find(
-      (route) =>
-        !route.triggerKey || !templateTriggerKeys.has(route.triggerKey)
+      (route) => !route.triggerKey || !templateTriggerKeys.has(route.triggerKey)
     );
     if (invalidQuickReplyRoute) {
       toast.error("Assign every quick reply to an active flow trigger.");
@@ -1758,7 +1854,7 @@ export default function ConversationsPage() {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ block: "end" });
-  }, [messages, selectedId]);
+  }, [latestMessageId, selectedId]);
 
   useEffect(() => {
     setReplyTarget(null);
@@ -2001,11 +2097,26 @@ export default function ConversationsPage() {
                   </div>
                 </div>
 
-                <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                <div
+                  ref={messageScrollRef}
+                  className="min-h-0 flex-1 overflow-y-auto p-4"
+                >
                   {isMessagesLoading ? (
                     <ThreadSkeleton />
                   ) : messages.length ? (
                     <div className="space-y-3">
+                      <div ref={messagesStartRef} className="h-px" />
+                      {isFetchingOlderMessages && (
+                        <div className="space-y-2">
+                          <Skeleton className="h-12 w-2/3 rounded-2xl" />
+                          <Skeleton className="ml-auto h-12 w-1/2 rounded-2xl" />
+                        </div>
+                      )}
+                      {!hasOlderMessages && messages.length > 0 && (
+                        <p className="py-2 text-center text-xs text-muted-foreground">
+                          Conversation start reached.
+                        </p>
+                      )}
                       {messages.map((message) =>
                         (() => {
                           const replyContext =
@@ -2577,33 +2688,55 @@ export default function ConversationsPage() {
                     className="pl-9"
                   />
                 </div>
-                <Select
-                  value={selectedContactId}
-                  onValueChange={setSelectedContactId}
-                  disabled={isContactsLoading || isSendingTemplate}
-                >
-                  <SelectTrigger>
-                    <SelectValue
-                      placeholder={
-                        isContactsLoading
-                          ? "Loading contacts..."
-                          : "Select a WhatsApp contact"
-                      }
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {whatsappContacts.map((contact) => (
-                      <SelectItem key={contact._id} value={contact._id}>
-                        {[contact.firstName, contact.lastName]
+                <div className="max-h-56 overflow-y-auto rounded-md border bg-background p-1">
+                  {isContactsLoading ? (
+                    <div className="space-y-2 p-2">
+                      {Array.from({ length: 4 }).map((_, index) => (
+                        <Skeleton key={index} className="h-11" />
+                      ))}
+                    </div>
+                  ) : whatsappContacts.length ? (
+                    whatsappContacts.map((contact) => {
+                      const selected = selectedContactId === contact._id;
+                      const name =
+                        [contact.firstName, contact.lastName]
                           .filter(Boolean)
                           .join(" ") ||
-                          contact.phoneNumber ||
-                          contact.waId}{" "}
-                        · {contact.phoneNumber || contact.waId}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                        contact.phoneNumber ||
+                        contact.waId;
+                      return (
+                        <button
+                          key={contact._id}
+                          type="button"
+                          disabled={isSendingTemplate}
+                          onClick={() => setSelectedContactId(contact._id)}
+                          className={cn(
+                            "flex w-full cursor-pointer flex-col rounded-sm px-3 py-2 text-left text-sm transition hover:bg-muted",
+                            selected && "bg-primary/10 text-primary"
+                          )}
+                        >
+                          <span className="font-medium">{name}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {contact.phoneNumber || contact.waId}
+                          </span>
+                        </button>
+                      );
+                    })
+                  ) : null}
+                  <div ref={contactLoadMoreRef} className="h-px" />
+                  {isFetchingMoreContacts && (
+                    <div className="space-y-2 p-2">
+                      {Array.from({ length: 3 }).map((_, index) => (
+                        <Skeleton key={index} className="h-11" />
+                      ))}
+                    </div>
+                  )}
+                  {!hasMoreContacts && whatsappContacts.length > 0 && (
+                    <p className="py-2 text-center text-xs text-muted-foreground">
+                      All matching contacts are loaded.
+                    </p>
+                  )}
+                </div>
                 {!isContactsLoading && !whatsappContacts.length && (
                   <p className="text-sm text-muted-foreground">
                     No WhatsApp contacts found. Add or import contacts first.
@@ -2734,93 +2867,97 @@ export default function ConversationsPage() {
                     ) : null}
                   </div>
 
-                {selectedTemplateVariables.length ? (
-                  <div className="mt-4 space-y-3 border-t pt-4">
-                    <div>
-                      <Label>Body variables</Label>
-                      <p className="text-sm text-muted-foreground">
-                        These values fill the template placeholders in order.
-                      </p>
+                  {selectedTemplateVariables.length ? (
+                    <div className="mt-4 space-y-3 border-t pt-4">
+                      <div>
+                        <Label>Body variables</Label>
+                        <p className="text-sm text-muted-foreground">
+                          These values fill the template placeholders in order.
+                        </p>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {selectedTemplateVariables.map((variable) => (
+                          <div key={variable.key} className="space-y-2">
+                            <Label>{variable.label}</Label>
+                            <Input
+                              value={templateVariables[variable.key] || ""}
+                              disabled={isSendingTemplate}
+                              placeholder={`Value for ${variable.label}`}
+                              onChange={(event) =>
+                                setTemplateVariables((current) => ({
+                                  ...current,
+                                  [variable.key]: event.target.value
+                                }))
+                              }
+                            />
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      {selectedTemplateVariables.map((variable) => (
-                        <div key={variable.key} className="space-y-2">
-                          <Label>{variable.label}</Label>
-                          <Input
-                            value={templateVariables[variable.key] || ""}
-                            disabled={isSendingTemplate}
-                            placeholder={`Value for ${variable.label}`}
-                            onChange={(event) =>
-                              setTemplateVariables((current) => ({
-                                ...current,
-                                [variable.key]: event.target.value
-                              }))
-                            }
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
+                  ) : null}
 
-                {selectedTemplateQuickReplies.length ? (
-                  <div className="mt-4 space-y-3 border-t pt-4">
-                    <div>
-                      <Label>Quick reply triggers</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Choose the active flow trigger to run when the user taps
-                        each quick reply.
-                      </p>
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      {selectedTemplateQuickReplies.map(({ button, index }) => (
-                        <div
-                          key={`${button.text}-${index}`}
-                          className="space-y-2"
-                        >
-                          <Label>
-                            {button.text}{" "}
-                            <span className="text-muted-foreground">
-                              index {index}
-                            </span>
-                          </Label>
-                          <Select
-                            value={templateButtonPayloads[String(index)] || ""}
-                            disabled={isSendingTemplate}
-                            onValueChange={(value) =>
-                              setTemplateButtonPayloads((current) => ({
-                                ...current,
-                                [String(index)]: value
-                              }))
-                            }
-                          >
-                            <SelectTrigger className="w-full">
-                              <SelectValue
-                                placeholder={
-                                  templateSenderPhoneNumberId
-                                    ? "Choose flow trigger"
-                                    : "Select sender first"
+                  {selectedTemplateQuickReplies.length ? (
+                    <div className="mt-4 space-y-3 border-t pt-4">
+                      <div>
+                        <Label>Quick reply triggers</Label>
+                        <p className="text-sm text-muted-foreground">
+                          Choose the active flow trigger to run when the user
+                          taps each quick reply.
+                        </p>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {selectedTemplateQuickReplies.map(
+                          ({ button, index }) => (
+                            <div
+                              key={`${button.text}-${index}`}
+                              className="space-y-2"
+                            >
+                              <Label>
+                                {button.text}{" "}
+                                <span className="text-muted-foreground">
+                                  index {index}
+                                </span>
+                              </Label>
+                              <Select
+                                value={
+                                  templateButtonPayloads[String(index)] || ""
                                 }
-                              />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {(templateTriggersData?.data?.triggers || []).map(
-                                (trigger) => (
-                                  <SelectItem
-                                    key={trigger.triggerKey}
-                                    value={trigger.triggerKey}
-                                  >
-                                    {trigger.name} · {trigger.triggerKey}
-                                  </SelectItem>
-                                )
-                              )}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      ))}
+                                disabled={isSendingTemplate}
+                                onValueChange={(value) =>
+                                  setTemplateButtonPayloads((current) => ({
+                                    ...current,
+                                    [String(index)]: value
+                                  }))
+                                }
+                              >
+                                <SelectTrigger className="w-full">
+                                  <SelectValue
+                                    placeholder={
+                                      templateSenderPhoneNumberId
+                                        ? "Choose flow trigger"
+                                        : "Select sender first"
+                                    }
+                                  />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {(
+                                    templateTriggersData?.data?.triggers || []
+                                  ).map((trigger) => (
+                                    <SelectItem
+                                      key={trigger.triggerKey}
+                                      value={trigger.triggerKey}
+                                    >
+                                      {trigger.name} · {trigger.triggerKey}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ) : null}
+                  ) : null}
                 </div>
               </>
             )}

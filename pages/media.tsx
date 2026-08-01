@@ -69,11 +69,7 @@ const getUploadFileType = (file: File): MediaFileType => {
   return "document";
 };
 
-const allowedImageTypes = new Set([
-  "image/jpeg",
-  "image/jpg",
-  "image/png"
-]);
+const allowedImageTypes = new Set(["image/jpeg", "image/jpg", "image/png"]);
 
 export default function MediaPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);

@@ -58,6 +58,7 @@ import {
   useState
 } from "react";
 import {
+  useInfiniteQuery,
   useMutation,
   useQueries,
   useQuery,
@@ -738,6 +739,10 @@ const emptyRule: InstagramCommentRulePayload = {
   mediaIds: []
 };
 
+const INSTAGRAM_FLOWS_PAGE_SIZE = 12;
+const INSTAGRAM_MEDIA_PAGE_SIZE = 36;
+const INSTAGRAM_RULES_PAGE_SIZE = 30;
+
 type InstagramPageProps = {
   canvasOnly?: boolean;
   forcedCanvasId?: string;
@@ -750,6 +755,10 @@ export function InstagramPage({
   const router = useRouter();
   const queryClient = useQueryClient();
   const canvasRef = useRef<HTMLDivElement | null>(null);
+  const flowsLoadMoreRef = useRef<HTMLDivElement | null>(null);
+  const mediaLoadMoreRef = useRef<HTMLDivElement | null>(null);
+  const rulesLoadMoreRef = useRef<HTMLDivElement | null>(null);
+  const ruleMediaLoadMoreRef = useRef<HTMLDivElement | null>(null);
   const activeOrganization = useOrganizationStore(
     (state) => state.activeOrganization
   );
@@ -852,24 +861,71 @@ export function InstagramPage({
     queryFn: getInstagramCanvasPublished,
     enabled: Boolean(activeOrgId && isReady && !selectedCanvasId)
   });
-  const { data: flowsData } = useQuery({
+  const {
+    data: flowsData,
+    isFetchingNextPage: isFetchingMoreFlows,
+    hasNextPage: hasMoreFlows,
+    fetchNextPage: fetchMoreFlows
+  } = useInfiniteQuery({
     queryKey: ["instagram-flows", activeOrgId],
-    queryFn: () => getInstagramFlows({ limit: 8 }),
+    queryFn: ({ pageParam }) =>
+      getInstagramFlows({
+        page: pageParam,
+        limit: INSTAGRAM_FLOWS_PAGE_SIZE
+      }),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      const pagination = lastPage.data.pagination;
+      return pagination.page < pagination.pages
+        ? pagination.page + 1
+        : undefined;
+    },
     enabled: Boolean(activeOrgId && isReady)
   });
-  const { data: mediaData, isLoading: isMediaLoading } = useQuery({
+  const {
+    data: mediaData,
+    isLoading: isMediaLoading,
+    isFetchingNextPage: isFetchingMoreMedia,
+    hasNextPage: hasMoreMedia,
+    fetchNextPage: fetchMoreMedia
+  } = useInfiniteQuery({
     queryKey: ["instagram-media", activeOrgId, mediaSearch, mediaTypeFilter],
-    queryFn: () =>
+    queryFn: ({ pageParam }) =>
       getInstagramMedia({
-        limit: 36,
+        page: pageParam,
+        limit: INSTAGRAM_MEDIA_PAGE_SIZE,
         search: mediaSearch,
         mediaType: mediaTypeFilter
       }),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      const pagination = lastPage.data.pagination;
+      return pagination.page < pagination.pages
+        ? pagination.page + 1
+        : undefined;
+    },
     enabled: Boolean(activeOrgId && isReady)
   });
-  const { data: rulesData, isLoading: isRulesLoading } = useQuery({
+  const {
+    data: rulesData,
+    isLoading: isRulesLoading,
+    isFetchingNextPage: isFetchingMoreRules,
+    hasNextPage: hasMoreRules,
+    fetchNextPage: fetchMoreRules
+  } = useInfiniteQuery({
     queryKey: ["instagram-comment-rules", activeOrgId],
-    queryFn: () => getInstagramCommentRules({ limit: 30 }),
+    queryFn: ({ pageParam }) =>
+      getInstagramCommentRules({
+        page: pageParam,
+        limit: INSTAGRAM_RULES_PAGE_SIZE
+      }),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      const pagination = lastPage.data.pagination;
+      return pagination.page < pagination.pages
+        ? pagination.page + 1
+        : undefined;
+    },
     enabled: Boolean(activeOrgId && isReady)
   });
 
@@ -887,12 +943,78 @@ export function InstagramPage({
       ? node
       : null;
   }, [nodes, previewNodeId]);
-  const rules = rulesData?.data.rules || [];
-  const media = mediaData?.data.media || [];
+  const rules =
+    rulesData?.pages.flatMap((page) => page.data.rules || []) || [];
+  const media =
+    mediaData?.pages.flatMap((page) => page.data.media || []) || [];
+  const flows =
+    flowsData?.pages.flatMap((page) => page.data.flows || []) || [];
   const selectedCanvasVersion =
     canvasDetail?.draftState?.version ||
     draftData?.data.draftState?.version ||
     1;
+
+  useEffect(() => {
+    const sentinel = rulesLoadMoreRef.current;
+    if (!sentinel || !hasMoreRules || activeTab !== "rules") return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !isFetchingMoreRules) {
+          fetchMoreRules();
+        }
+      },
+      { rootMargin: "200px 0px" }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [activeTab, fetchMoreRules, hasMoreRules, isFetchingMoreRules]);
+
+  useEffect(() => {
+    const sentinel =
+      activeTab === "media"
+        ? mediaLoadMoreRef.current
+        : isRuleMediaPickerOpen
+          ? ruleMediaLoadMoreRef.current
+          : null;
+    if (!sentinel || !hasMoreMedia) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !isFetchingMoreMedia) {
+          fetchMoreMedia();
+        }
+      },
+      { rootMargin: "200px 0px" }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [
+    activeTab,
+    fetchMoreMedia,
+    hasMoreMedia,
+    isFetchingMoreMedia,
+    isRuleMediaPickerOpen
+  ]);
+
+  useEffect(() => {
+    const sentinel = flowsLoadMoreRef.current;
+    if (!sentinel || !hasMoreFlows || activeTab !== "setup") return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !isFetchingMoreFlows) {
+          fetchMoreFlows();
+        }
+      },
+      { rootMargin: "200px 0px" }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [activeTab, fetchMoreFlows, hasMoreFlows, isFetchingMoreFlows]);
 
   useEffect(() => {
     if (!canvasOnly && !isReady && activeTab !== "profile") {
@@ -3116,6 +3238,18 @@ export function InstagramPage({
                   </div>
                 )}
               </div>
+              <div ref={rulesLoadMoreRef} className="h-px" />
+              {isFetchingMoreRules && (
+                <CardGridLoadingSkeleton
+                  count={3}
+                  className="lg:grid-cols-2 xl:grid-cols-3"
+                />
+              )}
+              {!hasMoreRules && rules.length > 0 && (
+                <p className="text-center text-xs text-muted-foreground">
+                  All comment automations are loaded.
+                </p>
+              )}
             </div>
           </div>
         )}
@@ -3174,11 +3308,25 @@ export function InstagramPage({
                 className="lg:grid-cols-3 xl:grid-cols-4"
               />
             ) : (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {media.map((item) => (
-                  <InstagramMediaCard key={item.mediaId} item={item} />
-                ))}
-              </div>
+              <>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {media.map((item) => (
+                    <InstagramMediaCard key={item.mediaId} item={item} />
+                  ))}
+                </div>
+                <div ref={mediaLoadMoreRef} className="h-px" />
+                {isFetchingMoreMedia && (
+                  <CardGridLoadingSkeleton
+                    count={4}
+                    className="lg:grid-cols-3 xl:grid-cols-4"
+                  />
+                )}
+                {!hasMoreMedia && media.length > 0 && (
+                  <p className="mt-4 text-center text-xs text-muted-foreground">
+                    All Instagram media is loaded.
+                  </p>
+                )}
+              </>
             )}
           </div>
         )}
@@ -3236,7 +3384,7 @@ export function InstagramPage({
                   Current message flows
                 </h2>
                 <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                  {(flowsData?.data.flows || []).map((flow) => (
+                  {flows.map((flow) => (
                     <div key={flow._id} className="rounded-lg border p-3">
                       <p className="truncate text-sm font-semibold">
                         {flow.name}
@@ -3249,12 +3397,24 @@ export function InstagramPage({
                       </Badge>
                     </div>
                   ))}
-                  {!flowsData?.data.flows?.length && (
+                  {!flows.length && (
                     <p className="text-sm text-muted-foreground">
                       No separate named Instagram flows have been created.
                     </p>
                   )}
                 </div>
+                <div ref={flowsLoadMoreRef} className="h-px" />
+                {isFetchingMoreFlows && (
+                  <CardGridLoadingSkeleton
+                    count={4}
+                    className="mt-3 md:grid-cols-2 xl:grid-cols-4"
+                  />
+                )}
+                {!hasMoreFlows && flows.length > 0 && (
+                  <p className="mt-3 text-center text-xs text-muted-foreground">
+                    All Instagram flows are loaded.
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -3697,6 +3857,18 @@ export function InstagramPage({
               <div className="rounded-xl border border-dashed p-10 text-center text-sm text-muted-foreground">
                 Sync Instagram media before selecting posts.
               </div>
+            )}
+            <div ref={ruleMediaLoadMoreRef} className="h-px" />
+            {isFetchingMoreMedia && (
+              <CardGridLoadingSkeleton
+                count={4}
+                className="md:grid-cols-3 lg:grid-cols-4"
+              />
+            )}
+            {!hasMoreMedia && media.length > 0 && (
+              <p className="py-3 text-center text-xs text-muted-foreground">
+                All Instagram media is loaded.
+              </p>
             )}
           </div>
           <DialogFooter className="items-center sm:justify-between">

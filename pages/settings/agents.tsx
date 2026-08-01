@@ -333,8 +333,7 @@ function PermissionEditor({
                       ...current,
                       [group.key]: {
                         access: event.target.value as PermissionAccessLevel,
-                        capabilities:
-                          current[group.key]?.capabilities || {}
+                        capabilities: current[group.key]?.capabilities || {}
                       }
                     }))
                   }
@@ -364,8 +363,10 @@ function PermissionEditor({
                           access: current[group.key]?.access || "none",
                           capabilities: {
                             ...current[group.key]?.capabilities,
-                            [capability.key]: !current[group.key]
-                              ?.capabilities?.[capability.key]
+                            [capability.key]:
+                              !current[group.key]?.capabilities?.[
+                                capability.key
+                              ]
                           }
                         }
                       }))

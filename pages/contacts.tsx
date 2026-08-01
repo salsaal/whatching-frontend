@@ -12,8 +12,12 @@ import {
   Upload,
   X
 } from "lucide-react";
-import { ElementType, useMemo, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { ElementType, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery
+} from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import { toast } from "sonner";
 import { FaWhatsapp } from "react-icons/fa";
@@ -74,6 +78,7 @@ const formatDate = (date?: string) =>
     : "-";
 
 type ContactChannel = "all" | "whatsapp" | "instagram";
+const CONTACTS_PAGE_SIZE = 50;
 
 const contactChannelOptions: Array<{
   value: ContactChannel;
@@ -112,6 +117,7 @@ const getContactSyncState = (number?: WhatsAppPhoneNumber) => {
 };
 
 export default function ContactsPage() {
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const [query, setQuery] = useState("");
   const [channel, setChannel] = useState<ContactChannel>("all");
   const [selectedSubscriber, setSelectedSubscriber] =
@@ -130,9 +136,38 @@ export default function ContactsPage() {
   const [selectedSyncNumberId, setSelectedSyncNumberId] = useState("");
   const [isExporting, setIsExporting] = useState(false);
 
-  const { data, isLoading, refetch } = useQuery({
-    queryKey: ["subscribers", channel],
-    queryFn: () => getAllSubscribers({ channel }),
+  const primaryTagFilter = selectedTagFilters[0] || "";
+  const remainingTagFilters = selectedTagFilters.slice(1);
+  const {
+    data,
+    isLoading,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+    refetch
+  } = useInfiniteQuery({
+    queryKey: [
+      "subscribers",
+      channel,
+      query.trim(),
+      primaryTagFilter,
+      remainingTagFilters
+    ],
+    queryFn: ({ pageParam }) =>
+      getAllSubscribers({
+        channel,
+        q: query,
+        tag: primaryTagFilter,
+        page: pageParam,
+        limit: CONTACTS_PAGE_SIZE
+      }),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      const currentPage = lastPage.pagination.page;
+      return currentPage < lastPage.pagination.totalPages
+        ? currentPage + 1
+        : undefined;
+    },
     refetchOnMount: "always"
   });
   const { data: allCountData } = useQuery({
@@ -167,8 +202,9 @@ export default function ContactsPage() {
   });
 
   const subscribers = useMemo(
-    () => data?.data?.subscribers || [],
-    [data?.data?.subscribers]
+    () =>
+      data?.pages.flatMap((page) => page.data?.subscribers || []) || [],
+    [data?.pages]
   );
   const channelCounts = {
     all: allCountData?.pagination.total,
@@ -211,8 +247,8 @@ export default function ContactsPage() {
 
     return subscribers.filter((subscriber) => {
       const matchesTags =
-        !selectedTagFilters.length ||
-        selectedTagFilters.every((tag) => subscriber.tags.includes(tag));
+        !remainingTagFilters.length ||
+        remainingTagFilters.every((tag) => subscriber.tags.includes(tag));
 
       const matchesQuery =
         !value ||
@@ -230,7 +266,7 @@ export default function ContactsPage() {
 
       return matchesTags && matchesQuery;
     });
-  }, [query, selectedTagFilters, subscribers]);
+  }, [query, remainingTagFilters, subscribers]);
   const selectedVisibleIds = useMemo(
     () =>
       filteredSubscribers
@@ -238,6 +274,27 @@ export default function ContactsPage() {
         .map((subscriber) => subscriber._id),
     [filteredSubscribers, selectedIds]
   );
+  const loadedSubscriberCount =
+    data?.pages.reduce((total, page) => total + page.results, 0) || 0;
+  const totalSubscriberCount =
+    data?.pages[data.pages.length - 1]?.pagination.total || 0;
+
+  useEffect(() => {
+    const sentinel = loadMoreRef.current;
+    if (!sentinel || !hasNextPage) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !isFetchingNextPage) {
+          fetchNextPage();
+        }
+      },
+      { rootMargin: "240px 0px" }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
 
   const { mutate: saveSubscriber, isPending: isSaving } = useMutation({
     mutationFn: async (payload: SubscriberPayload) => {
@@ -421,6 +478,7 @@ export default function ContactsPage() {
       const first = await getAllSubscribers({
         channel,
         q: query,
+        tag: primaryTagFilter,
         page: 1,
         limit: 100
       });
@@ -434,7 +492,13 @@ export default function ContactsPage() {
           pages
             .slice(index, index + 5)
             .map((page) =>
-              getAllSubscribers({ channel, q: query, page, limit: 100 })
+              getAllSubscribers({
+                channel,
+                q: query,
+                tag: primaryTagFilter,
+                page,
+                limit: 100
+              })
             )
         );
         remaining.push(...batch);
@@ -610,9 +674,9 @@ export default function ContactsPage() {
                   <button
                     key={option.value}
                     type="button"
-                    onClick={() => {
-                      setChannel(option.value);
-                      setSelectedIds([]);
+                onClick={() => {
+                  setChannel(option.value);
+                  setSelectedIds([]);
                     }}
                     className={cn(
                       "flex cursor-pointer items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-medium text-muted-foreground transition",
@@ -694,6 +758,11 @@ export default function ContactsPage() {
               Add tag
             </Button>
           </div>
+          <p className="mt-3 text-xs text-muted-foreground">
+            Showing {filteredSubscribers.length} matching loaded contact
+            {filteredSubscribers.length === 1 ? "" : "s"}
+            {totalSubscriberCount ? ` from ${totalSubscriberCount} total` : ""}.
+          </p>
         </section>
 
         <section className="rounded-lg bg-white p-2 shadow-xs">
@@ -815,6 +884,26 @@ export default function ContactsPage() {
                   ))}
                 </tbody>
               </table>
+              <div ref={loadMoreRef} className="h-px" />
+              {isFetchingNextPage && (
+                <div className="space-y-3 border-t p-3">
+                  {Array.from({ length: 3 }).map((_, index) => (
+                    <div key={index} className="grid gap-4 md:grid-cols-6">
+                      <Skeleton className="h-5" />
+                      <Skeleton className="h-5" />
+                      <Skeleton className="h-5" />
+                      <Skeleton className="h-5" />
+                      <Skeleton className="h-5" />
+                      <Skeleton className="h-5" />
+                    </div>
+                  ))}
+                </div>
+              )}
+              {!hasNextPage && loadedSubscriberCount > 0 && (
+                <p className="border-t p-4 text-center text-xs text-muted-foreground">
+                  All matching contacts are loaded.
+                </p>
+              )}
             </div>
           )}
         </section>

@@ -21,10 +21,12 @@ export const getAllBroadcasts = async (
 };
 
 export const getBroadcastById = async (
-  broadcastId: string
+  broadcastId: string,
+  params: { page?: number; limit?: number; recipientStatus?: string } = {}
 ): Promise<BroadcastResponse> => {
   const res = await api.get<BroadcastResponse>(
-    BROADCAST_ENDPOINTS.GET_BY_ID(broadcastId)
+    BROADCAST_ENDPOINTS.GET_BY_ID(broadcastId),
+    { params }
   );
   return res.data;
 };

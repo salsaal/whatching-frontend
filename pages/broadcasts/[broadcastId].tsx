@@ -14,9 +14,13 @@ import {
   Users,
   XCircle
 } from "lucide-react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQueryClient
+} from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import {
@@ -142,16 +146,38 @@ const getTimelineRows = (broadcast: {
   }
 ];
 
+const RECIPIENTS_PAGE_SIZE = 50;
+
 export default function BroadcastMetricsPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const recipientsLoadMoreRef = useRef<HTMLDivElement | null>(null);
   const broadcastId = Array.isArray(router.query.broadcastId)
     ? router.query.broadcastId[0]
     : router.query.broadcastId;
 
-  const { data, isLoading, isError } = useQuery({
+  const {
+    data,
+    isLoading,
+    isError,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage
+  } = useInfiniteQuery({
     queryKey: ["broadcast", broadcastId],
-    queryFn: () => getBroadcastById(broadcastId as string),
+    queryFn: ({ pageParam }) =>
+      getBroadcastById(broadcastId as string, {
+        page: pageParam,
+        limit: RECIPIENTS_PAGE_SIZE
+      }),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      const pagination = lastPage.data.recipientsPagination;
+      if (!pagination) return undefined;
+      return pagination.page < pagination.totalPages
+        ? pagination.page + 1
+        : undefined;
+    },
     enabled: Boolean(broadcastId),
     refetchOnMount: "always",
     refetchInterval: 3000
@@ -166,11 +192,14 @@ export default function BroadcastMetricsPage() {
     }
   });
 
-  const broadcast = data?.data.broadcast;
+  const firstPage = data?.pages[0];
+  const broadcast = firstPage?.data.broadcast;
   const recipients = useMemo(
-    () => data?.data.recipients || [],
-    [data?.data.recipients]
+    () => data?.pages.flatMap((page) => page.data.recipients || []) || [],
+    [data?.pages]
   );
+  const recipientsTotal =
+    data?.pages[data.pages.length - 1]?.data.recipientsPagination?.total || 0;
   const stats = broadcast?.stats;
   const rows = stats ? metricRows(stats) : [];
   const deliveryRate = stats
@@ -182,6 +211,23 @@ export default function BroadcastMetricsPage() {
   const failureRate = stats
     ? getPercent(stats.failedRecipients, stats.totalRecipients)
     : 0;
+
+  useEffect(() => {
+    const sentinel = recipientsLoadMoreRef.current;
+    if (!sentinel || !hasNextPage) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !isFetchingNextPage) {
+          fetchNextPage();
+        }
+      },
+      { rootMargin: "240px 0px" }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
 
   return (
     <AppLayout>
@@ -433,8 +479,8 @@ export default function BroadcastMetricsPage() {
                   Recipients
                 </CardTitle>
                 <CardDescription>
-                  {data?.data.recipientsPagination?.total ?? recipients.length}{" "}
-                  recipients returned for this broadcast.
+                  {recipientsTotal || recipients.length} recipients returned for
+                  this broadcast.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -521,6 +567,19 @@ export default function BroadcastMetricsPage() {
                   <div className="rounded-sm bg-muted/50 p-8 text-center text-sm text-muted-foreground">
                     No recipients returned for this broadcast yet.
                   </div>
+                )}
+                <div ref={recipientsLoadMoreRef} className="h-px" />
+                {isFetchingNextPage && (
+                  <div className="mt-3 space-y-2">
+                    {Array.from({ length: 3 }).map((_, index) => (
+                      <Skeleton key={index} className="h-12" />
+                    ))}
+                  </div>
+                )}
+                {!hasNextPage && recipients.length > 0 && (
+                  <p className="mt-3 text-center text-xs text-muted-foreground">
+                    All recipients are loaded.
+                  </p>
                 )}
               </CardContent>
             </Card>
