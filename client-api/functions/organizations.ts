@@ -278,9 +278,21 @@ export const getSupportRequests = async (
 export const createSupportRequest = async (
   payload: CreateSupportRequestPayload
 ): Promise<SupportRequestResponse> => {
+  const formData = new FormData();
+  formData.append("category", payload.category || "other");
+  formData.append("priority", payload.priority || "normal");
+  formData.append("subject", payload.subject);
+  formData.append("message", payload.message);
+  payload.images?.forEach((image) => formData.append("images", image));
+
   const res = await api.post<SupportRequestResponse>(
     ORGANIZATION_ENDPOINTS.SUPPORT_REQUESTS,
-    payload
+    formData,
+    {
+      headers: {
+        "Content-Type": "multipart/form-data"
+      }
+    }
   );
   return res.data;
 };

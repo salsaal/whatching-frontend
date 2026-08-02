@@ -943,12 +943,9 @@ export function InstagramPage({
       ? node
       : null;
   }, [nodes, previewNodeId]);
-  const rules =
-    rulesData?.pages.flatMap((page) => page.data.rules || []) || [];
-  const media =
-    mediaData?.pages.flatMap((page) => page.data.media || []) || [];
-  const flows =
-    flowsData?.pages.flatMap((page) => page.data.flows || []) || [];
+  const rules = rulesData?.pages.flatMap((page) => page.data.rules || []) || [];
+  const media = mediaData?.pages.flatMap((page) => page.data.media || []) || [];
+  const flows = flowsData?.pages.flatMap((page) => page.data.flows || []) || [];
   const selectedCanvasVersion =
     canvasDetail?.draftState?.version ||
     draftData?.data.draftState?.version ||

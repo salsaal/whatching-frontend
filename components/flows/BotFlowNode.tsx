@@ -109,6 +109,11 @@ function BotFlowNode({ id, data, selected }: NodeProps<BotFlowReactNode>) {
           data.invalid && "ring-2 ring-destructive/30"
         )}
       >
+        {isDefaultNode && (
+          <div className="absolute left-1/2 top-0 z-20 -translate-x-1/2 -translate-y-1/2 rounded-full border border-primary bg-primary px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white shadow-sm">
+            Default
+          </div>
+        )}
         {hasAutomaticFollowUp && (
           <div
             className="absolute -right-2 -top-2 z-20 flex size-7 items-center justify-center rounded-full border-2 border-white bg-primary text-white shadow-sm"

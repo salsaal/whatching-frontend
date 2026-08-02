@@ -15,11 +15,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/router";
-import {
-  useInfiniteQuery,
-  useMutation,
-  useQuery
-} from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import {
@@ -391,7 +387,8 @@ export default function BroadcastsPage() {
   );
   const subscribers = useMemo(
     () =>
-      (subscribersData?.pages.flatMap((page) => page.data.subscribers || []) ||
+      (
+        subscribersData?.pages.flatMap((page) => page.data.subscribers || []) ||
         []
       ).filter((subscriber) => Boolean(subscriber.phoneNumber)),
     [subscribersData?.pages]

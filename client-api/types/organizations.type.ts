@@ -305,6 +305,12 @@ export interface SupportRequest {
   status: SupportRequestStatus;
   subject: string;
   message: string;
+  images?: Array<{
+    url: string;
+    name: string;
+    mimeType?: string;
+    fileSize?: number;
+  }>;
   createdAt: string;
   updatedAt: string;
   resolvedAt?: string;
@@ -334,6 +340,7 @@ export interface CreateSupportRequestPayload {
   subject: string;
   message: string;
   context?: Record<string, unknown>;
+  images?: File[];
 }
 
 export interface TeamMember {

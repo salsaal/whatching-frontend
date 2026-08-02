@@ -224,6 +224,9 @@ const actionTypeOptions: Array<{ value: BotActionType; label: string }> = [
   { value: "open_url", label: "Open Website" },
   { value: "end_conversation", label: "End Conversation" }
 ];
+const buttonActionTypeOptions = actionTypeOptions.filter((option) =>
+  ["go_to_trigger", "open_url"].includes(option.value)
+);
 
 const lockedNodeIds = new Set([
   "main-menu",
@@ -3730,7 +3733,10 @@ function PropertiesPanel({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {actionTypeOptions.map((option) => (
+                    {(node.data.blockType === "buttons"
+                      ? buttonActionTypeOptions
+                      : actionTypeOptions
+                    ).map((option) => (
                       <SelectItem key={option.value} value={option.value}>
                         {option.label}
                       </SelectItem>

@@ -11,6 +11,7 @@ import {
 import { AxiosError } from "axios";
 import {
   Bot,
+  BookOpen,
   Edit3,
   Loader2,
   Plus,
@@ -247,7 +248,7 @@ export default function FlowsPage() {
         <section className="grid gap-3 md:grid-cols-2">
           <div className="flex items-center justify-between rounded-lg bg-white p-4 shadow-xs">
             <div>
-              <p className="text-sm font-semibold">Active bot</p>
+              <p className="text-md font-semibold">Active bot</p>
               <p className="text-xs text-muted-foreground">
                 Global switch for automation across every WhatsApp number.
               </p>
@@ -261,21 +262,37 @@ export default function FlowsPage() {
               }
             />
           </div>
-          <div className="flex items-center justify-between rounded-lg bg-white p-4 shadow-xs">
-            <div>
-              <p className="text-sm font-semibold">AI response</p>
-              <p className="text-xs text-muted-foreground">
-                Let AI answer when no interactive flow route matches.
-              </p>
+          <div className="flex flex-col gap-3 rounded-lg bg-white p-4 shadow-xs sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0 w-full">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-md font-semibold">AI response</p>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8 shrink-0 cursor-pointer"
+                  onClick={() => router.push("/settings/knowledge")}
+                >
+                  <BookOpen className="size-3.5" />
+                  Add Knowledge base
+                </Button>
+              </div>
+              <div className="flex items-center justify-between mt-4">
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Let AI answer when no route matches. Add knowledge for better
+                  replies.
+                </p>
+                <Switch
+                  className="shrink-0"
+                  checked={Boolean(settingsData?.data?.settings.isAiEnabled)}
+                  disabled={isSettingsLoading || isUpdatingSettings}
+                  title="Allow AI fallback when no flow route matches"
+                  onCheckedChange={(checked) =>
+                    updateSettingsMutate({ isAiEnabled: checked })
+                  }
+                />
+              </div>
             </div>
-            <Switch
-              checked={Boolean(settingsData?.data?.settings.isAiEnabled)}
-              disabled={isSettingsLoading || isUpdatingSettings}
-              title="Allow AI fallback when no flow route matches"
-              onCheckedChange={(checked) =>
-                updateSettingsMutate({ isAiEnabled: checked })
-              }
-            />
           </div>
         </section>
 

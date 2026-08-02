@@ -7,8 +7,7 @@ import {
   LogOut,
   Plus,
   Smartphone,
-  Sparkles,
-  Wallet
+  Sparkles
 } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/router";
@@ -178,7 +177,7 @@ function Organisations() {
                     WhatsApp growth hub
                   </p>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Manage broadcasts, contacts, templates, wallet, and
+                    Manage broadcasts, contacts, templates, automations, and
                     integrations per organisation.
                   </p>
                 </div>
@@ -206,57 +205,62 @@ function Organisations() {
               {organizations.map((organization) => (
                 <Card
                   key={organization?._id}
-                  className="rounded-lg border-0 bg-white shadow-xs transition hover:-translate-y-0.5 hover:shadow-sm"
+                  className="overflow-hidden rounded-lg border-0 bg-white shadow-xs transition hover:border-primary/30 hover:shadow-sm"
                 >
-                  <CardHeader className="pb-2">
-                    <CardTitle className="font-heading text-2xl">
-                      {organization?.name}
-                    </CardTitle>
+                  <CardHeader className="border-b  pb-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <CardTitle className="truncate font-heading text-2xl">
+                          {organization?.name}
+                        </CardTitle>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          Created {formatDate(organization?.createdAt)}
+                        </p>
+                      </div>
+                      <div className="flex size-10 shrink-0 items-center justify-center rounded-sm bg-primary/10 text-primary">
+                        <Building2 className="size-5" />
+                      </div>
+                    </div>
                   </CardHeader>
                   <CardContent className="space-y-5">
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div>
-                        <p className="text-muted-foreground">Status</p>
-                        <p className="mt-1 inline-flex items-center gap-1.5 font-medium capitalize text-primary">
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div className="rounded-md border bg-white px-3 py-2">
+                        <p className="text-xs text-muted-foreground">Status</p>
+                        <p className="mt-1 inline-flex items-center gap-1.5 font-semibold capitalize text-primary">
                           <CheckCircle2 className="size-4" />
                           {organization?.metaConfig?.status || "pending"}
                         </p>
                       </div>
-                      <div>
-                        <p className="text-muted-foreground">Active plan</p>
-                        <p className="mt-1 font-semibold text-emerald-900">
+                      <div className="rounded-md border bg-white px-3 py-2">
+                        <p className="text-xs text-muted-foreground">
+                          Active plan
+                        </p>
+                        <p className="mt-1 truncate font-semibold text-emerald-900">
                           {planLabel(organization?.planTier)}
                         </p>
                       </div>
                     </div>
 
                     <div className="grid gap-3 text-sm">
-                      <div className="flex items-center justify-between rounded-sm bg-muted/50 px-3 py-2">
+                      <div className="flex items-center justify-between gap-3 rounded-sm bg-muted/50 px-3 py-2">
                         <span className="inline-flex items-center gap-2 text-muted-foreground">
                           <Smartphone className="size-4" />
                           Number
                         </span>
-                        <span className="font-medium">
+                        <span className="truncate font-medium">
                           {organization?.metaConfig?.displayPhoneNumber ||
                             "N/A"}
                         </span>
                       </div>
-                      <div className="flex items-center justify-between rounded-sm bg-muted/50 px-3 py-2">
-                        <span className="inline-flex items-center gap-2 text-muted-foreground">
-                          <Wallet className="size-4" />
-                          Wallet
-                        </span>
-                        <span className="font-medium">
-                          Rs. {organization?.walletBalance}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between rounded-sm bg-muted/50 px-3 py-2">
+                      <div className="flex items-center justify-between gap-3 rounded-sm bg-muted/50 px-3 py-2">
                         <span className="inline-flex items-center gap-2 text-muted-foreground">
                           <CalendarDays className="size-4" />
-                          Created
+                          Last updated
                         </span>
-                        <span className="font-medium">
-                          {formatDate(organization?.createdAt)}
+                        <span className="truncate font-medium">
+                          {formatDate(
+                            organization?.updatedAt || organization?.createdAt
+                          )}
                         </span>
                       </div>
                     </div>

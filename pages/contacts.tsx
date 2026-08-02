@@ -13,11 +13,7 @@ import {
   X
 } from "lucide-react";
 import { ElementType, useEffect, useMemo, useRef, useState } from "react";
-import {
-  useInfiniteQuery,
-  useMutation,
-  useQuery
-} from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import { toast } from "sonner";
 import { FaWhatsapp } from "react-icons/fa";
@@ -53,7 +49,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -202,8 +197,7 @@ export default function ContactsPage() {
   });
 
   const subscribers = useMemo(
-    () =>
-      data?.pages.flatMap((page) => page.data?.subscribers || []) || [],
+    () => data?.pages.flatMap((page) => page.data?.subscribers || []) || [],
     [data?.pages]
   );
   const channelCounts = {
@@ -236,12 +230,9 @@ export default function ContactsPage() {
   const selectedSyncNumber =
     syncEligibleNumbers.find((number) => number.id === selectedSyncNumberId) ||
     syncEligibleNumbers[0];
-  const selectedCoexistenceNumber =
-    coexistenceNumbers.find((number) => number.id === selectedSyncNumberId) ||
-    coexistenceNumbers[0];
-  const selectedContactSyncState = getContactSyncState(
-    selectedCoexistenceNumber
-  );
+  const selectedContactSyncState = selectedSyncNumber
+    ? getContactSyncState(selectedSyncNumber)
+    : null;
   const filteredSubscribers = useMemo(() => {
     const value = query.trim().toLowerCase();
 
@@ -489,17 +480,15 @@ export default function ContactsPage() {
       const remaining = [];
       for (let index = 0; index < pages.length; index += 5) {
         const batch = await Promise.all(
-          pages
-            .slice(index, index + 5)
-            .map((page) =>
-              getAllSubscribers({
-                channel,
-                q: query,
-                tag: primaryTagFilter,
-                page,
-                limit: 100
-              })
-            )
+          pages.slice(index, index + 5).map((page) =>
+            getAllSubscribers({
+              channel,
+              q: query,
+              tag: primaryTagFilter,
+              page,
+              limit: 100
+            })
+          )
         );
         remaining.push(...batch);
       }
@@ -576,36 +565,53 @@ export default function ContactsPage() {
               </Button>
             )}
             {syncEligibleNumbers.length > 0 && (
-              <div className="flex min-w-0 gap-2">
-                {syncEligibleNumbers.length > 1 && (
-                  <select
-                    value={selectedSyncNumber?.id || ""}
-                    onChange={(event) =>
-                      setSelectedSyncNumberId(event.target.value)
+              <div className="flex min-w-0 flex-col gap-2">
+                <div className="flex min-w-0 gap-2">
+                  {syncEligibleNumbers.length > 1 && (
+                    <select
+                      value={selectedSyncNumber?.id || ""}
+                      onChange={(event) =>
+                        setSelectedSyncNumberId(event.target.value)
+                      }
+                      className="h-10 rounded-sm border bg-background px-3 text-sm"
+                    >
+                      {syncEligibleNumbers.map((number) => (
+                        <option key={number.id} value={number.id}>
+                          {number.displayPhoneNumber ||
+                            number.verifiedName ||
+                            number.phoneNumberId}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  <Button
+                    variant="outline"
+                    disabled={!selectedSyncNumber || isSyncingContacts}
+                    isLoading={isSyncingContacts}
+                    onClick={() =>
+                      selectedSyncNumber &&
+                      syncCoexistenceContacts(selectedSyncNumber)
                     }
-                    className="h-10 rounded-sm border bg-background px-3 text-sm"
                   >
-                    {syncEligibleNumbers.map((number) => (
-                      <option key={number.id} value={number.id}>
-                        {number.displayPhoneNumber ||
-                          number.verifiedName ||
-                          number.phoneNumberId}
-                      </option>
-                    ))}
-                  </select>
+                    <RefreshCw className="size-4" />
+                    Sync WhatsApp Business contacts
+                  </Button>
+                </div>
+                {selectedContactSyncState && (
+                  <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs">
+                    <p className="font-medium">
+                      Business App contact sync:{" "}
+                      <span className="capitalize">
+                        {selectedContactSyncState.status}
+                      </span>
+                    </p>
+                    <p className="mt-1 text-muted-foreground">
+                      Active {selectedContactSyncState.contactsActive || 0},
+                      removed {selectedContactSyncState.contactsRemoved || 0},
+                      skipped {selectedContactSyncState.contactsSkipped || 0}
+                    </p>
+                  </div>
                 )}
-                <Button
-                  variant="outline"
-                  disabled={!selectedSyncNumber || isSyncingContacts}
-                  isLoading={isSyncingContacts}
-                  onClick={() =>
-                    selectedSyncNumber &&
-                    syncCoexistenceContacts(selectedSyncNumber)
-                  }
-                >
-                  <RefreshCw className="size-4" />
-                  Sync WhatsApp Business contacts
-                </Button>
               </div>
             )}
             <Button variant="outline" onClick={() => setIsImportOpen(true)}>
@@ -632,38 +638,6 @@ export default function ContactsPage() {
           </div>
         </section>
 
-        {selectedContactSyncState &&
-          selectedContactSyncState.status !== "not_requested" && (
-            <section className="rounded-lg border border-primary/15 bg-primary/5 p-4 text-sm shadow-xs">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="font-medium">
-                    Business App contact sync:{" "}
-                    <span className="capitalize">
-                      {selectedContactSyncState.status.replace(/_/g, " ")}
-                    </span>
-                  </p>
-                  <p className="mt-1 text-muted-foreground">
-                    Active {selectedContactSyncState.contactsActive}, removed{" "}
-                    {selectedContactSyncState.contactsRemoved}, skipped{" "}
-                    {selectedContactSyncState.contactsSkipped}
-                  </p>
-                </div>
-                <Badge variant="outline">One-time sync</Badge>
-              </div>
-              {selectedContactSyncState.lastError && (
-                <p className="mt-3 text-destructive">
-                  {selectedContactSyncState.lastError}
-                </p>
-              )}
-              {selectedContactSyncState.warning && (
-                <p className="mt-3 text-amber-700">
-                  {selectedContactSyncState.warning}
-                </p>
-              )}
-            </section>
-          )}
-
         <section className="rounded-lg bg-white p-4 shadow-xs">
           <div className="grid gap-4 lg:grid-cols-[360px_minmax(0,1fr)] lg:items-center">
             <div className="grid w-full grid-cols-3 gap-1 rounded-xl bg-muted p-1">
@@ -674,9 +648,9 @@ export default function ContactsPage() {
                   <button
                     key={option.value}
                     type="button"
-                onClick={() => {
-                  setChannel(option.value);
-                  setSelectedIds([]);
+                    onClick={() => {
+                      setChannel(option.value);
+                      setSelectedIds([]);
                     }}
                     className={cn(
                       "flex cursor-pointer items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs font-medium text-muted-foreground transition",

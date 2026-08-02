@@ -51,6 +51,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle
 } from "@/components/ui/dialog";
@@ -151,6 +152,22 @@ const plans = [
   }
 ];
 
+type PlanAction =
+  | {
+      kind: "trial" | "subscribe" | "change";
+      tier: "basic" | "pro";
+      planName: string;
+      label: string;
+      description: string;
+    }
+  | {
+      kind: "enterprise";
+      tier: "enterprise";
+      planName: string;
+      label: string;
+      description: string;
+    };
+
 export default function AppLayout({
   children,
   hideHeader = false,
@@ -160,6 +177,9 @@ export default function AppLayout({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isPlansOpen, setIsPlansOpen] = useState(false);
   const [isLogoutOpen, setIsLogoutOpen] = useState(false);
+  const [pendingPlanAction, setPendingPlanAction] = useState<PlanAction | null>(
+    null
+  );
   const [planBannerDismissed, setPlanBannerDismissed] = useState(false);
   const logout = useAuthStore((state) => state.logout);
   const {
@@ -192,7 +212,10 @@ export default function AppLayout({
   const { mutate: subscribe, isPending: isSubscribing } = useMutation({
     mutationFn: purchaseSubscription,
     onSuccess: (data) => {
-      window.location.href = data.data.paymentUrl || "";
+      if (data.data.paymentUrl) {
+        window.open(data.data.paymentUrl, "_blank", "noopener,noreferrer");
+      }
+      setPendingPlanAction(null);
     },
     onError: () => toast.error("Unable to start subscription checkout")
   });
@@ -202,7 +225,8 @@ export default function AppLayout({
     onSuccess: (data) => {
       const paymentUrl = data.data?.paymentUrl;
       if (paymentUrl) {
-        window.location.href = paymentUrl;
+        window.open(paymentUrl, "_blank", "noopener,noreferrer");
+        setPendingPlanAction(null);
         return;
       }
       if (data.data?.organization) {
@@ -210,6 +234,7 @@ export default function AppLayout({
       }
       toast.success(data.message || "Plan updated.");
       setIsPlansOpen(false);
+      setPendingPlanAction(null);
     },
     onError: () => toast.error("Unable to change plan")
   });
@@ -222,6 +247,7 @@ export default function AppLayout({
       }
       toast.success(data.message || "Your 7-day free trial has started.");
       setIsPlansOpen(false);
+      setPendingPlanAction(null);
     },
     onError: () => toast.error("Unable to start the free trial")
   });
@@ -233,6 +259,8 @@ export default function AppLayout({
   const isNoPlan = currentPlan === "none";
   const isTrialing = activeOrganization?.subscriptionStatus === "trialing";
   const canStartTrial = isNoPlan && !activeOrganization?.trialConsumedAt;
+  const isPlanActionPending =
+    isSubscribing || isChangingPlan || isStartingTrial;
 
   useEffect(() => {
     if (organizationData?.data.organization) {
@@ -305,6 +333,66 @@ export default function AppLayout({
     setIsLogoutOpen(false);
     setIsMobileMenuOpen(false);
     router.push("/auth/login");
+  };
+  const buildPlanAction = (plan: (typeof plans)[number]): PlanAction => {
+    if (plan.id === "enterprise") {
+      return {
+        kind: "enterprise",
+        tier: "enterprise",
+        planName: plan.name,
+        label: "Contact Sales",
+        description:
+          "Enterprise setup is handled by the Whatching team for custom usage, more numbers, and dedicated support."
+      };
+    }
+    const tier = plan.id as "basic" | "pro";
+    if (canStartTrial) {
+      return {
+        kind: "trial",
+        tier,
+        planName: plan.name,
+        label: "Start free trial",
+        description: `Start a 7-day ${plan.name} trial for this organisation. No checkout tab will be opened.`
+      };
+    }
+    if (isNoPlan || isTrialing) {
+      return {
+        kind: "subscribe",
+        tier,
+        planName: plan.name,
+        label: `Subscribe to ${plan.name}`,
+        description:
+          "After confirmation, Razorpay checkout will open in a new tab."
+      };
+    }
+    return {
+      kind: "change",
+      tier,
+      planName: plan.name,
+      label:
+        currentPlan === "basic" && plan.id === "pro"
+          ? "Upgrade plan"
+          : `Downgrade to ${plan.name}`,
+      description:
+        "After confirmation, the billing flow will open in a new tab when payment is required."
+    };
+  };
+  const proceedPlanAction = () => {
+    if (!pendingPlanAction) return;
+    if (pendingPlanAction.kind === "enterprise") {
+      toast.info("Contact sales flow coming next");
+      setPendingPlanAction(null);
+      return;
+    }
+    if (pendingPlanAction.kind === "trial") {
+      beginTrial({ tier: pendingPlanAction.tier });
+      return;
+    }
+    if (pendingPlanAction.kind === "subscribe") {
+      subscribe({ tier: pendingPlanAction.tier });
+      return;
+    }
+    changePlan({ tier: pendingPlanAction.tier });
   };
 
   const renderAccountLinks = (mobile = false) => (
@@ -507,6 +595,8 @@ export default function AppLayout({
             {plans.map((plan) => {
               const Icon = plan.icon;
               const isCurrentPlan = plan.id === currentPlan && !isTrialing;
+              const isThisPlanPending =
+                isPlanActionPending && pendingPlanAction?.tier === plan.id;
 
               return (
                 <div
@@ -540,25 +630,14 @@ export default function AppLayout({
                   <Button
                     variant={plan.highlighted ? "default" : "outline"}
                     className="mb-6 w-full"
-                    disabled={isCurrentPlan}
-                    isLoading={
-                      isSubscribing || isChangingPlan || isStartingTrial
+                    disabled={
+                      isCurrentPlan ||
+                      (isPlanActionPending && !isThisPlanPending)
                     }
+                    isLoading={isThisPlanPending}
                     onClick={() => {
                       if (isCurrentPlan) return;
-
-                      if (plan.id === "enterprise") {
-                        toast.info("Contact sales flow coming next");
-                        return;
-                      }
-
-                      if (canStartTrial) {
-                        beginTrial({ tier: plan.id as "basic" | "pro" });
-                      } else if (isNoPlan || isTrialing) {
-                        subscribe({ tier: plan.id });
-                      } else {
-                        changePlan({ tier: plan.id });
-                      }
+                      setPendingPlanAction(buildPlanAction(plan));
                     }}
                   >
                     {isCurrentPlan
@@ -605,6 +684,44 @@ export default function AppLayout({
               );
             })}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(pendingPlanAction)}
+        onOpenChange={(open) => !open && setPendingPlanAction(null)}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{pendingPlanAction?.label}</DialogTitle>
+            <DialogDescription>
+              {pendingPlanAction?.description}
+            </DialogDescription>
+          </DialogHeader>
+          {pendingPlanAction && (
+            <div className="rounded-md border bg-muted/30 p-3 text-sm">
+              <p className="font-medium">{pendingPlanAction.planName}</p>
+              <p className="mt-1 text-muted-foreground">
+                Prices shown in the plans modal are inclusive of GST.
+              </p>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setPendingPlanAction(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              isLoading={isPlanActionPending}
+              onClick={proceedPlanAction}
+            >
+              Proceed
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

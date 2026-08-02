@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import { useInfiniteQuery, useMutation } from "@tanstack/react-query";
-import { LifeBuoy, Send } from "lucide-react";
-import { FormEvent, useState } from "react";
+import { ImageIcon, LifeBuoy, Send, X } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -32,9 +31,15 @@ const categories: Array<{ value: SupportRequestCategory; label: string }> = [
   { value: "data_recovery", label: "Data recovery" },
   { value: "other", label: "Other" }
 ];
+const allowedSupportImageTypes = new Set([
+  "image/jpeg",
+  "image/jpg",
+  "image/png"
+]);
 
 export default function HelpPage() {
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const activeOrganization = useOrganizationStore(
     (state) => state.activeOrganization
   );
@@ -42,6 +47,7 @@ export default function HelpPage() {
   const [priority, setPriority] = useState<SupportRequestPriority>("normal");
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
+  const [images, setImages] = useState<File[]>([]);
 
   const {
     data,
@@ -71,6 +77,8 @@ export default function HelpPage() {
       setSubject("");
       setMessage("");
       setPriority("normal");
+      setImages([]);
+      if (fileInputRef.current) fileInputRef.current.value = "";
       await refetch();
     }
   });
@@ -86,8 +94,22 @@ export default function HelpPage() {
       priority,
       subject: subject.trim(),
       message: message.trim(),
+      images,
       context: { page: window.location.pathname }
     });
+  };
+  const handleImages = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    const invalid = files.find(
+      (file) => !allowedSupportImageTypes.has(file.type)
+    );
+    if (invalid) {
+      toast.error("Support attachments must be PNG or JPG images.");
+      event.target.value = "";
+      return;
+    }
+    setImages((current) => [...current, ...files].slice(0, 5));
+    event.target.value = "";
   };
 
   const requests =
@@ -189,6 +211,58 @@ export default function HelpPage() {
                 placeholder="Describe what happened and what you expected."
               />
             </div>
+            <div className="space-y-3 rounded-md border bg-muted/20 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <Label>Images</Label>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Attach up to 5 PNG or JPG screenshots.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={images.length >= 5 || isPending}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <ImageIcon className="size-4" />
+                  Add image
+                </Button>
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/jpg"
+                multiple
+                className="hidden"
+                onChange={handleImages}
+              />
+              {images.length > 0 && (
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {images.map((image, index) => (
+                    <div
+                      key={`${image.name}-${index}`}
+                      className="flex min-w-0 items-center justify-between gap-2 rounded-sm bg-white px-3 py-2 text-sm"
+                    >
+                      <span className="truncate">{image.name}</span>
+                      <button
+                        type="button"
+                        className="text-muted-foreground hover:text-destructive"
+                        onClick={() =>
+                          setImages((current) =>
+                            current.filter(
+                              (_, itemIndex) => itemIndex !== index
+                            )
+                          )
+                        }
+                      >
+                        <X className="size-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
             <Button type="submit" isLoading={isPending}>
               <Send className="size-4" />
               Submit ticket
@@ -218,6 +292,26 @@ export default function HelpPage() {
                     <p className="mt-2 text-xs text-muted-foreground">
                       {new Date(request.createdAt).toLocaleString()}
                     </p>
+                    {!!request.images?.length && (
+                      <div className="mt-3 flex gap-2 overflow-x-auto">
+                        {request.images.map((image) => (
+                          <a
+                            key={image.url}
+                            href={image.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-sm border bg-muted"
+                            title={image.name}
+                          >
+                            <img
+                              src={image.url}
+                              alt={image.name}
+                              className="h-full w-full object-cover"
+                            />
+                          </a>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))
               ) : (

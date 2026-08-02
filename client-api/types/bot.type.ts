@@ -155,7 +155,7 @@ export type BotSettingsPatch = Partial<
 export interface KnowledgeSource {
   _id: string;
   type: "text" | "faq" | "file";
-  status: "pending" | "processing" | "ready" | "failed";
+  status: "pending" | "processing" | "ready" | "failed" | "archived";
   title: string;
   content?: string;
   faqEntries?: Array<{ question: string; answer: string }>;

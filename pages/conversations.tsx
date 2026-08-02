@@ -1429,9 +1429,7 @@ export default function ConversationsPage() {
       (payload: { conversationId?: string; message?: ChatMessage }) => {
         const incomingMessage = payload.message;
         if (payload.conversationId && incomingMessage) {
-          queryClient.setQueryData<
-            InfiniteData<ConversationMessagesResponse>
-          >(
+          queryClient.setQueryData<InfiniteData<ConversationMessagesResponse>>(
             ["conversation-messages", orgId, payload.conversationId],
             (current) => {
               if (!current) return current;
@@ -1587,8 +1585,8 @@ export default function ConversationsPage() {
   );
   const whatsappContacts = useMemo(
     () =>
-      (contactsData?.pages.flatMap((page) => page.data.subscribers || []) ||
-        []
+      (
+        contactsData?.pages.flatMap((page) => page.data.subscribers || []) || []
       ).filter(
         (subscriber: Subscriber) => subscriber.phoneNumber || subscriber.waId
       ),
