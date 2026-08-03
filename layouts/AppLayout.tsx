@@ -465,7 +465,14 @@ export default function AppLayout({
           {/* Icon */}
           <div className="absolute left-1/2 -translate-x-1/2 opacity-100 transition-opacity duration-200 group-hover/sidebar:opacity-0">
             <div className="flex size-10 items-center justify-center rounded-sm bg-primary/10">
-              <MessageCircle className="size-5 text-primary" />
+              {/* <MessageCircle className="size-5 text-primary" /> */}
+              <Image
+                src={assets.whatchingIcon}
+                alt="Whatching"
+                height={200}
+                width={200}
+                className="w-[100px] h-[100px] object-cover text-primary"
+              />
             </div>
           </div>
         </div>

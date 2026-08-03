@@ -3,5 +3,6 @@ export default {
   logo: "/assets/images/logo.png",
   whatchingLogo: "/assets/images/whatching.png",
   logo2: "/assets/images/logo2.png",
-  authLayoutImage: "/assets/images/auth.png"
+  authLayoutImage: "/assets/images/auth.png",
+  whatchingIcon: "/assets/images/whatchingicon.png"
 };

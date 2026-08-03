@@ -9,6 +9,8 @@ const api = axios.create({
   withCredentials: true
 });
 
+let refreshTokenRequest: Promise<string> | null = null;
+
 const getAccessTokenFromResponse = (data: unknown): string | null => {
   if (!data || typeof data !== "object") return null;
 
@@ -40,6 +42,44 @@ const getUserFromResponse = (data: unknown): AuthUser | null => {
   };
 
   return response.data?.user || null;
+};
+
+const refreshAccessToken = async () => {
+  if (!refreshTokenRequest) {
+    refreshTokenRequest = axios
+      .post(
+        `${process.env.NEXT_PUBLIC_API_BASE_URL}${AUTH_ENDPOINTS.REFRESH_TOKEN}`,
+        {},
+        { withCredentials: true }
+      )
+      .then((res) => {
+        const newToken = getAccessTokenFromResponse(res.data);
+
+        if (!newToken) {
+          throw new Error(
+            "Refresh token response did not include access token"
+          );
+        }
+
+        const refreshedUser = getUserFromResponse(res.data);
+
+        if (refreshedUser) {
+          useAuthStore.getState().setAuth({
+            token: newToken,
+            user: refreshedUser
+          });
+        } else {
+          useAuthStore.getState().setToken(newToken);
+        }
+
+        return newToken;
+      })
+      .finally(() => {
+        refreshTokenRequest = null;
+      });
+  }
+
+  return refreshTokenRequest;
 };
 
 // 🔥 REQUEST INTERCEPTOR
@@ -93,30 +133,7 @@ api.interceptors.response.use(
       originalRequest._retry = true;
 
       try {
-        const res = await axios.post(
-          `${process.env.NEXT_PUBLIC_API_BASE_URL}${AUTH_ENDPOINTS.REFRESH_TOKEN}`,
-          {},
-          { withCredentials: true }
-        );
-
-        const newToken = getAccessTokenFromResponse(res.data);
-
-        if (!newToken) {
-          throw new Error(
-            "Refresh token response did not include access token"
-          );
-        }
-
-        const refreshedUser = getUserFromResponse(res.data);
-
-        if (refreshedUser) {
-          useAuthStore.getState().setAuth({
-            token: newToken,
-            user: refreshedUser
-          });
-        } else {
-          useAuthStore.getState().setToken(newToken);
-        }
+        const newToken = await refreshAccessToken();
 
         originalRequest.headers = originalRequest.headers || {};
         originalRequest.headers.Authorization = `Bearer ${newToken}`;
