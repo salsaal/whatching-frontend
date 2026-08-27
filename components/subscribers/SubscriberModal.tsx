@@ -67,11 +67,13 @@ export default function SubscriberModal({
     enabled: open && Boolean(subscriber?._id)
   });
 
-  const { mutate: toggleBroadcastEligibility, isPending: isTogglingEligibility } =
-    useMutation({
-      mutationFn: updateSubscriberBroadcastEligibility,
-      meta: { showToast: false, invalidateQueries: ["subscribers"] }
-    });
+  const {
+    mutate: toggleBroadcastEligibility,
+    isPending: isTogglingEligibility
+  } = useMutation({
+    mutationFn: updateSubscriberBroadcastEligibility,
+    meta: { showToast: false, invalidateQueries: ["subscribers"] }
+  });
 
   const campaignSources = campaignTouchesData?.data.campaignSources || [];
   const campaignTouches = campaignTouchesData?.data.touches || [];
@@ -204,33 +206,34 @@ export default function SubscriberModal({
             </div>
           )}
 
-          {subscriber && (campaignSources.length > 0 || campaignTouches.length > 0) && (
-            <div className="space-y-2 rounded-sm border p-3">
-              <p className="text-sm font-medium">Campaign attribution</p>
-              {campaignSources.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {campaignSources.map((source) => (
-                    <span
-                      key={source.sourceId}
-                      className="inline-flex items-center rounded-sm bg-muted px-2 py-1 text-xs"
-                    >
-                      {source.label} ({source.touchCount})
-                    </span>
-                  ))}
-                </div>
-              )}
-              {campaignTouches.length > 0 && (
-                <ul className="max-h-32 space-y-1 overflow-y-auto text-xs text-muted-foreground">
-                  {campaignTouches.map((touch) => (
-                    <li key={touch._id}>
-                      {new Date(touch.occurredAt).toLocaleDateString("en-IN")}{" "}
-                      — {touch.headline || touch.sourceId}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
+          {subscriber &&
+            (campaignSources.length > 0 || campaignTouches.length > 0) && (
+              <div className="space-y-2 rounded-sm border p-3">
+                <p className="text-sm font-medium">Campaign attribution</p>
+                {campaignSources.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {campaignSources.map((source) => (
+                      <span
+                        key={source.sourceId}
+                        className="inline-flex items-center rounded-sm bg-muted px-2 py-1 text-xs"
+                      >
+                        {source.label} ({source.touchCount})
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {campaignTouches.length > 0 && (
+                  <ul className="max-h-32 space-y-1 overflow-y-auto text-xs text-muted-foreground">
+                    {campaignTouches.map((touch) => (
+                      <li key={touch._id}>
+                        {new Date(touch.occurredAt).toLocaleDateString("en-IN")}{" "}
+                        — {touch.headline || touch.sourceId}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
 
           <DialogFooter>
             <Button

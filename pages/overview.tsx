@@ -448,7 +448,9 @@ export default function OverviewPage() {
   const stats = [
     {
       label: "Subscribers",
-      value: formatCompactNumber(activeOrganization?.usage?.subscribersCount || 0),
+      value: formatCompactNumber(
+        activeOrganization?.usage?.subscribersCount || 0
+      ),
       icon: Users
     },
     isOwner && typeof aiTokensRemaining === "number"
@@ -457,11 +459,14 @@ export default function OverviewPage() {
           value: formatCompactNumber(Math.max(0, aiTokensRemaining)),
           icon: Bot,
           href: "/settings/billing#ai-tokens",
-          tooltip: "Included plan tokens plus any top-ups, minus usage this cycle."
+          tooltip:
+            "Included plan tokens plus any top-ups, minus usage this cycle."
         }
       : {
           label: "AI tokens used",
-          value: formatCompactNumber(activeOrganization?.usage?.aiTokensUsed || 0),
+          value: formatCompactNumber(
+            activeOrganization?.usage?.aiTokensUsed || 0
+          ),
           icon: Bot,
           href: isOwner ? "/settings/billing#ai-tokens" : undefined
         },
@@ -479,7 +484,8 @@ export default function OverviewPage() {
       value: formatCompactNumber(campaignsData?.data.pagination.total || 0),
       icon: Target,
       href: "/campaigns",
-      tooltip: "Distinct Click-to-WhatsApp ad campaigns that have driven contacts."
+      tooltip:
+        "Distinct Click-to-WhatsApp ad campaigns that have driven contacts."
     }
   ];
   const setupItems = useMemo(
@@ -702,9 +708,7 @@ export default function OverviewPage() {
                 <CheckCircle2 className="size-5" />
               </div>
               <div className="min-w-0">
-                <p className="font-medium">
-                  WhatsApp Business API connected
-                </p>
+                <p className="font-medium">WhatsApp Business API connected</p>
                 <p className="truncate text-sm text-muted-foreground">
                   {integration?.displayPhoneNumber ||
                     activeOrganization?.metaConfig?.displayPhoneNumber}{" "}
@@ -811,8 +815,8 @@ export default function OverviewPage() {
                 {signupSession && !isMetaReady && (
                   <div className="rounded-sm bg-white p-3 text-xs text-muted-foreground">
                     Received WABA {signupSession.wabaId} and phone number{" "}
-                    {signupSession.phoneNumberId}. Waiting for authorization
-                    to finish.
+                    {signupSession.phoneNumberId}. Waiting for authorization to
+                    finish.
                   </div>
                 )}
               </div>

@@ -98,12 +98,12 @@ const getListPreviewSections = (content?: BotCanvasNodeContent) =>
     : []
   ).map((section, sectionIndex) => ({
     title: getPreviewText(section.title, `Section ${sectionIndex + 1}`),
-    rows: (Array.isArray(section.rows) ? (section.rows as ListRowPreview[]) : [])
+    rows: (Array.isArray(section.rows)
+      ? (section.rows as ListRowPreview[])
+      : []
+    )
       .map((row, rowIndex) => ({
-        title: getPreviewText(
-          row.title || row.label,
-          `Row ${rowIndex + 1}`
-        ),
+        title: getPreviewText(row.title || row.label, `Row ${rowIndex + 1}`),
         description: getPreviewText(row.description)
       }))
       .filter((row) => row.title || row.description)

@@ -41,9 +41,9 @@ export const getMyOrganizations = async (): Promise<OrganizationsResponse> => {
   return res.data;
 };
 
-export const updateOrganizationSettings = async (
-  payload: { timezone: string }
-): Promise<OrganizationResponse> => {
+export const updateOrganizationSettings = async (payload: {
+  timezone: string;
+}): Promise<OrganizationResponse> => {
   const res = await api.patch<OrganizationResponse>(
     ORGANIZATION_ENDPOINTS.UPDATE_SETTINGS,
     payload

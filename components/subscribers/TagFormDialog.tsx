@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
 
-import { CreateTagPayload, Tag, TagAutomationTrigger, TagChannelScope, TagMode, UpdateTagPayload } from "@/client-api/types/tags.type";
+import {
+  CreateTagPayload,
+  Tag,
+  TagAutomationTrigger,
+  TagChannelScope,
+  TagMode,
+  UpdateTagPayload
+} from "@/client-api/types/tags.type";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,

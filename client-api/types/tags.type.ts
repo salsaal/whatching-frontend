@@ -52,6 +52,4 @@ export interface CreateTagPayload {
   cooldownSeconds?: number;
 }
 
-export type UpdateTagPayload = Partial<
-  Omit<CreateTagPayload, "name">
->;
+export type UpdateTagPayload = Partial<Omit<CreateTagPayload, "name">>;

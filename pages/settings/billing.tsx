@@ -103,13 +103,14 @@ export default function BillingSettingsPage() {
     enabled: canUseAiTokenTopup
   });
 
-  const { data: aiTokenUsageData, isLoading: isLoadingAiTokenUsage } =
-    useQuery({
+  const { data: aiTokenUsageData, isLoading: isLoadingAiTokenUsage } = useQuery(
+    {
       queryKey: ["ai-token-usage", activeOrganization?._id],
       queryFn: getAiTokenUsage,
       enabled: canUseAiTokenTopup,
       refetchOnMount: "always"
-    });
+    }
+  );
 
   const { mutate: cancelSubscriptionMutate, isPending: isCancelling } =
     useMutation({
@@ -291,7 +292,9 @@ export default function BillingSettingsPage() {
                 <>
                   Paid features stop working on{" "}
                   <span className="font-semibold text-foreground">
-                    {formatDate(activeOrganization?.subscriptionCurrentPeriodEnd)}
+                    {formatDate(
+                      activeOrganization?.subscriptionCurrentPeriodEnd
+                    )}
                   </span>
                   {typeof daysUntilPeriodEnd === "number"
                     ? ` (${daysUntilPeriodEnd} day${daysUntilPeriodEnd === 1 ? "" : "s"} left).`
@@ -309,7 +312,9 @@ export default function BillingSettingsPage() {
                 <>
                   {formatCurrency(totals.totalAmount)} will be deducted on{" "}
                   <span className="font-semibold text-foreground">
-                    {formatDate(activeOrganization?.subscriptionCurrentPeriodEnd)}
+                    {formatDate(
+                      activeOrganization?.subscriptionCurrentPeriodEnd
+                    )}
                   </span>
                   .
                 </>

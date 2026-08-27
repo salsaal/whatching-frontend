@@ -71,7 +71,7 @@ export const plans: PlanDefinition[] = [
       "Unlimited AI Message Tokens",
       "Coexistence with WhatsApp Business App",
       "WhatsApp AI Agent",
-      "Remove \"Powered by Whatching\" Branding"
+      'Remove "Powered by Whatching" Branding'
     ],
     comingSoon: [
       "Instagram Automations",
@@ -254,7 +254,8 @@ export const buildPlanAction = (
       tier: plan.id,
       planName: plan.name,
       label: `Subscribe to ${plan.name}`,
-      description: "Review GST billing details before opening Razorpay checkout."
+      description:
+        "Review GST billing details before opening Razorpay checkout."
     };
   }
 

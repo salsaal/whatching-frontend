@@ -1,6 +1,9 @@
 import api from "../axiosInstance";
 import { ANALYTICS_ENDPOINTS, SUBSCRIBER_ENDPOINTS } from "../endpoints";
-import { CampaignsResponse, CampaignTouchesResponse } from "../types/campaigns.type";
+import {
+  CampaignsResponse,
+  CampaignTouchesResponse
+} from "../types/campaigns.type";
 
 export const listCampaigns = async (
   params: { sort?: "recent" | "leads"; page?: number; limit?: number } = {}

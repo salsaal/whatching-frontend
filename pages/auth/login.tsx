@@ -55,10 +55,7 @@ export default function LoginPage() {
       router.push((router.query.next as string) || "/organisations");
     },
 
-    onError: async (
-      error: AxiosError<{ message?: string }>,
-      variables
-    ) => {
+    onError: async (error: AxiosError<{ message?: string }>, variables) => {
       const message = error.response?.data?.message || "Login failed";
 
       if (message === "Please verify your email to log in.") {

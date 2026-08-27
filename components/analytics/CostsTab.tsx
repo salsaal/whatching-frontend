@@ -7,7 +7,10 @@ import {
   getTemplateAnalytics,
   getTemplateInsightsStatus
 } from "@/client-api/functions/analytics";
-import { AnalyticsRange, ConversationCostGroupBy } from "@/client-api/types/analytics.type";
+import {
+  AnalyticsRange,
+  ConversationCostGroupBy
+} from "@/client-api/types/analytics.type";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,12 +36,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 const numberFormat = new Intl.NumberFormat("en-IN");
 
-const groupByOptions: Array<{ value: ConversationCostGroupBy; label: string }> = [
-  { value: "category", label: "Category" },
-  { value: "type", label: "Type" },
-  { value: "country", label: "Country" },
-  { value: "phone", label: "Phone number" }
-];
+const groupByOptions: Array<{ value: ConversationCostGroupBy; label: string }> =
+  [
+    { value: "category", label: "Category" },
+    { value: "type", label: "Type" },
+    { value: "country", label: "Country" },
+    { value: "phone", label: "Phone number" }
+  ];
 
 export default function CostsTab({ range }: { range: AnalyticsRange }) {
   const queryClient = useQueryClient();
@@ -96,31 +100,32 @@ export default function CostsTab({ range }: { range: AnalyticsRange }) {
       {templateInsightsEnabled === false && (
         <section className="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950 sm:flex-row sm:items-center sm:justify-between">
           <p>
-            Enable template insights to see per-template click and spend
-            data from Meta.
+            Enable template insights to see per-template click and spend data
+            from Meta.
           </p>
-          <AlertDialog
-            onOpenChange={(open) => !open && setAcknowledged(false)}
-          >
+          <AlertDialog onOpenChange={(open) => !open && setAcknowledged(false)}>
             <AlertDialogTrigger asChild>
               <Button size="sm">Enable template insights</Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>
-                  Enable template insights?
-                </AlertDialogTitle>
+                <AlertDialogTitle>Enable template insights?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  This is a <strong>permanent, one-time opt-in on Meta&apos;s
-                  side</strong> — there is no API to disable it once enabled.
-                  Meta will collect and anonymize chat data for link
-                  tracking on this WhatsApp Business Account.
+                  This is a{" "}
+                  <strong>
+                    permanent, one-time opt-in on Meta&apos;s side
+                  </strong>{" "}
+                  — there is no API to disable it once enabled. Meta will
+                  collect and anonymize chat data for link tracking on this
+                  WhatsApp Business Account.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <label className="flex items-start gap-2 rounded-sm bg-muted/60 p-3 text-sm">
                 <Checkbox
                   checked={acknowledged}
-                  onCheckedChange={(checked) => setAcknowledged(Boolean(checked))}
+                  onCheckedChange={(checked) =>
+                    setAcknowledged(Boolean(checked))
+                  }
                 />
                 I understand this cannot be undone.
               </label>
@@ -145,7 +150,9 @@ export default function CostsTab({ range }: { range: AnalyticsRange }) {
           </h2>
           <Select
             value={groupBy}
-            onValueChange={(value) => setGroupBy(value as ConversationCostGroupBy)}
+            onValueChange={(value) =>
+              setGroupBy(value as ConversationCostGroupBy)
+            }
           >
             <SelectTrigger className="w-40">
               <SelectValue />

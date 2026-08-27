@@ -28,7 +28,10 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
 import { getDashboardAnalytics } from "@/client-api/functions/analytics";
-import { AnalyticsRange, AnalyticsTrend } from "@/client-api/types/analytics.type";
+import {
+  AnalyticsRange,
+  AnalyticsTrend
+} from "@/client-api/types/analytics.type";
 import CostsTab from "@/components/analytics/CostsTab";
 import { QueryErrorState } from "@/components/shared/QueryErrorState";
 import { Badge } from "@/components/ui/badge";
@@ -495,9 +498,7 @@ function TrendBadge({ trend }: { trend: AnalyticsTrend }) {
   if (isFlat) return null;
 
   const Icon = isNew || isUp ? TrendingUp : isDown ? TrendingDown : Minus;
-  const label = isNew
-    ? "New"
-    : `${isUp ? "+" : ""}${trend.changePercent}%`;
+  const label = isNew ? "New" : `${isUp ? "+" : ""}${trend.changePercent}%`;
 
   return (
     <span

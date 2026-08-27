@@ -19,7 +19,11 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { emptyBillingProfile, indiaStates, validateBillingProfile } from "@/lib/billing";
+import {
+  emptyBillingProfile,
+  indiaStates,
+  validateBillingProfile
+} from "@/lib/billing";
 
 const normalizeBillingProfile = (profile: BillingProfile): BillingProfile => ({
   legalName: profile.legalName.trim(),

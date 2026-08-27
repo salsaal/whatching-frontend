@@ -50,10 +50,7 @@ import {
 } from "@/lib/billing";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
-import {
-  Organization,
-  useOrganizationStore
-} from "@/stores/organizationStore";
+import { Organization, useOrganizationStore } from "@/stores/organizationStore";
 
 type ApiErrorPayload = {
   message?: string;
@@ -193,15 +190,13 @@ export default function CheckoutPage() {
   const [billingProfile, setBillingProfile] =
     useState<BillingProfile>(emptyBillingProfile);
 
-  const {
-    data: billingProfileData,
-    isLoading: isBillingProfileLoading
-  } = useQuery({
-    queryKey: ["billing-profile", activeOrganization?._id],
-    queryFn: getBillingProfile,
-    enabled: Boolean(activeOrganization?._id && isPaidAction),
-    refetchOnMount: "always"
-  });
+  const { data: billingProfileData, isLoading: isBillingProfileLoading } =
+    useQuery({
+      queryKey: ["billing-profile", activeOrganization?._id],
+      queryFn: getBillingProfile,
+      enabled: Boolean(activeOrganization?._id && isPaidAction),
+      refetchOnMount: "always"
+    });
 
   useEffect(() => {
     if (!isPaidAction) return;
@@ -223,7 +218,9 @@ export default function CheckoutPage() {
         activeOrganization?.billingProfile?.address ||
         "",
       state:
-        backendProfile?.state || activeOrganization?.billingProfile?.state || "",
+        backendProfile?.state ||
+        activeOrganization?.billingProfile?.state ||
+        "",
       pinCode:
         backendProfile?.pinCode ||
         activeOrganization?.billingProfile?.pinCode ||

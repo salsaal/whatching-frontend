@@ -80,9 +80,7 @@ export default function CampaignsTab() {
                     {numberFormat.format(campaign.touchCount)}
                   </td>
                   <td className="p-3 text-right">
-                    {new Date(campaign.lastTouchAt).toLocaleDateString(
-                      "en-IN"
-                    )}
+                    {new Date(campaign.lastTouchAt).toLocaleDateString("en-IN")}
                   </td>
                 </tr>
               ))}

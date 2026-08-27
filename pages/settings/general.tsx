@@ -122,9 +122,7 @@ export default function GeneralSettingsPage() {
           <Button
             type="button"
             disabled={
-              isSaving ||
-              !timezone ||
-              timezone === activeOrganization?.timezone
+              isSaving || !timezone || timezone === activeOrganization?.timezone
             }
             onClick={() => saveSettings({ timezone })}
           >

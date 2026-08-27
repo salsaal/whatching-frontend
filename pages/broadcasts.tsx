@@ -1265,20 +1265,22 @@ export default function BroadcastsPage() {
               <div>
                 <Label>Audience</Label>
                 <div className="mt-2 grid gap-2 sm:grid-cols-4">
-                  {(["all", "tags", "specific", "campaign"] as const).map((mode) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      onClick={() => setAudienceMode(mode)}
-                      className={cn(
-                        "rounded-md border bg-white p-3 text-left text-sm font-medium capitalize shadow-xs transition hover:border-primary/30",
-                        audienceMode === mode &&
-                          "border-primary/40 bg-primary/10 text-primary"
-                      )}
-                    >
-                      {mode}
-                    </button>
-                  ))}
+                  {(["all", "tags", "specific", "campaign"] as const).map(
+                    (mode) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setAudienceMode(mode)}
+                        className={cn(
+                          "rounded-md border bg-white p-3 text-left text-sm font-medium capitalize shadow-xs transition hover:border-primary/30",
+                          audienceMode === mode &&
+                            "border-primary/40 bg-primary/10 text-primary"
+                        )}
+                      >
+                        {mode}
+                      </button>
+                    )
+                  )}
                 </div>
               </div>
 

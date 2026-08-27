@@ -38,7 +38,11 @@ import {
   Subscriber,
   SubscriberPayload
 } from "@/client-api/types/subscribers.type";
-import { CreateTagPayload, Tag, UpdateTagPayload } from "@/client-api/types/tags.type";
+import {
+  CreateTagPayload,
+  Tag,
+  UpdateTagPayload
+} from "@/client-api/types/tags.type";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { QueryErrorState } from "@/components/shared/QueryErrorState";
 import ImportSubscribersModal from "@/components/subscribers/ImportSubscribersModal";
