@@ -20,6 +20,8 @@ Do not manually attach auth/org headers in feature modules unless there is a spe
 
 It also handles refresh-token retry and logout on refresh failure.
 
+Production deployments with a cross-site frontend/API boundary require the backend refresh cookie to use `SameSite=None; Secure`. A frontend `withCredentials` flag does not override `SameSite=Lax` and cannot repair a cookie omitted by the browser.
+
 ## Persisted Stores Must Stay User-Aware
 
 Auth and organization state are persisted. `authStore` clears organization state when the user changes, and `organizationStore` clears stale organization state if owner identity is missing. Preserve this behaviour to avoid leaking one user's active organization into another user's session.
@@ -50,7 +52,25 @@ Both WhatsApp and Instagram canvases use `defaultTriggerKey` in draft/published 
 
 ## Preview Flow Uses Preview Nodes
 
-The full-flow preview dialog is intended to show preview-style nodes connected like the builder canvas, not regular editor blocks. This distinction matters for the user's requested preview mode.
+The full-flow preview dialog is intended to show preview-style nodes connected like the builder canvas. The editable builder uses regular editor blocks, including for WhatsApp buttons and lists, so route handles remain visible. Both surfaces use orthogonal step edges.
+
+## Query Keys Must Match Query Shape
+
+Do not reuse one TanStack Query key for a normal query and an infinite query. Broadcast preview uses `broadcast-preview`; the paginated detail view uses `broadcast-detail`. Reusing a key lets a plain response hydrate an infinite observer and causes client crashes when it expects `pages` and `pageParams`.
+
+## Modal Height Is Bounded Globally
+
+Dialog and alert-dialog primitives cap content at `90vh` and allow vertical scrolling. Feature dialogs that need fixed headers or actions override the outer overflow and scroll only their body.
+
+## Knowledge Editing Follows Backend Capability
+
+Knowledge sources support text/FAQ creation, titled file upload, re-ingestion, and deletion. Do not show an edit action until the backend exposes and validates an update route.
+
+## Paid Plans Require Billing Profile First
+
+Before paid subscribe or plan-change calls, save the India billing profile through `/billing/profile`. Legal name, billing email, address, state, and six-digit PIN are required; GSTIN is optional but validated when present. Trials bypass this form.
+
+Plan selection and paid checkout should stay on dedicated routes instead of the global app shell modal. The backend subscribe/change validators only accept `{ tier }`, so callback URLs or billing fields must not be sent in those payloads. The frontend should open Razorpay Checkout.js with backend-returned `key` and `subscription_id`; for this SPA, use Checkout's `handler` to route to `/congratulations` and let webhooks plus `/billing/sync` confirm the subscription state.
 
 ## Instagram And WhatsApp Meta Auth Are Separate
 

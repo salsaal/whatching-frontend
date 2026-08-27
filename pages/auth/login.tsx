@@ -7,7 +7,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { loginUser } from "@/client-api/functions/auth";
+import { loginUser, resendVerification } from "@/client-api/functions/auth";
 import { useRouter } from "next/router";
 import { AxiosError } from "axios";
 import AuthLayout from "@/layouts/AuthLayout";
@@ -55,8 +55,34 @@ export default function LoginPage() {
       router.push((router.query.next as string) || "/organisations");
     },
 
-    onError: (error: AxiosError<{ message?: string }>) => {
-      toast.error(error.response?.data?.message || "Login failed");
+    onError: async (
+      error: AxiosError<{ message?: string }>,
+      variables
+    ) => {
+      const message = error.response?.data?.message || "Login failed";
+
+      if (message === "Please verify your email to log in.") {
+        try {
+          const response = await resendVerification({ email: variables.email });
+          toast.success(
+            response.message || "Verification link sent. Check your email."
+          );
+        } catch (resendError) {
+          const resendMessage =
+            resendError instanceof AxiosError
+              ? resendError.response?.data?.message
+              : undefined;
+          toast.error(resendMessage || "Unable to send verification link.");
+        } finally {
+          router.push({
+            pathname: "/auth/verify",
+            query: { email: variables.email, resent: "1" }
+          });
+        }
+        return;
+      }
+
+      toast.error(message);
     }
   });
 

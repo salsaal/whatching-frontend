@@ -1,6 +1,13 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
+import {
+  ChangeEvent,
+  FormEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from "react";
 import { useInfiniteQuery, useMutation } from "@tanstack/react-query";
 import { ImageIcon, LifeBuoy, Send, X } from "lucide-react";
 import { toast } from "sonner";
@@ -10,6 +17,7 @@ import {
   getSupportRequests
 } from "@/client-api/functions/organizations";
 import {
+  SupportRequest,
   SupportRequestCategory,
   SupportRequestPriority
 } from "@/client-api/types/organizations.type";
@@ -112,8 +120,13 @@ export default function HelpPage() {
     event.target.value = "";
   };
 
-  const requests =
-    data?.pages.flatMap((page) => page.data?.supportRequests || []) || [];
+  const requests = useMemo(() => {
+    const uniqueRequests = new Map<string, SupportRequest>();
+    data?.pages
+      .flatMap((page) => page.data?.supportRequests || [])
+      .forEach((request) => uniqueRequests.set(request._id, request));
+    return Array.from(uniqueRequests.values());
+  }, [data?.pages]);
 
   useEffect(() => {
     const sentinel = loadMoreRef.current;

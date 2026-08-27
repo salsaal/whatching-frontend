@@ -144,6 +144,10 @@ export interface BroadcastResponse {
   };
 }
 
+export type BroadcastRecipient = NonNullable<
+  BroadcastResponse["data"]["recipients"]
+>[number];
+
 export interface CreateBroadcastPayload {
   name: string;
   templateId: string;

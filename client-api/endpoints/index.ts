@@ -46,6 +46,8 @@ export const ORGANIZATION_ENDPOINTS = {
   BILLING_START_TRIAL: `${ORGANIZATIONS_BASE}/billing/start-trial`,
   BILLING_SUBSCRIBE: `${ORGANIZATIONS_BASE}/billing/subscribe`,
   BILLING_CHANGE_PLAN: `${ORGANIZATIONS_BASE}/billing/change-plan`,
+  BILLING_PROFILE: `${ORGANIZATIONS_BASE}/billing/profile`,
+  BILLING_SYNC: `${ORGANIZATIONS_BASE}/billing/sync`,
   BILLING_TOPUP_WALLET: `${ORGANIZATIONS_BASE}/billing/topup-wallet`,
   BILLING_HISTORY: `${ORGANIZATIONS_BASE}/billing/history`,
   BILLING_CANCEL: `${ORGANIZATIONS_BASE}/billing/cancel`,

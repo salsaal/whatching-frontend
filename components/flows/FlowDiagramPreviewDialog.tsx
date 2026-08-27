@@ -1,5 +1,6 @@
 import {
   Background,
+  ConnectionLineType,
   Controls,
   Edge,
   Handle,
@@ -52,6 +53,7 @@ interface MessagePreviewNodeData extends Record<string, unknown> {
 }
 
 type MessagePreviewNode = Node<MessagePreviewNodeData, "messagePreview">;
+const previewEdgeStyle = { strokeWidth: 1.25, strokeDasharray: "4 5" };
 
 const instagramMessageTypes = new Set<InstagramBlockType>([
   "send_text",
@@ -211,6 +213,7 @@ export default function FlowDiagramPreviewDialog({
     () =>
       edges.map((edge) => ({
         ...edge,
+        type: "smoothstep",
         animated: false,
         selectable: false,
         markerEnd: {
@@ -222,7 +225,7 @@ export default function FlowDiagramPreviewDialog({
         style: {
           ...edge.style,
           stroke: platform === "Instagram" ? "#db2777" : "#16a34a",
-          strokeWidth: 1.75
+          ...previewEdgeStyle
         }
       })),
     [edges, platform]
@@ -256,6 +259,11 @@ export default function FlowDiagramPreviewDialog({
               nodes={previewNodes}
               edges={previewEdges}
               nodeTypes={previewNodeTypes}
+              connectionLineType={ConnectionLineType.SmoothStep}
+              defaultEdgeOptions={{
+                type: "smoothstep",
+                style: previewEdgeStyle
+              }}
               fitView
               fitViewOptions={{ padding: 0.22, maxZoom: 0.9 }}
               minZoom={0.15}

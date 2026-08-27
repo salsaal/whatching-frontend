@@ -21,9 +21,9 @@ export default function VerifyPage() {
     ? router.query.email[0]
     : router.query.email;
 
-  const [status, setStatus] = useState<"loading" | "success" | "error">(
-    "loading"
-  );
+  const [status, setStatus] = useState<
+    "loading" | "success" | "error" | "email_sent"
+  >("loading");
   const queryClient = useQueryClient();
   const setAuth = useAuthStore((state) => state.setAuth);
   const verifiedTokenRef = useRef<string | null>(null);
@@ -72,6 +72,10 @@ export default function VerifyPage() {
       if (missingTokenHandledRef.current) return;
 
       missingTokenHandledRef.current = true;
+      if (email) {
+        setStatus("email_sent");
+        return;
+      }
       setStatus("error");
       toast.error("Invalid or missing verification link");
       return;
@@ -81,7 +85,7 @@ export default function VerifyPage() {
 
     verifiedTokenRef.current = token;
     verifyMutate(token);
-  }, [router.isReady, token, verifyMutate]);
+  }, [email, router.isReady, token, verifyMutate]);
 
   return (
     <AuthLayout>
@@ -125,6 +129,38 @@ export default function VerifyPage() {
             >
               Go to dashboard
               <ArrowRight className="size-4" />
+            </Button>
+          </>
+        )}
+
+        {status === "email_sent" && (
+          <>
+            <h1 className="text-4xl font-heading max-sm:text-3xl">
+              Check your email
+            </h1>
+
+            <p className="text-muted-foreground mt-3 mb-6">
+              We sent a fresh verification link to {email}.
+            </p>
+
+            {email && (
+              <Button
+                variant="outline"
+                className="w-full mb-3"
+                isLoading={isResending}
+                onClick={() => resendMutate({ email })}
+              >
+                <RefreshCcw className="size-4" />
+                Resend verification link
+              </Button>
+            )}
+
+            <Button
+              variant="ghost"
+              className="w-full"
+              onClick={() => router.push("/auth/login")}
+            >
+              Back to login
             </Button>
           </>
         )}

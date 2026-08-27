@@ -20,18 +20,39 @@ export interface OrganizationUsage {
   subscribersCount: number;
 }
 
+export interface OrganizationBillingProfile {
+  country?: "IN";
+  legalName: string;
+  billingEmail: string;
+  address: string;
+  state: string;
+  pinCode: string;
+  gstin?: string;
+}
+
 export interface Organization {
   _id: string;
   name: string;
   slug: string;
   planTier: string;
   subscriptionStatus: string;
+  subscriptionCancelAtPeriodEnd?: boolean;
+  subscriptionCurrentPeriodStart?: string;
   subscriptionCurrentPeriodEnd?: string;
+  subscriptionCanceledAt?: string;
+  razorpaySubscriptionId?: string;
+  scheduledPlanTier?: "basic" | "pro" | null;
+  scheduledPlanChangeAt?: string | null;
+  pendingRazorpaySubscriptionTier?: "basic" | "pro" | null;
+  pendingRazorpaySubscriptionStatus?: string | null;
+  pendingRazorpaySubscriptionStartsAt?: string | null;
+  pendingRazorpaySubscriptionCheckoutUrl?: string | null;
   trialPlanTier?: "basic" | "pro" | null;
   trialStartedAt?: string;
   trialEndsAt?: string;
   trialConsumedAt?: string;
   walletBalance: number;
+  billingProfile?: OrganizationBillingProfile | null;
   metaConfig: OrganizationMetaConfig;
   usage: OrganizationUsage;
   createdAt: string;

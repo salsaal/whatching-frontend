@@ -64,6 +64,56 @@ const statusIcons: Record<string, React.ElementType> = {
 
 const TEMPLATE_SYNC_SESSION_KEY = "whatching_templates_synced";
 
+const isMergeKey = (value: string | undefined): value is string =>
+  Boolean(value);
+
+const getTemplateMergeKeys = (template: MessageTemplate) =>
+  [
+    template.templateId,
+    template.metaTemplateId,
+    template.draftId,
+    template._id,
+    `${template.name}:${template.language}:${template.category}`
+  ].filter(isMergeKey);
+
+const mergeTemplateLists = (
+  drafts: MessageTemplate[],
+  metaTemplates: MessageTemplate[]
+) => {
+  const merged: MessageTemplate[] = [];
+  const keyToIndex = new Map<string, number>();
+
+  [...drafts, ...metaTemplates].forEach((template) => {
+    const keys = getTemplateMergeKeys(template);
+    const existingIndex = keys
+      .map((key) => keyToIndex.get(key))
+      .find((index): index is number => typeof index === "number");
+
+    if (typeof existingIndex === "number") {
+      const existing = merged[existingIndex];
+      const preferred =
+        existing.source === "draft" && template.source === "meta"
+          ? template
+          : template.source === "meta" &&
+              Date.parse(template.updatedAt || "") >=
+                Date.parse(existing.updatedAt || "")
+            ? template
+            : existing;
+      merged[existingIndex] = preferred;
+      getTemplateMergeKeys(preferred).forEach((key) =>
+        keyToIndex.set(key, existingIndex)
+      );
+      return;
+    }
+
+    const nextIndex = merged.length;
+    merged.push(template);
+    keys.forEach((key) => keyToIndex.set(key, nextIndex));
+  });
+
+  return merged;
+};
+
 export default function TemplatesPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -206,13 +256,15 @@ export default function TemplatesPage() {
 
   useEffect(() => {
     if (data?.data.templates || draftsData?.data.drafts) {
-      setTemplates([
-        ...(draftsData?.data.drafts || []).map(mapDraftToTemplate),
-        ...(data?.data.templates || []).map((template) => ({
-          ...template,
-          source: "meta" as const
-        }))
-      ]);
+      setTemplates(
+        mergeTemplateLists(
+          (draftsData?.data.drafts || []).map(mapDraftToTemplate),
+          (data?.data.templates || []).map((template) => ({
+            ...template,
+            source: "meta" as const
+          }))
+        )
+      );
     }
   }, [data, draftsData, setTemplates]);
 

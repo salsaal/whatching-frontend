@@ -30,7 +30,6 @@ import {
   BotCanvasNodeContent
 } from "@/client-api/types/bot.type";
 import { Badge } from "@/components/ui/badge";
-import { WhatsAppFlowBlockPreview } from "@/components/flows/FlowBlockPreview";
 import { cn } from "@/lib/utils";
 
 export interface BotFlowNodeData extends Record<string, unknown> {
@@ -79,11 +78,47 @@ const labelByType: Record<BotBlockType, string> = {
   generic_carousel: "Generic Carousel"
 };
 
+type ListRowPreview = {
+  title?: unknown;
+  label?: unknown;
+  description?: unknown;
+};
+
+type ListSectionPreview = {
+  title?: unknown;
+  rows?: unknown;
+};
+
+const getPreviewText = (value: unknown, fallback = "") =>
+  typeof value === "string" && value.trim() ? value.trim() : fallback;
+
+const getListPreviewSections = (content?: BotCanvasNodeContent) =>
+  (Array.isArray(content?.sections)
+    ? (content?.sections as ListSectionPreview[])
+    : []
+  ).map((section, sectionIndex) => ({
+    title: getPreviewText(section.title, `Section ${sectionIndex + 1}`),
+    rows: (Array.isArray(section.rows) ? (section.rows as ListRowPreview[]) : [])
+      .map((row, rowIndex) => ({
+        title: getPreviewText(
+          row.title || row.label,
+          `Row ${rowIndex + 1}`
+        ),
+        description: getPreviewText(row.description)
+      }))
+      .filter((row) => row.title || row.description)
+  }));
+
 function BotFlowNode({ id, data, selected }: NodeProps<BotFlowReactNode>) {
   const updateNodeInternals = useUpdateNodeInternals();
   const hasAutomaticFollowUp = Boolean(data.metadata?.automaticFollowUp);
   const Icon = iconByType[data.blockType] || Bot;
   const isDefaultNode = Boolean(data.metadata?.isDefault);
+  const listSections = useMemo(
+    () =>
+      data.blockType === "list" ? getListPreviewSections(data.content) : [],
+    [data.blockType, data.content]
+  );
   const outputActions = useMemo(
     () => data.actions.filter((action) => action.type === "go_to_trigger"),
     [data.actions]
@@ -96,48 +131,6 @@ function BotFlowNode({ id, data, selected }: NodeProps<BotFlowReactNode>) {
   useEffect(() => {
     updateNodeInternals(id);
   }, [id, outputHandleKey, updateNodeInternals]);
-
-  if (
-    (data.blockType === "buttons" || data.blockType === "list") &&
-    data.content
-  ) {
-    return (
-      <div
-        className={cn(
-          "relative w-[320px] rounded-xl transition",
-          selected && "ring-2 ring-primary/30",
-          data.invalid && "ring-2 ring-destructive/30"
-        )}
-      >
-        {isDefaultNode && (
-          <div className="absolute left-1/2 top-0 z-20 -translate-x-1/2 -translate-y-1/2 rounded-full border border-primary bg-primary px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white shadow-sm">
-            Default
-          </div>
-        )}
-        {hasAutomaticFollowUp && (
-          <div
-            className="absolute -right-2 -top-2 z-20 flex size-7 items-center justify-center rounded-full border-2 border-white bg-primary text-white shadow-sm"
-            title="Automatic follow-up configured"
-          >
-            <Timer className="size-3.5" />
-          </div>
-        )}
-        <Handle
-          id="in"
-          type="target"
-          position={Position.Left}
-          className="!left-[-1px] !size-3.5 !border-2 !border-white !bg-primary !shadow-sm"
-        />
-        <WhatsAppFlowBlockPreview
-          blockType={data.blockType}
-          content={data.content}
-          actions={data.actions}
-          showClose={false}
-          showRouteHandles
-        />
-      </div>
-    );
-  }
 
   return (
     <div
@@ -187,10 +180,47 @@ function BotFlowNode({ id, data, selected }: NodeProps<BotFlowReactNode>) {
         </div>
       </div>
 
-      <div className="px-4 py-3">
+      <div className="space-y-3 px-4 py-3">
         <p className="line-clamp-3 text-sm text-muted-foreground">
           {data.summary || "Configure this block from the properties panel."}
         </p>
+        {listSections.length > 0 && (
+          <div className="space-y-2">
+            {listSections.map((section, sectionIndex) => (
+              <div
+                key={`${section.title}-${sectionIndex}`}
+                className="overflow-hidden rounded-md border bg-slate-50/70"
+              >
+                <div className="border-b bg-white px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-primary">
+                  {section.title}
+                </div>
+                <div className="divide-y">
+                  {section.rows.length ? (
+                    section.rows.map((row, rowIndex) => (
+                      <div
+                        key={`${row.title}-${rowIndex}`}
+                        className="px-2.5 py-1.5"
+                      >
+                        <p className="truncate text-xs font-medium text-foreground">
+                          {row.title}
+                        </p>
+                        {row.description && (
+                          <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-muted-foreground">
+                            {row.description}
+                          </p>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <p className="px-2.5 py-1.5 text-[11px] text-muted-foreground">
+                      No rows configured
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {outputActions.length > 0 && (

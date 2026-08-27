@@ -225,10 +225,33 @@ export interface EmbeddedSignupConnectPayload {
 
 export interface SubscribeResponse {
   status: string;
+  message?: string;
   data: {
-    subscriptionId: string;
-    paymentUrl: string;
-    key: string;
+    subscriptionId?: string;
+    paymentUrl?: string;
+    key?: string;
+    subscriptionStatus?: string;
+    organization?: Organization;
+    synced?: boolean;
+  };
+}
+
+export interface BillingProfile {
+  country?: "IN";
+  legalName: string;
+  billingEmail: string;
+  address: string;
+  state: string;
+  pinCode: string;
+  gstin?: string;
+}
+
+export interface BillingProfileResponse {
+  status: string;
+  message?: string;
+  data: {
+    billingProfile: BillingProfile | null;
+    complete: boolean;
   };
 }
 
@@ -255,6 +278,20 @@ export interface BillingHistoryResponse {
 export interface CancelSubscriptionResponse {
   status: string;
   message: string;
+  data?: {
+    organization?: Organization;
+    currentPeriodEnd?: string | null;
+    accessUntil?: string | null;
+  };
+}
+
+export interface SyncSubscriptionResponse {
+  status: string;
+  data: {
+    organization: Organization;
+    remoteSubscription?: unknown;
+    synced: boolean;
+  };
 }
 
 export interface ChangePlanResponse {
@@ -262,6 +299,9 @@ export interface ChangePlanResponse {
   message?: string;
   data?: {
     organization?: Organization;
+    subscriptionId?: string;
+    replacementSubscriptionId?: string;
+    key?: string;
     paymentUrl?: string;
     [key: string]: unknown;
   };

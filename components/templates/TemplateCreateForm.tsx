@@ -14,13 +14,15 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { parseAsString, useQueryState } from "nuqs";
-import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import {
   createDraftTemplate,
   createTemplate,
+  getAllDraftTemplates,
+  getAllTemplates,
   submitDraftTemplate,
   updateApprovedTemplate,
   updateDraftTemplate
@@ -54,6 +56,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { useOrganizationStore } from "@/stores/organizationStore";
 import { useTemplateStore } from "@/stores/templateStore";
 import TemplatePreview from "./TemplatePreview";
 import {
@@ -223,7 +226,11 @@ export default function TemplateCreateForm({
   editKind
 }: TemplateCreateFormProps) {
   const router = useRouter();
-  const { addTemplate, upsertTemplate } = useTemplateStore();
+  const queryClient = useQueryClient();
+  const { addTemplate, upsertTemplate, removeTemplate } = useTemplateStore();
+  const activeOrgId = useOrganizationStore(
+    (state) => state.activeOrganization?._id
+  );
   const [category, setCategory] = useQueryState(
     "category",
     parseAsString.withDefault("MARKETING")
@@ -312,6 +319,28 @@ export default function TemplateCreateForm({
     initialTemplate?.status?.toLowerCase() === "pending_review";
   const canEditFields = !isPendingEdit;
   const pageTitle = isEditing ? "Edit template" : "Create template";
+  const templatesQueryKey = useMemo(
+    () => ["templates", activeOrgId] as const,
+    [activeOrgId]
+  );
+  const templateDraftsQueryKey = useMemo(
+    () => ["template-drafts", activeOrgId] as const,
+    [activeOrgId]
+  );
+  const refreshTemplateListCaches = useCallback(async () => {
+    if (!activeOrgId) return;
+
+    await Promise.all([
+      queryClient.fetchQuery({
+        queryKey: templatesQueryKey,
+        queryFn: getAllTemplates
+      }),
+      queryClient.fetchQuery({
+        queryKey: templateDraftsQueryKey,
+        queryFn: getAllDraftTemplates
+      })
+    ]);
+  }, [activeOrgId, queryClient, templateDraftsQueryKey, templatesQueryKey]);
 
   useEffect(() => {
     if (!initialTemplate) return;
@@ -392,18 +421,20 @@ export default function TemplateCreateForm({
 
   const { mutate, isPending } = useMutation({
     mutationFn: createTemplate,
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       addTemplate(data.data.template);
       toast.success("Template submitted for review");
+      await refreshTemplateListCaches();
       router.push("/templates");
     }
   });
 
   const { mutate: saveDraft, isPending: isSavingDraft } = useMutation({
     mutationFn: createDraftTemplate,
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       upsertTemplate(mapDraftToTemplate(data.data.draft));
       toast.success("Template saved as draft");
+      await refreshTemplateListCaches();
       router.push("/templates");
     }
   });
@@ -418,21 +449,25 @@ export default function TemplateCreateForm({
 
   const { mutate: submitDraft, isPending: isSubmittingDraft } = useMutation({
     mutationFn: submitDraftTemplate,
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       if (data.data.template) {
-        upsertTemplate(data.data.template);
+        removeTemplate(data.data.draft._id);
+        upsertTemplate({ ...data.data.template, source: "meta" as const });
+      } else {
+        upsertTemplate(mapDraftToTemplate(data.data.draft));
       }
-      upsertTemplate(mapDraftToTemplate(data.data.draft));
       toast.success("Draft submitted for review");
+      await refreshTemplateListCaches();
       router.push("/templates");
     }
   });
 
   const { mutate: patchApproved, isPending: isPatchingApproved } = useMutation({
     mutationFn: updateApprovedTemplate,
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       upsertTemplate(data.data.template);
       toast.success("Template edit submitted. Status is now pending.");
+      await refreshTemplateListCaches();
       router.push("/templates");
     }
   });

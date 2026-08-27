@@ -4,6 +4,7 @@ import {
   addEdge,
   Background,
   Connection,
+  ConnectionLineType,
   Controls,
   Edge,
   Handle,
@@ -39,6 +40,7 @@ import {
   Send,
   Settings2,
   ShieldAlert,
+  Sparkles,
   Tags,
   Trash2,
   UserCheck,
@@ -106,6 +108,7 @@ import {
   InstagramCanvasState,
   InstagramCommentRule,
   InstagramCommentRulePayload,
+  InstagramFlow,
   InstagramGenericCard,
   InstagramLoginAccount,
   InstagramMedia,
@@ -153,12 +156,19 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from "@/components/ui/tooltip";
 import AppLayout from "@/layouts/AppLayout";
 import { cn } from "@/lib/utils";
 import { useOrganizationStore } from "@/stores/organizationStore";
 
 type PageTab = "profile" | "canvas" | "rules" | "media" | "setup";
 type CanvasMode = "draft" | "published";
+const COMMENT_AUTOMATION_ENABLED = false;
+const instagramEdgeStyle = { strokeWidth: 1.25, strokeDasharray: "4 5" };
 type MediaPickerTarget =
   | { kind: "node"; type: "IMAGE" | "VIDEO" }
   | { kind: "generic-card"; cardIndex: number; type: "IMAGE" | "VIDEO" };
@@ -377,6 +387,8 @@ const toFlowEdges = (state?: InstagramCanvasState | null): Edge[] =>
     target: edge.target,
     sourceHandle: edge.sourceHandle || edge.actionId || edge.replyId,
     targetHandle: edge.targetHandle || "in",
+    type: "smoothstep",
+    style: instagramEdgeStyle,
     data: {
       actionId: edge.actionId,
       replyId: edge.replyId,
@@ -748,6 +760,28 @@ type InstagramPageProps = {
   forcedCanvasId?: string;
 };
 
+function InstagramComingSoonOverlay() {
+  return (
+    <div className="absolute inset-0 z-[60] flex items-center justify-center bg-white/35 px-4 backdrop-blur-[6px]">
+      <div className="pointer-events-none text-center">
+        <div className="mx-auto flex size-14 items-center justify-center rounded-md bg-white/90 text-pink-600 shadow-sm ring-1 ring-border">
+          <Instagram className="size-7" />
+        </div>
+        <div className="mt-5 flex items-center justify-center gap-2 text-xs font-semibold uppercase tracking-[0.24em] text-primary">
+          <Sparkles className="size-4" />
+          Whatching Instagram
+        </div>
+        <h2 className="mt-2 font-heading text-4xl font-semibold text-foreground">
+          Coming soon
+        </h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Instagram automation is temporarily unavailable.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export function InstagramPage({
   canvasOnly = false,
   forcedCanvasId = ""
@@ -937,15 +971,42 @@ export function InstagramPage({
     () => nodes.find((node) => node.id === selectedNodeId) || null,
     [nodes, selectedNodeId]
   );
+  const styledEdges = useMemo(
+    () =>
+      edges.map((edge) => ({
+        ...edge,
+        type: "smoothstep",
+        style: { ...edge.style, ...instagramEdgeStyle }
+      })),
+    [edges]
+  );
   const previewNode = useMemo(() => {
     const node = nodes.find((item) => item.id === previewNodeId) || null;
     return node && previewableInstagramBlockTypes.has(node.data.blockType)
       ? node
       : null;
   }, [nodes, previewNodeId]);
-  const rules = rulesData?.pages.flatMap((page) => page.data.rules || []) || [];
-  const media = mediaData?.pages.flatMap((page) => page.data.media || []) || [];
-  const flows = flowsData?.pages.flatMap((page) => page.data.flows || []) || [];
+  const rules = useMemo(() => {
+    const uniqueRules = new Map<string, InstagramCommentRule>();
+    rulesData?.pages
+      .flatMap((page) => page.data.rules || [])
+      .forEach((rule) => uniqueRules.set(rule._id, rule));
+    return Array.from(uniqueRules.values());
+  }, [rulesData?.pages]);
+  const media = useMemo(() => {
+    const uniqueMedia = new Map<string, InstagramMedia>();
+    mediaData?.pages
+      .flatMap((page) => page.data.media || [])
+      .forEach((item) => uniqueMedia.set(item._id, item));
+    return Array.from(uniqueMedia.values());
+  }, [mediaData?.pages]);
+  const flows = useMemo(() => {
+    const uniqueFlows = new Map<string, InstagramFlow>();
+    flowsData?.pages
+      .flatMap((page) => page.data.flows || [])
+      .forEach((flow) => uniqueFlows.set(flow._id, flow));
+    return Array.from(uniqueFlows.values());
+  }, [flowsData?.pages]);
   const selectedCanvasVersion =
     canvasDetail?.draftState?.version ||
     draftData?.data.draftState?.version ||
@@ -1399,6 +1460,8 @@ export function InstagramPage({
           {
             ...connection,
             id: `ig_edge_${connection.source}_${connection.sourceHandle}_${connection.target}`,
+            type: "smoothstep",
+            style: instagramEdgeStyle,
             data: {
               actionId: connection.sourceHandle,
               replyId: connection.sourceHandle
@@ -2784,7 +2847,7 @@ export function InstagramPage({
 
   return (
     <AppLayout hideHeader fullBleed>
-      <div className="flex h-[calc(100vh-1px)] min-h-0 flex-col bg-slate-50">
+      <div className="relative flex h-[calc(100vh-1px)] min-h-0 flex-col overflow-hidden bg-slate-50">
         <div className="flex shrink-0 items-center justify-between border-b bg-white px-5 py-3">
           <div className="flex items-center gap-3">
             <div className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-pink-500 to-orange-400 text-white">
@@ -2828,14 +2891,16 @@ export function InstagramPage({
                   ? "Ready"
                   : "Not connected"}
             </Badge>
-            <Button
-              variant="outline"
-              onClick={() => setIsConnectOpen(true)}
-              tooltip="Connect or reconnect an Instagram professional account"
-            >
-              <Settings2 className="mr-2 size-4" />
-              Connect
-            </Button>
+            {!isReady && (
+              <Button
+                variant="outline"
+                onClick={() => setIsConnectOpen(true)}
+                tooltip="Connect or reconnect an Instagram professional account"
+              >
+                <Settings2 className="mr-2 size-4" />
+                Connect
+              </Button>
+            )}
             <Button
               variant="outline"
               onClick={() => syncStatusMutation.mutate()}
@@ -2862,6 +2927,10 @@ export function InstagramPage({
                   toast.error("Connect Instagram first.");
                   return;
                 }
+                if (value === "rules" && !COMMENT_AUTOMATION_ENABLED) {
+                  toast.info("Comment automation is coming soon.");
+                  return;
+                }
                 setActiveTab(value as PageTab);
               }}
             >
@@ -2870,9 +2939,19 @@ export function InstagramPage({
                 <TabsTrigger value="canvas" disabled={!isReady}>
                   Message Flow
                 </TabsTrigger>
-                <TabsTrigger value="rules" disabled={!isReady}>
-                  Comment Automation
-                </TabsTrigger>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="inline-flex h-full">
+                      <TabsTrigger
+                        value="rules"
+                        disabled={!isReady || !COMMENT_AUTOMATION_ENABLED}
+                      >
+                        Comment Automation
+                      </TabsTrigger>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent sideOffset={6}>Coming soon</TooltipContent>
+                </Tooltip>
                 <TabsTrigger value="media" disabled={!isReady}>
                   Media
                 </TabsTrigger>
@@ -2964,7 +3043,7 @@ export function InstagramPage({
                 <ReactFlowProvider>
                   <ReactFlow
                     nodes={nodes}
-                    edges={edges}
+                    edges={styledEdges}
                     nodeTypes={nodeTypes}
                     onNodesChange={
                       canvasMode === "draft" ? handleNodesChange : undefined
@@ -2973,6 +3052,12 @@ export function InstagramPage({
                       canvasMode === "draft" ? onEdgesChange : undefined
                     }
                     onConnect={onConnect}
+                    connectionLineType={ConnectionLineType.SmoothStep}
+                    defaultEdgeOptions={{
+                      type: "smoothstep",
+                      style: instagramEdgeStyle
+                    }}
+                    onlyRenderVisibleElements
                     onNodeClick={(_, node) => {
                       if (node.id !== selectedNodeId) setPreviewNodeId(null);
                       setSelectedNodeId(node.id);
@@ -3416,6 +3501,7 @@ export function InstagramPage({
             </div>
           </div>
         )}
+        <InstagramComingSoonOverlay />
       </div>
 
       <AlertDialog
@@ -3676,7 +3762,7 @@ export function InstagramPage({
                 </div>
                 {ruleDraft.sendPublicReply && (
                   <Textarea
-                    className="mt-3"
+                    className="mt-3 max-h-[220px] overflow-y-auto"
                     value={ruleDraft.publicReplyText}
                     maxLength={2200}
                     placeholder="Check your messages!"
@@ -3710,7 +3796,7 @@ export function InstagramPage({
                 </div>
                 {ruleDraft.sendPrivateReply && (
                   <Textarea
-                    className="mt-3"
+                    className="mt-3 max-h-[220px] overflow-y-auto"
                     value={ruleDraft.privateReplyText}
                     maxLength={1000}
                     placeholder="Here are the details you asked for..."
@@ -3999,7 +4085,7 @@ export function InstagramPage({
         title={`${selectedCanvas?.name || "Instagram flow"} preview`}
         platform="Instagram"
         nodes={nodes}
-        edges={edges}
+        edges={styledEdges}
       />
     </AppLayout>
   );

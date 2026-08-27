@@ -4,6 +4,7 @@ import {
   addEdge,
   Background,
   Connection,
+  ConnectionLineType,
   Controls,
   Edge,
   MiniMap,
@@ -129,6 +130,12 @@ type ListSection = {
 type CanvasMode = "draft" | "published";
 
 const nodeTypes = { botBlock: BotFlowNode };
+const flowEdgeStyle = { strokeWidth: 1.25, strokeDasharray: "4 5" };
+const selectedFlowEdgeStyle = {
+  stroke: "#16a34a",
+  strokeWidth: 2,
+  strokeDasharray: "4 5"
+};
 const REPLY_BUTTON_LABEL_MAX = 20;
 const LIST_ROW_TITLE_MAX = 24;
 const LIST_ROW_DESCRIPTION_MAX = 72;
@@ -473,6 +480,15 @@ const getCarouselCards = (
     ? (content.cards as GenericCarouselCard[])
     : (defaultContent("generic_carousel").cards as GenericCarouselCard[]);
 
+const makeCarouselReplyId = (
+  nodeTriggerKey: string,
+  cardIndex: number,
+  buttonIndex: number
+) =>
+  slugifyTrigger(
+    `${nodeTriggerKey || "CAROUSEL"}_CARD_${cardIndex + 1}_ACTION_${buttonIndex + 1}`
+  );
+
 const makeCarouselCard = (index: number): GenericCarouselCard => ({
   title: `Card ${index + 1}`,
   bodyText: "Card description",
@@ -486,6 +502,96 @@ const makeCarouselCard = (index: number): GenericCarouselCard => ({
     }
   ]
 });
+
+const normalizeGenericCarouselContent = (
+  content: BotCanvasNodeContent,
+  nodeTriggerKey: string
+): BotCanvasNodeContent => {
+  const usedReplyIds = new Set<string>();
+  const cards = getCarouselCards(content).map((card, cardIndex) => {
+    const buttons = Array.isArray(card.buttons)
+      ? (card.buttons as Array<Record<string, unknown>>)
+      : [];
+
+    return {
+      ...card,
+      buttons: buttons.map((button, buttonIndex) => {
+        const buttonType = String(
+          button.type || (button.url ? "url" : "quick_reply")
+        );
+        const label =
+          typeof button.label === "string" && button.label.trim()
+            ? button.label
+            : typeof button.title === "string" && button.title.trim()
+              ? button.title
+              : `Action ${buttonIndex + 1}`;
+
+        if (buttonType === "url") {
+          return {
+            ...button,
+            type: "url",
+            label,
+            title: label,
+            replyId: undefined,
+            id: undefined
+          };
+        }
+
+        const normalizedExisting = slugifyTrigger(
+          String(button.replyId || button.id || "")
+        );
+        const expectedPrefix = slugifyTrigger(
+          `${nodeTriggerKey || "CAROUSEL"}_CARD_${cardIndex + 1}_ACTION_`
+        );
+        const replyId =
+          normalizedExisting.startsWith(expectedPrefix) &&
+          !usedReplyIds.has(normalizedExisting)
+            ? normalizedExisting
+            : makeCarouselReplyId(nodeTriggerKey, cardIndex, buttonIndex);
+
+        usedReplyIds.add(replyId);
+
+        return {
+          ...button,
+          type: "quick_reply",
+          id: replyId,
+          replyId,
+          label,
+          title: label,
+          url: undefined
+        };
+      })
+    };
+  });
+
+  return { ...content, cards };
+};
+
+const normalizeGenericCarouselNode = (node: BotCanvasNode): BotCanvasNode => {
+  if (node.blockType !== "generic_carousel") return node;
+
+  const content = normalizeGenericCarouselContent(
+    node.content || {},
+    node.triggerKey
+  );
+  const existingActions = new Map<string, BotAction>();
+  (node.actions || []).forEach((action) => {
+    existingActions.set(action.actionId, action);
+  });
+
+  const actions = getContentActions("generic_carousel", content).map(
+    (action) => {
+      const existing = existingActions.get(action.actionId);
+      return {
+        ...action,
+        nextTriggerKey: existing?.nextTriggerKey || action.nextTriggerKey,
+        metadata: existing?.metadata || action.metadata
+      };
+    }
+  );
+
+  return { ...node, content, actions };
+};
 
 const getContentActions = (
   blockType: BotBlockType,
@@ -669,7 +775,7 @@ const normalizeBackendNode = (rawNode: unknown): BotCanvasNode => {
 };
 
 const toReactNode = (rawNode: unknown): BuilderNode => {
-  const node = normalizeBackendNode(rawNode);
+  const node = normalizeGenericCarouselNode(normalizeBackendNode(rawNode));
   const mergedActions = mergeActions(
     node.actions || [],
     getContentActions(node.blockType, node.content || {})
@@ -929,7 +1035,9 @@ const defaultCanvasEdges = (): Edge[] => [
     target: "node_opt_out",
     sourceHandle: "action_opt_out",
     targetHandle: "in",
-    animated: false
+    type: "smoothstep",
+    animated: false,
+    style: flowEdgeStyle
   }
 ];
 
@@ -1109,7 +1217,13 @@ const flowEdgesToBackend = (
 };
 
 const prepareNodeContent = (node: BuilderNode): BotCanvasNodeContent => {
-  const content = { ...node.data.content };
+  const content =
+    node.data.blockType === "generic_carousel"
+      ? normalizeGenericCarouselContent(
+          { ...node.data.content },
+          node.data.triggerKey
+        )
+      : { ...node.data.content };
   const visibleActions = node.data.actions.filter((action) =>
     ["go_to_trigger", "escalate_to_agent", "end_conversation"].includes(
       action.type
@@ -1210,6 +1324,7 @@ const canvasEdgesToFlow = (
       edge.replyId ||
       undefined,
     targetHandle: edge.targetHandle || "in",
+    type: "smoothstep",
     animated: false,
     data: edge.metadata
   }));
@@ -1650,11 +1765,12 @@ function FlowsBuilder() {
         const selected = edge.id === selectedEdgeId;
         return {
           ...edge,
+          type: "smoothstep",
           selected,
           style:
             connectedToSelected || selected
-              ? { ...edge.style, stroke: "#16a34a", strokeWidth: 3 }
-              : edge.style
+              ? { ...edge.style, ...selectedFlowEdgeStyle }
+              : { ...edge.style, ...flowEdgeStyle }
         };
       }),
     [rawVisibleEdges, selectedEdgeId, selectedNodeId]
@@ -1694,32 +1810,40 @@ function FlowsBuilder() {
               node.data.triggerKey !== "OPT_OUT"
           )?.data.triggerKey ||
           "DEFAULT",
-        nodes: publishNodes.map((node, index) => ({
-          id: node.id,
-          type: "botBlock",
-          position: node.position,
-          data: {
-            triggerKey: node.data.triggerKey,
-            blockType: node.data.blockType,
-            name: node.data.label,
-            sortOrder: index,
-            content: prepareNodeContent(node),
-            actions: node.data.actions.map((action) => ({
-              ...action,
-              nextTriggerKey:
-                action.type === "go_to_trigger"
-                  ? targetByAction.get(action.replyId || action.actionId) ||
-                    targetByAction.get(action.actionId) ||
-                    action.nextTriggerKey
-                  : undefined
-            })),
-            followUp: node.data.followUp,
-            metadata: {
-              ...node.data.metadata,
-              locked: node.data.locked || undefined
+        nodes: publishNodes.map((node, index) => {
+          const content = prepareNodeContent(node);
+          const actions =
+            node.data.blockType === "generic_carousel"
+              ? getContentActions(node.data.blockType, content)
+              : node.data.actions;
+
+          return {
+            id: node.id,
+            type: "botBlock",
+            position: node.position,
+            data: {
+              triggerKey: node.data.triggerKey,
+              blockType: node.data.blockType,
+              name: node.data.label,
+              sortOrder: index,
+              content,
+              actions: actions.map((action) => ({
+                ...action,
+                nextTriggerKey:
+                  action.type === "go_to_trigger"
+                    ? targetByAction.get(action.replyId || action.actionId) ||
+                      targetByAction.get(action.actionId) ||
+                      action.nextTriggerKey
+                    : undefined
+              })),
+              followUp: node.data.followUp,
+              metadata: {
+                ...node.data.metadata,
+                locked: node.data.locked || undefined
+              }
             }
-          }
-        })) as unknown as BotCanvasNode[],
+          };
+        }) as unknown as BotCanvasNode[],
         edges: flowEdgesToBackend(currentEdges, publishNodes),
         updatedAt: new Date().toISOString()
       };
@@ -1902,7 +2026,9 @@ function FlowsBuilder() {
           {
             ...connection,
             id: newId("edge"),
-            animated: false
+            type: "smoothstep",
+            animated: false,
+            style: flowEdgeStyle
           },
           current.filter(
             (edge) =>
@@ -2479,6 +2605,12 @@ function FlowsBuilder() {
                 onNodesChange={isPublishedMode ? undefined : handleNodesChange}
                 onEdgesChange={isPublishedMode ? undefined : onEdgesChange}
                 onConnect={onConnect}
+                connectionLineType={ConnectionLineType.SmoothStep}
+                defaultEdgeOptions={{
+                  type: "smoothstep",
+                  style: flowEdgeStyle
+                }}
+                onlyRenderVisibleElements
                 onNodeClick={(_, node) => {
                   setSelectedEdgeId(null);
                   if (node.id !== selectedNodeId) setPreviewNodeId(null);
@@ -3581,6 +3713,7 @@ function PropertiesPanel({
               />
             </Field>
             <GenericCarouselEditor
+              nodeTriggerKey={node.data.triggerKey}
               cards={getCarouselCards(content)}
               onChange={(cards) => updateContent({ cards })}
               openMediaPicker={openMediaPicker}
@@ -4135,11 +4268,13 @@ function MediaField({
 }
 
 function GenericCarouselEditor({
+  nodeTriggerKey,
   cards,
   onChange,
   openMediaPicker,
   readOnly
 }: {
+  nodeTriggerKey: string;
   cards: GenericCarouselCard[];
   onChange: (cards: GenericCarouselCard[]) => void;
   openMediaPicker: (
@@ -4175,7 +4310,8 @@ function GenericCarouselEditor({
           ...((card.buttons || []) as Array<Record<string, unknown>>),
           {
             type: "quick_reply",
-            replyId: `CARD_${index + 1}_ACTION_${buttonCount + 1}`,
+            id: makeCarouselReplyId(nodeTriggerKey, index, buttonCount),
+            replyId: makeCarouselReplyId(nodeTriggerKey, index, buttonCount),
             label: `Action ${buttonCount + 1}`
           }
         ]
@@ -4228,13 +4364,28 @@ function GenericCarouselEditor({
           ...(buttons[buttonIndex] || {}),
           type,
           ...(type === "url"
-            ? { url: "", replyId: undefined }
-            : {
-                replyId:
-                  buttons[buttonIndex]?.replyId ||
-                  `CARD_${cardIndex + 1}_ACTION_${buttonIndex + 1}`,
-                url: undefined
-              })
+            ? { url: "", replyId: undefined, id: undefined }
+            : (() => {
+                const existingReplyId = slugifyTrigger(
+                  String(
+                    buttons[buttonIndex]?.replyId ||
+                      buttons[buttonIndex]?.id ||
+                      ""
+                  )
+                );
+                const expectedPrefix = slugifyTrigger(
+                  `${nodeTriggerKey || "CAROUSEL"}_CARD_${cardIndex + 1}_ACTION_`
+                );
+                const replyId = existingReplyId.startsWith(expectedPrefix)
+                  ? existingReplyId
+                  : makeCarouselReplyId(nodeTriggerKey, cardIndex, buttonIndex);
+
+                return {
+                  id: replyId,
+                  replyId,
+                  url: undefined
+                };
+              })())
         };
         return { ...card, buttons };
       })
@@ -4252,7 +4403,7 @@ function GenericCarouselEditor({
       replyId:
         button.type === "url"
           ? undefined
-          : `CARD_${cards.length + 1}_ACTION_${buttonIndex + 1}`,
+          : makeCarouselReplyId(nodeTriggerKey, cards.length, buttonIndex),
       url: button.type === "url" ? button.url || "" : undefined
     }));
     onChange([

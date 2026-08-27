@@ -24,7 +24,7 @@ Browser UI:
 
 `components/auth/RouteGuard.tsx` treats auth pages, `/verify/*`, `/reset-password/*`, and `/404` as public. Authenticated users on `/auth/login` are redirected to `/organisations`; unauthenticated users on private pages are redirected to login with `next`.
 
-`layouts/AppLayout.tsx` is the authenticated shell. It owns the sidebar, mobile nav, organization/integration refresh, plan checkout modal, logout confirmation, and global WhatsApp number switcher in the header.
+`layouts/AppLayout.tsx` is the authenticated shell. It owns the sidebar, mobile nav, organization/integration refresh, no-plan/cancelled-plan banners, logout confirmation, and global WhatsApp number switcher in the header. Plan selection and billing checkout are route-owned by `pages/plans.tsx`, `pages/checkout.tsx`, and `pages/congratulations.tsx`.
 
 `layouts/AuthLayout.tsx` is the login/signup/reset shell using `public/assets/images/auth.png`.
 
@@ -39,7 +39,11 @@ Browser UI:
 - adds `ngrok-skip-browser-warning` when the API base URL includes `ngrok-free.app`;
 - on non-auth 401, calls `/users/refresh-token`, stores the refreshed token/user, retries the original request, or logs out on refresh failure.
 
+The access token currently expires after 15 minutes and the refresh token after 7 days. For a production deployment where the frontend and API are on different sites, the backend refresh cookie must use `SameSite=None; Secure`; `withCredentials` cannot send a cross-site cookie marked `SameSite=Lax`. Local same-site HTTP development can keep `SameSite=Lax` without `Secure`.
+
 Endpoint constants live in `client-api/endpoints/index.ts`; typed wrappers live in `client-api/functions/`; response/payload types live in `client-api/types/`.
+
+Billing uses separate backend calls for profile and checkout. Paid subscribe/change saves the India billing profile through `PATCH /organizations/billing/profile`, then calls `POST /organizations/billing/subscribe` or `POST /organizations/billing/change-plan` with only `{ tier }`. The backend returns Razorpay `subscriptionId` and `key`; the frontend loads Checkout.js and opens it with `subscription_id`. In the current SPA flow, Checkout's `handler` redirects to `/congratulations`, and `/congratulations` polls `/billing/sync`. Webhooks remain the payment source of truth. Do not add `callback_url` to Razorpay subscription creation; Razorpay treats callback handling as a Checkout option, not a Subscriptions API create parameter.
 
 ## State Model
 
@@ -194,6 +198,8 @@ Backend model fields include:
 
 Replies are sent through `POST /api/v1/organizations/conversations/:conversationId/reply`; template sends use `/api/v1/organizations/messages/template-send`.
 
+Conversation history uses backend cursor pagination. The frontend requests seven older messages when the user reaches the top, prepends them while preserving scroll position, and deduplicates by message ID across cursor pages and realtime updates. A template send resolves `defaultMediaId` or header `mediaId` through the media API before requiring a replacement upload.
+
 ## Backend Runtime Architecture
 
 The backend uses:
@@ -247,6 +253,7 @@ Organizations, Meta, WhatsApp numbers, team, billing, tags:
 - `PATCH /api/v1/organizations/team/:membershipId/permissions`
 - `DELETE /api/v1/organizations/team/:membershipId`
 - `GET /api/v1/organizations/billing/history`
+- `GET|PATCH /api/v1/organizations/billing/profile`
 - `POST /api/v1/organizations/billing/subscribe`
 - `POST /api/v1/organizations/billing/change-plan`
 - `POST /api/v1/organizations/billing/sync`
@@ -313,6 +320,8 @@ WhatsApp bot and knowledge:
 - `DELETE /api/v1/organizations/bot/knowledge-sources/:sourceId`
 - `POST /api/v1/organizations/bot/knowledge-sources/:sourceId/reingest`
 - `GET /api/v1/organizations/bot/status`
+
+There is no knowledge-source update route. The supported mutations are create text/FAQ, upload file, re-ingest, and delete/archive.
 
 Instagram:
 

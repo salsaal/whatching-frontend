@@ -38,6 +38,7 @@ import {
   BroadcastAudience
 } from "@/client-api/types/broadcasts.type";
 import { MessageTemplate } from "@/client-api/types/templates.type";
+import { Subscriber } from "@/client-api/types/subscribers.type";
 import {
   ALL_WHATSAPP_NUMBERS,
   WhatsAppNumberSwitcher,
@@ -368,16 +369,19 @@ export default function BroadcastsPage() {
   });
   const { data: selectedBroadcastData, refetch: refetchSelectedBroadcast } =
     useQuery({
-      queryKey: ["broadcast", selectedBroadcastId],
+      queryKey: ["broadcast-preview", selectedBroadcastId],
       queryFn: () => getBroadcastById(selectedBroadcastId),
       enabled: Boolean(selectedBroadcastId),
       refetchInterval: selectedBroadcastId ? 3000 : false
     });
 
-  const broadcasts = useMemo(
-    () => data?.pages.flatMap((page) => page.data.broadcasts || []) || [],
-    [data?.pages]
-  );
+  const broadcasts = useMemo(() => {
+    const uniqueBroadcasts = new Map<string, Broadcast>();
+    data?.pages
+      .flatMap((page) => page.data.broadcasts || [])
+      .forEach((broadcast) => uniqueBroadcasts.set(broadcast._id, broadcast));
+    return Array.from(uniqueBroadcasts.values());
+  }, [data?.pages]);
   const templates = useMemo(
     () =>
       (templatesData?.data.templates || []).filter(
@@ -385,14 +389,16 @@ export default function BroadcastsPage() {
       ),
     [templatesData?.data.templates]
   );
-  const subscribers = useMemo(
-    () =>
-      (
-        subscribersData?.pages.flatMap((page) => page.data.subscribers || []) ||
-        []
-      ).filter((subscriber) => Boolean(subscriber.phoneNumber)),
-    [subscribersData?.pages]
-  );
+  const subscribers = useMemo(() => {
+    const uniqueSubscribers = new Map<string, Subscriber>();
+    subscribersData?.pages
+      .flatMap((page) => page.data.subscribers || [])
+      .filter((subscriber) => Boolean(subscriber.phoneNumber))
+      .forEach((subscriber) =>
+        uniqueSubscribers.set(subscriber._id, subscriber)
+      );
+    return Array.from(uniqueSubscribers.values());
+  }, [subscribersData?.pages]);
   const tags = useMemo(() => tagsData?.data.tags || [], [tagsData?.data.tags]);
   const filteredBroadcasts = broadcasts;
 
@@ -926,235 +932,219 @@ export default function BroadcastsPage() {
       </div>
 
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
+        <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden sm:max-w-4xl">
           <DialogHeader>
             <DialogTitle>Create broadcast draft</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleCreate} className="space-y-5">
-            <div className="grid gap-4 sm:grid-cols-3">
-              <div className="space-y-2">
-                <Label>Name</Label>
-                <Input
-                  value={broadcastName}
-                  onChange={(event) => setBroadcastName(event.target.value)}
-                  placeholder="E.g. July product update"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Template</Label>
-                <Select
-                  value={templateId}
-                  onValueChange={(value) => {
-                    setTemplateId(value);
-                    setQuickReplyRoutes({});
-                  }}
-                >
-                  <SelectTrigger className="h-11 w-full">
-                    <SelectValue placeholder="Select template" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {templates.map((template) => (
-                      <SelectItem
-                        key={template.templateId}
-                        value={template.templateId}
-                      >
-                        {template.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>WhatsApp sender</Label>
-                <WhatsAppNumberSwitcher
-                  includeAll={false}
-                  value={senderPhoneNumberId}
-                  onValueChange={setSenderPhoneNumberId}
-                  className="h-11 w-full"
-                />
-              </div>
-            </div>
-
-            {selectedTemplate && (
-              <div className="rounded-lg border bg-muted/30 p-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <p className="text-sm font-semibold">
-                      {selectedTemplate.name}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {selectedTemplate.language} · {selectedTemplate.category}
-                    </p>
-                  </div>
-                  <span className="rounded-sm bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
-                    {bodyVariables.length
-                      ? `${bodyVariables.length} variable${bodyVariables.length > 1 ? "s" : ""}`
-                      : "No body variables"}
-                  </span>
+          <form
+            onSubmit={handleCreate}
+            className="flex min-h-0 flex-1 flex-col gap-4"
+          >
+            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overflow-x-hidden pr-1">
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="space-y-2">
+                  <Label>Name</Label>
+                  <Input
+                    value={broadcastName}
+                    onChange={(event) => setBroadcastName(event.target.value)}
+                    placeholder="E.g. July product update"
+                  />
                 </div>
-                {bodyText && (
-                  <div className="mt-3 rounded-md bg-white p-3 text-sm leading-6 text-muted-foreground shadow-xs">
-                    {personalizedBodyText}
-                  </div>
-                )}
-                {quickReplyButtons.length > 0 && (
-                  <div className="mt-4 border-t pt-4">
-                    <div className="mb-3">
+                <div className="space-y-2">
+                  <Label>Template</Label>
+                  <Select
+                    value={templateId}
+                    onValueChange={(value) => {
+                      setTemplateId(value);
+                      setQuickReplyRoutes({});
+                    }}
+                  >
+                    <SelectTrigger className="h-11 w-full">
+                      <SelectValue placeholder="Select template" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {templates.map((template) => (
+                        <SelectItem
+                          key={template.templateId}
+                          value={template.templateId}
+                        >
+                          {template.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>WhatsApp sender</Label>
+                  <WhatsAppNumberSwitcher
+                    includeAll={false}
+                    value={senderPhoneNumberId}
+                    onValueChange={setSenderPhoneNumberId}
+                    className="h-11 w-full"
+                  />
+                </div>
+              </div>
+
+              {selectedTemplate && (
+                <div className="rounded-lg border bg-muted/30 p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
                       <p className="text-sm font-semibold">
-                        Quick reply triggers
+                        {selectedTemplate.name}
                       </p>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        Choose the flow trigger for each quick reply in this
-                        broadcast. Triggers come from the selected sender
-                        number, with the organisation fallback used when no
-                        number-specific flow is assigned.
+                        {selectedTemplate.language} ·{" "}
+                        {selectedTemplate.category}
                       </p>
                     </div>
-                    <div className="space-y-2">
-                      {quickReplyButtons.map(({ button, index }) => {
-                        const selectedTriggerKey =
-                          quickReplyRoutes[index] || "";
-                        const selectedTriggerMissing =
-                          selectedTriggerKey &&
-                          !senderTriggerKeys.has(selectedTriggerKey);
+                    <span className="rounded-sm bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
+                      {bodyVariables.length
+                        ? `${bodyVariables.length} variable${bodyVariables.length > 1 ? "s" : ""}`
+                        : "No body variables"}
+                    </span>
+                  </div>
+                  {bodyText && (
+                    <div className="mt-3 rounded-md bg-white p-3 text-sm leading-6 text-muted-foreground shadow-xs">
+                      {personalizedBodyText}
+                    </div>
+                  )}
+                  {quickReplyButtons.length > 0 && (
+                    <div className="mt-4 border-t pt-4">
+                      <div className="mb-3">
+                        <p className="text-sm font-semibold">
+                          Quick reply triggers
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Choose the flow trigger for each quick reply in this
+                          broadcast. Triggers come from the selected sender
+                          number, with the organisation fallback used when no
+                          number-specific flow is assigned.
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        {quickReplyButtons.map(({ button, index }) => {
+                          const selectedTriggerKey =
+                            quickReplyRoutes[index] || "";
+                          const selectedTriggerMissing =
+                            selectedTriggerKey &&
+                            !senderTriggerKeys.has(selectedTriggerKey);
 
-                        return (
-                          <div
-                            key={`${button.text}-${index}`}
-                            className="grid gap-2 rounded-md bg-muted/40 p-3 sm:grid-cols-[minmax(0,1fr)_minmax(220px,0.9fr)]"
-                          >
-                            <div>
-                              <Label>
-                                {button.text || `Quick reply ${index + 1}`}
-                              </Label>
-                              <p className="mt-1 text-xs text-muted-foreground">
-                                Button {index + 1}
-                              </p>
-                            </div>
-                            <Select
-                              value={selectedTriggerKey}
-                              onValueChange={(value) =>
-                                setQuickReplyRoutes((current) => ({
-                                  ...current,
-                                  [index]: value
-                                }))
-                              }
-                              disabled={!senderPhoneNumberId}
+                          return (
+                            <div
+                              key={`${button.text}-${index}`}
+                              className="grid gap-2 rounded-md bg-muted/40 p-3 sm:grid-cols-[minmax(0,1fr)_minmax(220px,0.9fr)]"
                             >
-                              <SelectTrigger
-                                className={cn(
-                                  "w-full bg-white",
-                                  selectedTriggerMissing &&
-                                    "ring-2 ring-amber-400"
-                                )}
+                              <div>
+                                <Label>
+                                  {button.text || `Quick reply ${index + 1}`}
+                                </Label>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  Button {index + 1}
+                                </p>
+                              </div>
+                              <Select
+                                value={selectedTriggerKey}
+                                onValueChange={(value) =>
+                                  setQuickReplyRoutes((current) => ({
+                                    ...current,
+                                    [index]: value
+                                  }))
+                                }
+                                disabled={!senderPhoneNumberId}
                               >
-                                <SelectValue
-                                  placeholder={
-                                    senderTriggersData
-                                      ? "Choose flow trigger"
-                                      : "Select sender first"
-                                  }
-                                />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {selectedTriggerMissing && (
-                                  <SelectItem
-                                    value={selectedTriggerKey}
-                                    disabled
-                                  >
-                                    {selectedTriggerKey} (unavailable)
-                                  </SelectItem>
-                                )}
-                                {(senderTriggersData?.data?.triggers || []).map(
-                                  (trigger) => (
+                                <SelectTrigger
+                                  className={cn(
+                                    "w-full bg-white",
+                                    selectedTriggerMissing &&
+                                      "ring-2 ring-amber-400"
+                                  )}
+                                >
+                                  <SelectValue
+                                    placeholder={
+                                      senderTriggersData
+                                        ? "Choose flow trigger"
+                                        : "Select sender first"
+                                    }
+                                  />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {selectedTriggerMissing && (
+                                    <SelectItem
+                                      value={selectedTriggerKey}
+                                      disabled
+                                    >
+                                      {selectedTriggerKey} (unavailable)
+                                    </SelectItem>
+                                  )}
+                                  {(
+                                    senderTriggersData?.data?.triggers || []
+                                  ).map((trigger) => (
                                     <SelectItem
                                       key={trigger.triggerKey}
                                       value={trigger.triggerKey}
                                     >
                                       {trigger.name} · {trigger.triggerKey}
                                     </SelectItem>
-                                  )
-                                )}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {bodyVariables.length > 0 && (
-                  <div className="mt-4 border-t pt-4">
-                    <div className="mb-3">
-                      <p className="text-sm font-semibold">
-                        Template variables
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Map each WhatsApp placeholder to subscriber data or a
-                        fixed value. The number of fields here must match the
-                        template.
-                      </p>
-                    </div>
-                    <div className="space-y-3">
-                      {bodyVariables.map((key) => {
-                        const mapping =
-                          variableMappings[key] || defaultVariableMapping(key);
-                        const sample = getTemplateBodyExample(
-                          selectedTemplate,
-                          key
-                        );
-
-                        return (
-                          <div key={key} className="rounded-md bg-muted/40 p-3">
-                            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                              <Label>{`{{${key}}}`}</Label>
-                              {sample && (
-                                <span className="text-xs text-muted-foreground">
-                                  Sample: {sample}
-                                </span>
-                              )}
-                            </div>
-                            <div className="grid gap-2 lg:grid-cols-[180px_1fr_1fr]">
-                              <Select
-                                value={mapping.source}
-                                onValueChange={(value) =>
-                                  setVariableMappings((current) => ({
-                                    ...current,
-                                    [key]: {
-                                      ...mapping,
-                                      source: value as BroadcastVariableSource,
-                                      path:
-                                        value === "subscriber_field"
-                                          ? "firstName"
-                                          : ""
-                                    }
-                                  }))
-                                }
-                              >
-                                <SelectTrigger className="w-full">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="subscriber_field">
-                                    Subscriber field
-                                  </SelectItem>
-                                  <SelectItem value="metadata_field">
-                                    Metadata field
-                                  </SelectItem>
-                                  <SelectItem value="literal">
-                                    Fixed value
-                                  </SelectItem>
+                                  ))}
                                 </SelectContent>
                               </Select>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
-                              {mapping.source === "subscriber_field" ? (
+                  {bodyVariables.length > 0 && (
+                    <div className="mt-4 border-t pt-4">
+                      <div className="mb-3">
+                        <p className="text-sm font-semibold">
+                          Template variables
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Map each WhatsApp placeholder to subscriber data or a
+                          fixed value. The number of fields here must match the
+                          template.
+                        </p>
+                      </div>
+                      <div className="space-y-3">
+                        {bodyVariables.map((key) => {
+                          const mapping =
+                            variableMappings[key] ||
+                            defaultVariableMapping(key);
+                          const sample = getTemplateBodyExample(
+                            selectedTemplate,
+                            key
+                          );
+
+                          return (
+                            <div
+                              key={key}
+                              className="rounded-md bg-muted/40 p-3"
+                            >
+                              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                                <Label>{`{{${key}}}`}</Label>
+                                {sample && (
+                                  <span className="text-xs text-muted-foreground">
+                                    Sample: {sample}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="grid gap-2 lg:grid-cols-[180px_1fr_1fr]">
                                 <Select
-                                  value={mapping.path || "firstName"}
+                                  value={mapping.source}
                                   onValueChange={(value) =>
                                     setVariableMappings((current) => ({
                                       ...current,
-                                      [key]: { ...mapping, path: value }
+                                      [key]: {
+                                        ...mapping,
+                                        source:
+                                          value as BroadcastVariableSource,
+                                        path:
+                                          value === "subscriber_field"
+                                            ? "firstName"
+                                            : ""
+                                      }
                                     }))
                                   }
                                 >
@@ -1162,203 +1152,232 @@ export default function BroadcastsPage() {
                                     <SelectValue />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    {subscriberFieldOptions.map((option) => (
-                                      <SelectItem
-                                        key={option.value}
-                                        value={option.value}
-                                      >
-                                        {option.label}
-                                      </SelectItem>
-                                    ))}
+                                    <SelectItem value="subscriber_field">
+                                      Subscriber field
+                                    </SelectItem>
+                                    <SelectItem value="metadata_field">
+                                      Metadata field
+                                    </SelectItem>
+                                    <SelectItem value="literal">
+                                      Fixed value
+                                    </SelectItem>
                                   </SelectContent>
                                 </Select>
-                              ) : (
+
+                                {mapping.source === "subscriber_field" ? (
+                                  <Select
+                                    value={mapping.path || "firstName"}
+                                    onValueChange={(value) =>
+                                      setVariableMappings((current) => ({
+                                        ...current,
+                                        [key]: { ...mapping, path: value }
+                                      }))
+                                    }
+                                  >
+                                    <SelectTrigger className="w-full">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {subscriberFieldOptions.map((option) => (
+                                        <SelectItem
+                                          key={option.value}
+                                          value={option.value}
+                                        >
+                                          {option.label}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                ) : (
+                                  <Input
+                                    value={
+                                      mapping.source === "literal"
+                                        ? mapping.literal
+                                        : mapping.path
+                                    }
+                                    placeholder={
+                                      mapping.source === "literal"
+                                        ? "Fixed text"
+                                        : "metadata.path"
+                                    }
+                                    onChange={(event) =>
+                                      setVariableMappings((current) => ({
+                                        ...current,
+                                        [key]: {
+                                          ...mapping,
+                                          ...(mapping.source === "literal"
+                                            ? { literal: event.target.value }
+                                            : { path: event.target.value })
+                                        }
+                                      }))
+                                    }
+                                  />
+                                )}
+
                                 <Input
-                                  value={
-                                    mapping.source === "literal"
-                                      ? mapping.literal
-                                      : mapping.path
-                                  }
-                                  placeholder={
-                                    mapping.source === "literal"
-                                      ? "Fixed text"
-                                      : "metadata.path"
-                                  }
+                                  value={mapping.fallback}
+                                  placeholder="Fallback optional"
+                                  disabled={mapping.source === "literal"}
                                   onChange={(event) =>
                                     setVariableMappings((current) => ({
                                       ...current,
                                       [key]: {
                                         ...mapping,
-                                        ...(mapping.source === "literal"
-                                          ? { literal: event.target.value }
-                                          : { path: event.target.value })
+                                        fallback: event.target.value
                                       }
                                     }))
                                   }
                                 />
-                              )}
-
-                              <Input
-                                value={mapping.fallback}
-                                placeholder="Fallback optional"
-                                disabled={mapping.source === "literal"}
-                                onChange={(event) =>
-                                  setVariableMappings((current) => ({
-                                    ...current,
-                                    [key]: {
-                                      ...mapping,
-                                      fallback: event.target.value
-                                    }
-                                  }))
-                                }
-                              />
+                              </div>
                             </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div>
-              <Label>Audience</Label>
-              <div className="mt-2 grid gap-2 sm:grid-cols-3">
-                {(["all", "tags", "specific"] as const).map((mode) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    onClick={() => setAudienceMode(mode)}
-                    className={cn(
-                      "rounded-md border bg-white p-3 text-left text-sm font-medium capitalize shadow-xs transition hover:border-primary/30",
-                      audienceMode === mode &&
-                        "border-primary/40 bg-primary/10 text-primary"
-                    )}
-                  >
-                    {mode}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {audienceMode === "tags" && (
-              <div className="flex flex-wrap gap-2">
-                {tags.map((tag) => (
-                  <button
-                    key={tag}
-                    type="button"
-                    onClick={() =>
-                      setSelectedTags((current) =>
-                        current.includes(tag)
-                          ? current.filter((item) => item !== tag)
-                          : [...current, tag]
-                      )
-                    }
-                    className={cn(
-                      "rounded-sm bg-muted px-3 py-2 text-sm",
-                      selectedTags.includes(tag) && "bg-primary/10 text-primary"
-                    )}
-                  >
-                    {tag}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {audienceMode === "specific" && (
-              <div className="rounded-sm border p-3">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <div className="relative flex-1">
-                    <Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
-                    <Input
-                      value={subscriberSearch}
-                      onChange={(event) =>
-                        setSubscriberSearch(event.target.value)
-                      }
-                      placeholder="Search subscriber name or phone"
-                      className="pl-9"
-                    />
-                  </div>
-                  <Badge variant="outline">
-                    {selectedSubscriberIds.length} selected
-                  </Badge>
-                </div>
-                <div className="max-h-64 space-y-1 overflow-y-auto pr-1">
-                  {subscribers.length ? (
-                    subscribers.map((subscriber) => (
-                      <label
-                        key={subscriber._id}
-                        className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm hover:bg-muted/60"
-                      >
-                        <Checkbox
-                          checked={selectedSubscriberIds.includes(
-                            subscriber._id
-                          )}
-                          onCheckedChange={(checked) =>
-                            setSelectedSubscriberIds((current) =>
-                              checked
-                                ? [...current, subscriber._id]
-                                : current.filter(
-                                    (item) => item !== subscriber._id
-                                  )
-                            )
-                          }
-                        />
-                        <span className="min-w-0">
-                          <span className="block truncate font-medium">
-                            {[subscriber.firstName, subscriber.lastName]
-                              .filter(Boolean)
-                              .join(" ") || subscriber.phoneNumber}
-                          </span>
-                          <span className="block truncate text-xs text-muted-foreground">
-                            {subscriber.phoneNumber}
-                          </span>
-                        </span>
-                      </label>
-                    ))
-                  ) : (
-                    <div className="py-6 text-center text-sm text-muted-foreground">
-                      No eligible subscribers found.
-                    </div>
-                  )}
-                  <div ref={subscriberLoadMoreRef} className="h-px" />
-                  {isFetchingMoreSubscribers && (
-                    <div className="space-y-2 p-2">
-                      {Array.from({ length: 3 }).map((_, index) => (
-                        <Skeleton key={index} className="h-12" />
-                      ))}
-                    </div>
-                  )}
-                  {!hasMoreSubscribers && subscribers.length > 0 && (
-                    <p className="py-2 text-center text-xs text-muted-foreground">
-                      All eligible subscribers are loaded.
-                    </p>
                   )}
                 </div>
-              </div>
-            )}
+              )}
 
-            <div className="flex items-start justify-between gap-4 rounded-lg border bg-muted/20 p-4">
               <div>
-                <Label htmlFor="broadcast-limit-retry">
-                  Retry after a Meta messaging-limit pause
-                </Label>
-                <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">
-                  If Meta pauses this campaign because the business messaging
-                  limit was reached, automatically grant consent to retry the
-                  unfinished recipients after the backend recovery period. This
-                  does not retry recipients that failed for other reasons.
-                </p>
+                <Label>Audience</Label>
+                <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                  {(["all", "tags", "specific"] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setAudienceMode(mode)}
+                      className={cn(
+                        "rounded-md border bg-white p-3 text-left text-sm font-medium capitalize shadow-xs transition hover:border-primary/30",
+                        audienceMode === mode &&
+                          "border-primary/40 bg-primary/10 text-primary"
+                      )}
+                    >
+                      {mode}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <Switch
-                id="broadcast-limit-retry"
-                checked={retryOnMessagingLimit}
-                onCheckedChange={setRetryOnMessagingLimit}
-              />
+
+              {audienceMode === "tags" && (
+                <div className="flex flex-wrap gap-2">
+                  {tags.map((tag) => (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() =>
+                        setSelectedTags((current) =>
+                          current.includes(tag)
+                            ? current.filter((item) => item !== tag)
+                            : [...current, tag]
+                        )
+                      }
+                      className={cn(
+                        "rounded-sm bg-muted px-3 py-2 text-sm",
+                        selectedTags.includes(tag) &&
+                          "bg-primary/10 text-primary"
+                      )}
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {audienceMode === "specific" && (
+                <div className="rounded-sm border p-3">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
+                      <Input
+                        value={subscriberSearch}
+                        onChange={(event) =>
+                          setSubscriberSearch(event.target.value)
+                        }
+                        placeholder="Search subscriber name or phone"
+                        className="pl-9"
+                      />
+                    </div>
+                    <Badge variant="outline">
+                      {selectedSubscriberIds.length} selected
+                    </Badge>
+                  </div>
+                  <div className="max-h-64 space-y-1 overflow-y-auto pr-1">
+                    {subscribers.length ? (
+                      subscribers.map((subscriber) => (
+                        <label
+                          key={subscriber._id}
+                          className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm hover:bg-muted/60"
+                        >
+                          <Checkbox
+                            checked={selectedSubscriberIds.includes(
+                              subscriber._id
+                            )}
+                            onCheckedChange={(checked) =>
+                              setSelectedSubscriberIds((current) =>
+                                checked
+                                  ? [...current, subscriber._id]
+                                  : current.filter(
+                                      (item) => item !== subscriber._id
+                                    )
+                              )
+                            }
+                          />
+                          <span className="min-w-0">
+                            <span className="block truncate font-medium">
+                              {[subscriber.firstName, subscriber.lastName]
+                                .filter(Boolean)
+                                .join(" ") || subscriber.phoneNumber}
+                            </span>
+                            <span className="block truncate text-xs text-muted-foreground">
+                              {subscriber.phoneNumber}
+                            </span>
+                          </span>
+                        </label>
+                      ))
+                    ) : (
+                      <div className="py-6 text-center text-sm text-muted-foreground">
+                        No eligible subscribers found.
+                      </div>
+                    )}
+                    <div ref={subscriberLoadMoreRef} className="h-px" />
+                    {isFetchingMoreSubscribers && (
+                      <div className="space-y-2 p-2">
+                        {Array.from({ length: 3 }).map((_, index) => (
+                          <Skeleton key={index} className="h-12" />
+                        ))}
+                      </div>
+                    )}
+                    {!hasMoreSubscribers && subscribers.length > 0 && (
+                      <p className="py-2 text-center text-xs text-muted-foreground">
+                        All eligible subscribers are loaded.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-start justify-between gap-4 rounded-lg border bg-muted/20 p-4">
+                <div>
+                  <Label htmlFor="broadcast-limit-retry">
+                    Retry after a Meta messaging-limit pause
+                  </Label>
+                  <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">
+                    If Meta pauses this campaign because the business messaging
+                    limit was reached, automatically grant consent to retry the
+                    unfinished recipients after the backend recovery period.
+                    This does not retry recipients that failed for other
+                    reasons.
+                  </p>
+                </div>
+                <Switch
+                  id="broadcast-limit-retry"
+                  checked={retryOnMessagingLimit}
+                  onCheckedChange={setRetryOnMessagingLimit}
+                />
+              </div>
             </div>
 
-            <DialogFooter>
+            <DialogFooter className="shrink-0 border-t pt-4">
               <Button
                 type="button"
                 variant="outline"

@@ -196,10 +196,15 @@ export default function ContactsPage() {
     refetchOnMount: "always"
   });
 
-  const subscribers = useMemo(
-    () => data?.pages.flatMap((page) => page.data?.subscribers || []) || [],
-    [data?.pages]
-  );
+  const subscribers = useMemo(() => {
+    const uniqueSubscribers = new Map<string, Subscriber>();
+    data?.pages
+      .flatMap((page) => page.data?.subscribers || [])
+      .forEach((subscriber) =>
+        uniqueSubscribers.set(subscriber._id, subscriber)
+      );
+    return Array.from(uniqueSubscribers.values());
+  }, [data?.pages]);
   const channelCounts = {
     all: allCountData?.pagination.total,
     whatsapp: whatsappCountData?.pagination.total,

@@ -25,6 +25,7 @@ import {
   ElementType,
   FormEvent,
   KeyboardEvent,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -59,6 +60,7 @@ import {
   updateSubscriber
 } from "@/client-api/functions/subscribers";
 import { getAllTemplates } from "@/client-api/functions/templates";
+import { getMediaById } from "@/client-api/functions/media";
 import {
   ChatMessage,
   Conversation,
@@ -1015,8 +1017,8 @@ function ThreadSkeleton() {
 export default function ConversationsPage() {
   const queryClient = useQueryClient();
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
-  const messagesStartRef = useRef<HTMLDivElement | null>(null);
   const messageScrollRef = useRef<HTMLDivElement | null>(null);
+  const olderMessagesRequestRef = useRef(false);
   const replyInputRef = useRef<HTMLTextAreaElement | null>(null);
   const selectedIdRef = useRef("");
   const listScrollRef = useRef<HTMLDivElement | null>(null);
@@ -1298,7 +1300,8 @@ export default function ConversationsPage() {
     queryFn: ({ pageParam }) =>
       getConversationMessages({
         conversationId: selectedId,
-        before: pageParam
+        before: pageParam,
+        limit: 7
       }),
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) =>
@@ -1322,22 +1325,36 @@ export default function ConversationsPage() {
     ]);
   };
 
-  useEffect(() => {
-    const sentinel = messagesStartRef.current;
-    const root = messageScrollRef.current;
-    if (!sentinel || !root || !hasOlderMessages) return;
+  const loadOlderMessages = useCallback(async () => {
+    const container = messageScrollRef.current;
+    if (
+      !container ||
+      !hasOlderMessages ||
+      isFetchingOlderMessages ||
+      olderMessagesRequestRef.current
+    ) {
+      return;
+    }
 
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting && !isFetchingOlderMessages) {
-          fetchOlderMessages();
-        }
-      },
-      { root, rootMargin: "120px 0px 0px 0px" }
-    );
+    olderMessagesRequestRef.current = true;
+    const previousScrollHeight = container.scrollHeight;
+    const previousScrollTop = container.scrollTop;
 
-    observer.observe(sentinel);
-    return () => observer.disconnect();
+    try {
+      await fetchOlderMessages();
+      requestAnimationFrame(() => {
+        const currentContainer = messageScrollRef.current;
+        if (!currentContainer) return;
+        currentContainer.scrollTop =
+          currentContainer.scrollHeight -
+          previousScrollHeight +
+          previousScrollTop;
+      });
+    } finally {
+      requestAnimationFrame(() => {
+        olderMessagesRequestRef.current = false;
+      });
+    }
   }, [fetchOlderMessages, hasOlderMessages, isFetchingOlderMessages]);
 
   useEffect(() => {
@@ -1399,7 +1416,7 @@ export default function ConversationsPage() {
       "conversation.updated",
       (payload: { conversation?: Conversation }) =>
         scheduleRealtimeRefresh(payload.conversation?._id, {
-          messages: true,
+          messages: false,
           context: true
         })
     );
@@ -1461,11 +1478,37 @@ export default function ConversationsPage() {
             }
           );
         }
-        scheduleRealtimeRefresh(payload.conversationId, { messages: true });
+        scheduleRealtimeRefresh(payload.conversationId, { messages: false });
       }
     );
-    socket.on("message.updated", (payload: { conversationId?: string }) =>
-      scheduleRealtimeRefresh(payload.conversationId, { messages: true })
+    socket.on(
+      "message.updated",
+      (payload: { conversationId?: string; message?: ChatMessage }) => {
+        if (payload.conversationId && payload.message) {
+          const updatedMessage = payload.message;
+          queryClient.setQueryData<InfiniteData<ConversationMessagesResponse>>(
+            ["conversation-messages", orgId, payload.conversationId],
+            (current) => {
+              if (!current) return current;
+              return {
+                ...current,
+                pages: current.pages.map((page) => ({
+                  ...page,
+                  data: {
+                    ...page.data,
+                    messages: page.data.messages.map((message) =>
+                      message._id === updatedMessage._id
+                        ? updatedMessage
+                        : message
+                    )
+                  }
+                }))
+              };
+            }
+          );
+        }
+        scheduleRealtimeRefresh(payload.conversationId, { messages: false });
+      }
     );
     socket.on("socket.error", (payload: { message?: string }) => {
       if (payload.message) toast.error(payload.message);
@@ -1583,15 +1626,14 @@ export default function ConversationsPage() {
       ),
     [templatesData]
   );
-  const whatsappContacts = useMemo(
-    () =>
-      (
-        contactsData?.pages.flatMap((page) => page.data.subscribers || []) || []
-      ).filter(
-        (subscriber: Subscriber) => subscriber.phoneNumber || subscriber.waId
-      ),
-    [contactsData?.pages]
-  );
+  const whatsappContacts = useMemo(() => {
+    const uniqueContacts = new Map<string, Subscriber>();
+    contactsData?.pages
+      .flatMap((page) => page.data.subscribers || [])
+      .filter((subscriber) => subscriber.phoneNumber || subscriber.waId)
+      .forEach((subscriber) => uniqueContacts.set(subscriber._id, subscriber));
+    return Array.from(uniqueContacts.values());
+  }, [contactsData?.pages]);
   const selectedContact =
     whatsappContacts.find((contact) => contact._id === selectedContactId) ||
     null;
@@ -1616,6 +1658,25 @@ export default function ConversationsPage() {
     [selectedTemplate]
   );
   const selectedTemplateMediaHeader = getTemplateMediaHeader(selectedTemplate);
+  const linkedTemplateMediaId =
+    selectedTemplate?.defaultMediaId ||
+    selectedTemplateMediaHeader?.mediaId ||
+    "";
+  const {
+    data: linkedTemplateMediaData,
+    isLoading: isLinkedTemplateMediaLoading
+  } = useQuery({
+    queryKey: ["template-linked-media", linkedTemplateMediaId],
+    queryFn: () => getMediaById(linkedTemplateMediaId),
+    enabled: Boolean(
+      isTemplateModalOpen &&
+        selectedTemplateMediaHeader &&
+        linkedTemplateMediaId
+    ),
+    staleTime: 60_000
+  });
+  const effectiveTemplateHeaderMedia =
+    templateHeaderMedia || linkedTemplateMediaData?.data.media || null;
   const personalizedTemplateBody = useMemo(
     () =>
       (selectedTemplateBody?.text || "").replace(
@@ -1625,14 +1686,15 @@ export default function ConversationsPage() {
       ),
     [selectedTemplateBody?.text, templateVariables]
   );
-  const messages = useMemo(
-    () =>
-      messagesData?.pages
-        .slice()
-        .reverse()
-        .flatMap((page) => page.data.messages || []) || [],
-    [messagesData?.pages]
-  );
+  const messages = useMemo(() => {
+    const uniqueMessages = new Map<string, ChatMessage>();
+    messagesData?.pages
+      .slice()
+      .reverse()
+      .flatMap((page) => page.data.messages || [])
+      .forEach((message) => uniqueMessages.set(message._id, message));
+    return Array.from(uniqueMessages.values());
+  }, [messagesData?.pages]);
   const latestMessageId = messages[messages.length - 1]?._id || "";
   const messagesById = useMemo(() => {
     const byId = new Map<string, ChatMessage>();
@@ -1812,7 +1874,12 @@ export default function ConversationsPage() {
       return;
     }
 
-    if (selectedTemplateMediaHeader && !templateHeaderMedia) {
+    if (selectedTemplateMediaHeader && isLinkedTemplateMediaLoading) {
+      toast.error("Wait for the linked template media to finish loading.");
+      return;
+    }
+
+    if (selectedTemplateMediaHeader && !effectiveTemplateHeaderMedia) {
       toast.error(
         `Select a ${selectedTemplateMediaHeader.format.toLowerCase()} for this template header.`
       );
@@ -1844,7 +1911,7 @@ export default function ConversationsPage() {
         template: selectedTemplate,
         variables: templateVariables,
         buttonPayloads: {},
-        headerMedia: templateHeaderMedia
+        headerMedia: effectiveTemplateHeaderMedia
       }),
       ...(quickReplyRoutes.length ? { quickReplyRoutes } : {})
     });
@@ -1853,6 +1920,38 @@ export default function ConversationsPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ block: "end" });
   }, [latestMessageId, selectedId]);
+
+  useEffect(() => {
+    if (
+      !selectedId ||
+      isMessagesLoading ||
+      isFetchingOlderMessages ||
+      !hasOlderMessages ||
+      !messages.length
+    ) {
+      return;
+    }
+
+    const frame = requestAnimationFrame(() => {
+      const container = messageScrollRef.current;
+      if (!container) return;
+
+      const hasScrollableHistory =
+        container.scrollHeight > container.clientHeight + 24;
+      if (!hasScrollableHistory) {
+        void loadOlderMessages();
+      }
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [
+    hasOlderMessages,
+    isFetchingOlderMessages,
+    isMessagesLoading,
+    loadOlderMessages,
+    messages.length,
+    selectedId
+  ]);
 
   useEffect(() => {
     setReplyTarget(null);
@@ -2098,12 +2197,16 @@ export default function ConversationsPage() {
                 <div
                   ref={messageScrollRef}
                   className="min-h-0 flex-1 overflow-y-auto p-4"
+                  onScroll={(event) => {
+                    if (event.currentTarget.scrollTop <= 48) {
+                      void loadOlderMessages();
+                    }
+                  }}
                 >
                   {isMessagesLoading ? (
                     <ThreadSkeleton />
                   ) : messages.length ? (
                     <div className="space-y-3">
-                      <div ref={messagesStartRef} className="h-px" />
                       {isFetchingOlderMessages && (
                         <div className="space-y-2">
                           <Skeleton className="h-12 w-2/3 rounded-2xl" />
@@ -2791,7 +2894,9 @@ export default function ConversationsPage() {
                             {selectedTemplateMediaHeader.format} header
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            Select media from your media library for this send.
+                            {linkedTemplateMediaId
+                              ? "Linked template media will be used unless you replace it."
+                              : "Select media from your media library for this send."}
                           </p>
                         </div>
                         <Button
@@ -2801,20 +2906,28 @@ export default function ConversationsPage() {
                           disabled={isSendingTemplate}
                           onClick={() => setTemplateMediaPickerOpen(true)}
                         >
-                          Choose media
+                          {effectiveTemplateHeaderMedia
+                            ? "Replace media"
+                            : "Choose media"}
                         </Button>
                       </div>
-                      {templateHeaderMedia ? (
+                      {isLinkedTemplateMediaLoading ? (
+                        <div className="flex items-center gap-2 rounded-lg bg-muted p-3 text-xs text-muted-foreground">
+                          <Loader2 className="size-4 animate-spin" />
+                          Loading linked media...
+                        </div>
+                      ) : effectiveTemplateHeaderMedia ? (
                         <div className="flex items-center gap-3 rounded-lg bg-muted p-2">
-                          {templateHeaderMedia.fileType === "image" ? (
+                          {effectiveTemplateHeaderMedia.fileType === "image" ? (
                             <img
-                              src={templateHeaderMedia.cloudinaryUrl}
-                              alt={templateHeaderMedia.name}
+                              src={effectiveTemplateHeaderMedia.cloudinaryUrl}
+                              alt={effectiveTemplateHeaderMedia.name}
                               className="size-12 rounded-md object-cover"
                             />
-                          ) : templateHeaderMedia.fileType === "video" ? (
+                          ) : effectiveTemplateHeaderMedia.fileType ===
+                            "video" ? (
                             <video
-                              src={templateHeaderMedia.cloudinaryUrl}
+                              src={effectiveTemplateHeaderMedia.cloudinaryUrl}
                               className="size-12 rounded-md object-cover"
                               muted
                             />
@@ -2825,19 +2938,29 @@ export default function ConversationsPage() {
                           )}
                           <div className="min-w-0 flex-1">
                             <p className="truncate font-medium">
-                              {templateHeaderMedia.name}
+                              {effectiveTemplateHeaderMedia.name}
                             </p>
                             <p className="text-xs capitalize text-muted-foreground">
-                              {templateHeaderMedia.fileType}
+                              {effectiveTemplateHeaderMedia.fileType}
+                              {!templateHeaderMedia && linkedTemplateMediaId
+                                ? " · linked to template"
+                                : ""}
                             </p>
                           </div>
-                          <button
-                            type="button"
-                            className="cursor-pointer text-muted-foreground hover:text-foreground"
-                            onClick={() => setTemplateHeaderMedia(null)}
-                          >
-                            <X className="size-4" />
-                          </button>
+                          {templateHeaderMedia && (
+                            <button
+                              type="button"
+                              className="cursor-pointer text-muted-foreground hover:text-foreground"
+                              onClick={() => setTemplateHeaderMedia(null)}
+                              title={
+                                linkedTemplateMediaId
+                                  ? "Use linked template media"
+                                  : "Remove selected media"
+                              }
+                            >
+                              <X className="size-4" />
+                            </button>
+                          )}
                         </div>
                       ) : null}
                     </div>
@@ -2997,7 +3120,7 @@ export default function ConversationsPage() {
       />
       <MediaPickerDialog
         open={templateMediaPickerOpen}
-        selectedMediaId={templateHeaderMedia?._id}
+        selectedMediaId={effectiveTemplateHeaderMedia?._id}
         requiredType={selectedTemplateMediaHeader?.format}
         onOpenChange={setTemplateMediaPickerOpen}
         onSelect={(media) => {

@@ -111,6 +111,21 @@ const pageMeta: Record<string, PageMeta> = {
     description:
       "Upload and manage approved media assets for templates, broadcasts, and automation."
   },
+  "/plans": {
+    title: "Plans | Whatching",
+    description:
+      "Compare Whatching plans, trial eligibility, GST-inclusive pricing, and available upgrades."
+  },
+  "/checkout": {
+    title: "Checkout | Whatching",
+    description:
+      "Review Whatching plan pricing, GST, billing details, and Razorpay checkout."
+  },
+  "/congratulations": {
+    title: "Plan Purchased | Whatching",
+    description:
+      "Your Whatching plan purchase is being confirmed. Continue to the dashboard or billing settings."
+  },
   "/organisations": {
     title: "Organisations | Whatching",
     description:
@@ -255,7 +270,7 @@ export default function CustomApp({ Component, pageProps }: AppProps) {
       {/* <SessionProvider session={pageProps.session}> */}
       <QueryClientProvider client={queryClient}>
         <NuqsAdapter>
-          <Toaster richColors position="bottom-right" />
+          <Toaster richColors position="top-right" />
           <RouteGuard>
             <Component {...pageProps} />
           </RouteGuard>

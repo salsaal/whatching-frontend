@@ -1,10 +1,7 @@
 import {
   BarChart3,
-  Check,
-  Clock3,
   Megaphone,
   Contact,
-  CreditCard,
   FileText,
   Images,
   Instagram,
@@ -14,7 +11,6 @@ import {
   LogOut,
   Menu,
   MessageCircle,
-  Rocket,
   Settings,
   UserRound,
   Workflow,
@@ -25,15 +21,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import React, { useEffect, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
 
 import {
-  changeSubscriptionPlan,
   getIntegrationStatus,
-  getOrganization,
-  purchaseSubscription,
-  startFreeTrial
+  getOrganization
 } from "@/client-api/functions/organizations";
 import {
   AlertDialog,
@@ -46,16 +38,14 @@ import {
   AlertDialogTitle
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { WhatsAppNumberSwitcher } from "@/components/whatsapp/WhatsAppNumberSwitcher";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle
-} from "@/components/ui/dialog";
 import assets from "@/json/assets";
+import {
+  isSubscriptionCanceledWithAccess,
+  formatDate,
+  getDaysUntil
+} from "@/lib/billing";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
 import { useOrganizationStore } from "@/stores/organizationStore";
@@ -80,94 +70,6 @@ const navigation = [
   { label: "Help", href: "/settings/help", icon: LifeBuoy }
 ];
 
-const plans = [
-  {
-    id: "basic",
-    name: "Basic",
-    icon: Zap,
-    price: "Rs. 2,499",
-    description: "Ideal for small businesses",
-    features: [
-      "Bulk WhatsApp Messaging",
-      "5,000 Subscribers",
-      "0% Markup Fees",
-      "Owner + 2 Team Members",
-      "Role-Based Team Permissions",
-      "Drag & Drop Chatbot Builder",
-      "WhatsApp AI Agent",
-      "100,000 AI Message Tokens",
-      "Single Phone Number Integration",
-      "Coexistence with WhatsApp Business App",
-      "Messaging Template Management",
-      "Analytics Dashboard",
-      "Unlimited Free Incoming Conversations",
-      "Unlimited Chatbot Sessions",
-      "Multi Agent Shared Inbox",
-      "Automated Follow Up Bot",
-      "WhatsApp Chat Widget",
-      "Dedicated Customer Database"
-    ]
-  },
-  {
-    id: "pro",
-    name: "Pro",
-    icon: Rocket,
-    price: "Rs. 3,999",
-    description: "Advanced features for growing businesses",
-    highlighted: true,
-    features: [
-      "Includes all Basic features",
-      "15,000 Subscribers",
-      "0% Markup Fees",
-      "Up to 2 Phone Numbers per Organization",
-      "Owner + 5 Team Members",
-      "Role-Based Team Permissions",
-      "Unlimited AI Message Tokens",
-      "Coexistence with WhatsApp Business App",
-      "WhatsApp AI Agent",
-      'Remove "Powered by Whatching" Branding'
-    ],
-    comingSoon: [
-      "Instagram Automations",
-      "Drag & Drop Chatbot Builder for Instagram",
-      "Instagram AI Agent",
-      "Automated Instagram Comments Reply"
-    ]
-  },
-  {
-    id: "enterprise",
-    name: "Enterprise",
-    icon: CreditCard,
-    price: "For Scale",
-    description: "For high-scale businesses",
-    features: [
-      "Includes all Pro features",
-      "High Volume Subscribers",
-      "Any Custom Business Logic",
-      "Unlimited Team Members",
-      "More WhatsApp Numbers",
-      "Dedicated Account Manager",
-      "Priority Support"
-    ]
-  }
-];
-
-type PlanAction =
-  | {
-      kind: "trial" | "subscribe" | "change";
-      tier: "basic" | "pro";
-      planName: string;
-      label: string;
-      description: string;
-    }
-  | {
-      kind: "enterprise";
-      tier: "enterprise";
-      planName: string;
-      label: string;
-      description: string;
-    };
-
 export default function AppLayout({
   children,
   hideHeader = false,
@@ -175,11 +77,7 @@ export default function AppLayout({
 }: AppLayoutProps) {
   const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isPlansOpen, setIsPlansOpen] = useState(false);
   const [isLogoutOpen, setIsLogoutOpen] = useState(false);
-  const [pendingPlanAction, setPendingPlanAction] = useState<PlanAction | null>(
-    null
-  );
   const [planBannerDismissed, setPlanBannerDismissed] = useState(false);
   const logout = useAuthStore((state) => state.logout);
   const {
@@ -209,58 +107,20 @@ export default function AppLayout({
     refetchOnWindowFocus: true
   });
 
-  const { mutate: subscribe, isPending: isSubscribing } = useMutation({
-    mutationFn: purchaseSubscription,
-    onSuccess: (data) => {
-      if (data.data.paymentUrl) {
-        window.open(data.data.paymentUrl, "_blank", "noopener,noreferrer");
-      }
-      setPendingPlanAction(null);
-    },
-    onError: () => toast.error("Unable to start subscription checkout")
-  });
-
-  const { mutate: changePlan, isPending: isChangingPlan } = useMutation({
-    mutationFn: changeSubscriptionPlan,
-    onSuccess: (data) => {
-      const paymentUrl = data.data?.paymentUrl;
-      if (paymentUrl) {
-        window.open(paymentUrl, "_blank", "noopener,noreferrer");
-        setPendingPlanAction(null);
-        return;
-      }
-      if (data.data?.organization) {
-        upsertOrganization(data.data.organization);
-      }
-      toast.success(data.message || "Plan updated.");
-      setIsPlansOpen(false);
-      setPendingPlanAction(null);
-    },
-    onError: () => toast.error("Unable to change plan")
-  });
-
-  const { mutate: beginTrial, isPending: isStartingTrial } = useMutation({
-    mutationFn: startFreeTrial,
-    onSuccess: (data) => {
-      if (data.data?.organization) {
-        upsertOrganization(data.data.organization);
-      }
-      toast.success(data.message || "Your 7-day free trial has started.");
-      setIsPlansOpen(false);
-      setPendingPlanAction(null);
-    },
-    onError: () => toast.error("Unable to start the free trial")
-  });
-
   const status =
     integration?.state || activeOrganization?.metaConfig?.status || "pending";
   const isReady = status === "ready";
   const currentPlan = activeOrganization?.planTier || "none";
   const isNoPlan = currentPlan === "none";
-  const isTrialing = activeOrganization?.subscriptionStatus === "trialing";
-  const canStartTrial = isNoPlan && !activeOrganization?.trialConsumedAt;
-  const isPlanActionPending =
-    isSubscribing || isChangingPlan || isStartingTrial;
+  const canceledWithAccess =
+    isSubscriptionCanceledWithAccess(activeOrganization);
+  const shouldShowCancelledPlanBanner =
+    router.pathname === "/overview" ||
+    router.pathname === "/plans" ||
+    router.pathname.startsWith("/settings");
+  const daysUntilAccessEnds = getDaysUntil(
+    activeOrganization?.subscriptionCurrentPeriodEnd
+  );
 
   useEffect(() => {
     if (organizationData?.data.organization) {
@@ -334,67 +194,6 @@ export default function AppLayout({
     setIsMobileMenuOpen(false);
     router.push("/auth/login");
   };
-  const buildPlanAction = (plan: (typeof plans)[number]): PlanAction => {
-    if (plan.id === "enterprise") {
-      return {
-        kind: "enterprise",
-        tier: "enterprise",
-        planName: plan.name,
-        label: "Contact Sales",
-        description:
-          "Enterprise setup is handled by the Whatching team for custom usage, more numbers, and dedicated support."
-      };
-    }
-    const tier = plan.id as "basic" | "pro";
-    if (canStartTrial) {
-      return {
-        kind: "trial",
-        tier,
-        planName: plan.name,
-        label: "Start free trial",
-        description: `Start a 7-day ${plan.name} trial for this organisation. No checkout tab will be opened.`
-      };
-    }
-    if (isNoPlan || isTrialing) {
-      return {
-        kind: "subscribe",
-        tier,
-        planName: plan.name,
-        label: `Subscribe to ${plan.name}`,
-        description:
-          "After confirmation, Razorpay checkout will open in a new tab."
-      };
-    }
-    return {
-      kind: "change",
-      tier,
-      planName: plan.name,
-      label:
-        currentPlan === "basic" && plan.id === "pro"
-          ? "Upgrade plan"
-          : `Downgrade to ${plan.name}`,
-      description:
-        "After confirmation, the billing flow will open in a new tab when payment is required."
-    };
-  };
-  const proceedPlanAction = () => {
-    if (!pendingPlanAction) return;
-    if (pendingPlanAction.kind === "enterprise") {
-      toast.info("Contact sales flow coming next");
-      setPendingPlanAction(null);
-      return;
-    }
-    if (pendingPlanAction.kind === "trial") {
-      beginTrial({ tier: pendingPlanAction.tier });
-      return;
-    }
-    if (pendingPlanAction.kind === "subscribe") {
-      subscribe({ tier: pendingPlanAction.tier });
-      return;
-    }
-    changePlan({ tier: pendingPlanAction.tier });
-  };
-
   const renderAccountLinks = (mobile = false) => (
     <div className={cn("space-y-1", mobile ? "px-0" : "px-3 pb-4")}>
       <Link
@@ -450,8 +249,8 @@ export default function AppLayout({
 
   return (
     <div className="min-h-screen bg-[#f7faf8] text-foreground">
-      <aside className="group/sidebar fixed inset-y-0 left-0 z-30 hidden w-20 overflow-hidden bg-white shadow-xs transition-all duration-200 hover:w-64 lg:block">
-        <div className="relative flex h-18 items-center px-4">
+      <aside className="group/sidebar fixed inset-y-0 left-0 z-[130] hidden w-20 overflow-hidden bg-white shadow-xs transition-all duration-200 hover:w-64 lg:block">
+        <div className="relative flex h-18 items-center px-4 pointer-events-none">
           {/* Logo */}
           <div className="w-[150px] opacity-0 transition-opacity duration-200 group-hover/sidebar:opacity-100">
             <Image
@@ -542,7 +341,7 @@ export default function AppLayout({
                     {isNoPlan ? "No plan" : currentPlan}
                   </p>
                 </div>
-                <Button variant="outline" onClick={() => setIsPlansOpen(true)}>
+                <Button variant="outline" onClick={() => router.push("/plans")}>
                   <BarChart3 className="size-4" />
                   Explore plan
                 </Button>
@@ -563,7 +362,7 @@ export default function AppLayout({
                 type="button"
                 size="sm"
                 className="h-8 shrink-0"
-                onClick={() => setIsPlansOpen(true)}
+                onClick={() => router.push("/plans")}
               >
                 View plans
               </Button>
@@ -581,156 +380,35 @@ export default function AppLayout({
           </div>
         )}
 
+        {!hideHeader && canceledWithAccess && shouldShowCancelledPlanBanner && (
+          <div className="px-4 pt-3 sm:px-6 lg:px-8">
+            <div className="mx-auto flex max-w-7xl flex-col gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-950 sm:flex-row sm:items-center">
+              <X className="size-4 shrink-0 text-red-600" />
+              <p className="min-w-0 flex-1">
+                Your plan is cancelled. Paid features will stop working on{" "}
+                <span className="font-semibold">
+                  {formatDate(activeOrganization?.subscriptionCurrentPeriodEnd)}
+                </span>
+                {typeof daysUntilAccessEnds === "number"
+                  ? ` (${daysUntilAccessEnds} day${daysUntilAccessEnds === 1 ? "" : "s"} left).`
+                  : "."}
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                className="h-8 shrink-0"
+                onClick={() => router.push("/plans")}
+              >
+                Renew plan
+              </Button>
+            </div>
+          </div>
+        )}
+
         <main className={cn(fullBleed ? "p-0" : "px-4 py-6 sm:px-6 lg:px-8")}>
           {children}
         </main>
       </div>
-
-      <Dialog open={isPlansOpen} onOpenChange={setIsPlansOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto border-0 shadow-xs sm:max-w-6xl">
-          <DialogHeader>
-            <DialogTitle className="font-heading text-2xl">
-              Explore plans
-            </DialogTitle>
-            <DialogDescription>
-              Choose an infrastructure plan for this organisation. All listed
-              prices are inclusive of GST.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="grid gap-5 lg:grid-cols-3">
-            {plans.map((plan) => {
-              const Icon = plan.icon;
-              const isCurrentPlan = plan.id === currentPlan && !isTrialing;
-              const isThisPlanPending =
-                isPlanActionPending && pendingPlanAction?.tier === plan.id;
-
-              return (
-                <div
-                  key={plan.id}
-                  className={cn(
-                    "rounded-lg bg-white p-6 shadow-xs",
-                    plan.highlighted && !isCurrentPlan && "bg-emerald-50",
-                    isCurrentPlan && "bg-primary/10 ring-1 ring-primary/20"
-                  )}
-                >
-                  <div className="mb-6">
-                    <div className="mb-4 flex size-11 items-center justify-center rounded-sm bg-primary/10 text-primary">
-                      <Icon className="size-5" />
-                    </div>
-                    <h3 className="font-heading text-xl font-semibold">
-                      {plan.name}
-                    </h3>
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      {plan.description}
-                    </p>
-                    <p className="mt-6 font-heading text-3xl font-semibold">
-                      {plan.price}
-                      {plan.id !== "enterprise" && (
-                        <span className="ml-1 text-sm font-normal text-muted-foreground">
-                          /month
-                        </span>
-                      )}
-                    </p>
-                  </div>
-
-                  <Button
-                    variant={plan.highlighted ? "default" : "outline"}
-                    className="mb-6 w-full"
-                    disabled={
-                      isCurrentPlan ||
-                      (isPlanActionPending && !isThisPlanPending)
-                    }
-                    isLoading={isThisPlanPending}
-                    onClick={() => {
-                      if (isCurrentPlan) return;
-                      setPendingPlanAction(buildPlanAction(plan));
-                    }}
-                  >
-                    {isCurrentPlan
-                      ? "Current plan"
-                      : plan.id === "enterprise"
-                        ? "Contact Sales"
-                        : isTrialing
-                          ? `Subscribe to ${plan.name}`
-                          : !isNoPlan
-                            ? currentPlan === "basic" && plan.id === "pro"
-                              ? "Upgrade plan"
-                              : `Downgrade to ${plan.name}`
-                            : canStartTrial
-                              ? "Start free trial"
-                              : "Get Started"}
-                  </Button>
-
-                  <ul className="space-y-3">
-                    {plan.features.map((feature) => (
-                      <li key={feature} className="flex gap-2 text-sm">
-                        <Check className="mt-0.5 size-4 shrink-0 text-primary" />
-                        <span className="text-muted-foreground">{feature}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  {"comingSoon" in plan && plan.comingSoon?.length ? (
-                    <div className="mt-5 border-t pt-5">
-                      <p className="mb-3 text-sm font-semibold">
-                        Coming Pretty Soon
-                      </p>
-                      <ul className="space-y-3">
-                        {plan.comingSoon.map((feature) => (
-                          <li key={feature} className="flex gap-2 text-sm">
-                            <Clock3 className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                            <span className="text-muted-foreground">
-                              {feature}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={Boolean(pendingPlanAction)}
-        onOpenChange={(open) => !open && setPendingPlanAction(null)}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{pendingPlanAction?.label}</DialogTitle>
-            <DialogDescription>
-              {pendingPlanAction?.description}
-            </DialogDescription>
-          </DialogHeader>
-          {pendingPlanAction && (
-            <div className="rounded-md border bg-muted/30 p-3 text-sm">
-              <p className="font-medium">{pendingPlanAction.planName}</p>
-              <p className="mt-1 text-muted-foreground">
-                Prices shown in the plans modal are inclusive of GST.
-              </p>
-            </div>
-          )}
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setPendingPlanAction(null)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              isLoading={isPlanActionPending}
-              onClick={proceedPlanAction}
-            >
-              Proceed
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
         <DialogContent className="top-0 left-0 h-dvh max-h-dvh w-[86vw] max-w-sm translate-x-0 translate-y-0 rounded-none border-0 p-0 shadow-xs data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left">

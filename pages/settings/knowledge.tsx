@@ -49,7 +49,7 @@ import { Textarea } from "@/components/ui/textarea";
 import AppLayout from "@/layouts/AppLayout";
 import { useOrganizationStore } from "@/stores/organizationStore";
 
-type SourceFormType = "text" | "faq";
+type SourceFormType = "text" | "faq" | "file";
 
 const emptyFaqEntry = () => ({ question: "", answer: "" });
 
@@ -74,6 +74,7 @@ export default function KnowledgeSettingsPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [sourceType, setSourceType] = useState<SourceFormType>("text");
   const [form, setForm] = useState({ title: "", content: "" });
+  const [sourceFile, setSourceFile] = useState<File | null>(null);
   const [faqEntries, setFaqEntries] = useState([emptyFaqEntry()]);
   const [selectedSource, setSelectedSource] = useState<KnowledgeSource | null>(
     null
@@ -100,6 +101,9 @@ export default function KnowledgeSettingsPage() {
   const { mutate: uploadFile, isPending: isUploading } = useMutation({
     mutationFn: uploadKnowledgeSource,
     onSuccess: () => {
+      setForm({ title: "", content: "" });
+      setSourceFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
       toast.success("File source uploaded.");
       refetch();
     }
@@ -124,11 +128,7 @@ export default function KnowledgeSettingsPage() {
   const handleFile = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("title", file.name);
-    uploadFile(formData);
-    event.target.value = "";
+    setSourceFile(file);
   };
 
   const handleCreateSource = () => {
@@ -145,6 +145,18 @@ export default function KnowledgeSettingsPage() {
         return;
       }
       createText({ type: "text", title, content });
+      return;
+    }
+
+    if (sourceType === "file") {
+      if (!sourceFile) {
+        toast.error("Choose a TXT, PDF, or DOCX file to upload.");
+        return;
+      }
+      const formData = new FormData();
+      formData.append("title", title);
+      formData.append("file", sourceFile);
+      uploadFile(formData);
       return;
     }
 
@@ -194,8 +206,8 @@ export default function KnowledgeSettingsPage() {
           </div>
         </section>
 
-        <section className="grid gap-4 lg:grid-cols-[420px_1fr]">
-          <Card className="rounded-lg">
+        <section className="grid min-w-0 gap-4 lg:grid-cols-[420px_minmax(0,1fr)]">
+          <Card className="min-w-0 rounded-lg">
             <CardContent className="space-y-3 p-5">
               <div>
                 <p className="font-heading text-xl font-semibold">Add source</p>
@@ -218,6 +230,7 @@ export default function KnowledgeSettingsPage() {
                     <SelectContent>
                       <SelectItem value="text">Text</SelectItem>
                       <SelectItem value="faq">FAQ</SelectItem>
+                      <SelectItem value="file">File</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -240,7 +253,7 @@ export default function KnowledgeSettingsPage() {
               {sourceType === "text" ? (
                 <Textarea
                   placeholder="Paste policy, support script, or product details"
-                  className="min-h-44"
+                  className="min-h-44 max-h-[400px] overflow-y-auto resize-y"
                   maxLength={50000}
                   value={form.content}
                   onChange={(event) =>
@@ -250,7 +263,7 @@ export default function KnowledgeSettingsPage() {
                     }))
                   }
                 />
-              ) : (
+              ) : sourceType === "faq" ? (
                 <div className="space-y-3">
                   {faqEntries.map((entry, index) => (
                     <div
@@ -294,7 +307,7 @@ export default function KnowledgeSettingsPage() {
                       />
                       <Textarea
                         maxLength={8000}
-                        className="min-h-24"
+                        className="min-h-24 max-h-[400px] overflow-y-auto resize-y"
                         placeholder="Answer the AI should use"
                         value={entry.answer}
                         onChange={(event) =>
@@ -322,47 +335,58 @@ export default function KnowledgeSettingsPage() {
                     Add FAQ row
                   </Button>
                 </div>
+              ) : (
+                <div className="space-y-2 rounded-md border border-dashed bg-muted/20 p-3">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".txt,.pdf,.docx,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    className="hidden"
+                    onChange={handleFile}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full cursor-pointer"
+                    disabled={isUploading}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <UploadCloud className="size-4" />
+                    {sourceFile ? "Replace file" : "Choose file"}
+                  </Button>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {sourceFile
+                      ? sourceFile.name
+                      : "TXT, PDF, or DOCX. The title above is saved with the source."}
+                  </p>
+                </div>
               )}
               <Button
                 className="w-full cursor-pointer"
-                disabled={isCreating || !form.title.trim()}
+                disabled={
+                  isCreating ||
+                  isUploading ||
+                  !form.title.trim() ||
+                  (sourceType === "file" && !sourceFile)
+                }
                 onClick={handleCreateSource}
               >
-                {isCreating && <Loader2 className="mr-2 size-4 animate-spin" />}
-                Add {sourceType === "faq" ? "FAQ" : "text"} source
-              </Button>
-
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".txt,.pdf,.docx,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                className="hidden"
-                onChange={handleFile}
-              />
-              <Button
-                variant="outline"
-                className="w-full cursor-pointer"
-                disabled={isUploading}
-                onClick={() => fileInputRef.current?.click()}
-              >
-                {isUploading ? (
+                {(isCreating || isUploading) && (
                   <Loader2 className="mr-2 size-4 animate-spin" />
-                ) : (
-                  <UploadCloud className="mr-2 size-4" />
                 )}
-                Upload file source
+                Add {sourceType === "faq" ? "FAQ" : sourceType} source
               </Button>
             </CardContent>
           </Card>
 
-          <div className="space-y-3">
+          <div className="min-w-0 space-y-3">
             {isLoading ? (
               <ListLoadingSkeleton rows={5} />
             ) : sources.length ? (
               sources.map((source) => {
                 const Icon = sourceIcon(source.type);
                 return (
-                  <Card key={source._id} className="rounded-lg">
+                  <Card key={source._id} className="rounded-lg !p-0">
                     <CardContent className="flex items-center gap-3 p-4">
                       <div className="flex size-10 shrink-0 items-center justify-center rounded-sm bg-primary/10 text-primary">
                         <Icon className="size-5" />
@@ -442,15 +466,15 @@ export default function KnowledgeSettingsPage() {
         open={Boolean(selectedSource)}
         onOpenChange={() => setSelectedSource(null)}
       >
-        <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-2xl">
-          <DialogHeader>
+        <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-2xl">
+          <DialogHeader className="shrink-0 pr-8">
             <DialogTitle>{selectedSource?.title}</DialogTitle>
             <DialogDescription>
               Knowledge source details from the current backend record.
             </DialogDescription>
           </DialogHeader>
           {selectedSource && (
-            <div className="space-y-4">
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overflow-x-hidden pr-1">
               <div className="grid gap-3 text-sm sm:grid-cols-3">
                 <div className="rounded-md bg-muted/40 p-3">
                   <p className="text-xs text-muted-foreground">Type</p>
@@ -527,16 +551,15 @@ export default function KnowledgeSettingsPage() {
                   {selectedSource.ingestError}
                 </div>
               )}
-
-              <div className="grid gap-3 text-xs text-muted-foreground sm:grid-cols-2">
-                <p>
-                  Last ingested: {formatDate(selectedSource.lastIngestedAt)}
-                </p>
-                <p>Updated: {formatDate(selectedSource.updatedAt)}</p>
-              </div>
             </div>
           )}
-          <DialogFooter>
+          {selectedSource && (
+            <div className="grid shrink-0 gap-2 border-t pt-3 text-xs text-muted-foreground sm:grid-cols-2">
+              <p>Last ingested: {formatDate(selectedSource.lastIngestedAt)}</p>
+              <p>Updated: {formatDate(selectedSource.updatedAt)}</p>
+            </div>
+          )}
+          <DialogFooter className="shrink-0">
             <Button variant="outline" onClick={() => setSelectedSource(null)}>
               Close
             </Button>

@@ -27,7 +27,10 @@ import {
   consentToBroadcastMessagingLimitRetry,
   getBroadcastById
 } from "@/client-api/functions/broadcasts";
-import { BroadcastStats } from "@/client-api/types/broadcasts.type";
+import {
+  BroadcastRecipient,
+  BroadcastStats
+} from "@/client-api/types/broadcasts.type";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -164,7 +167,7 @@ export default function BroadcastMetricsPage() {
     hasNextPage,
     fetchNextPage
   } = useInfiniteQuery({
-    queryKey: ["broadcast", broadcastId],
+    queryKey: ["broadcast-detail", broadcastId],
     queryFn: ({ pageParam }) =>
       getBroadcastById(broadcastId as string, {
         page: pageParam,
@@ -187,17 +190,20 @@ export default function BroadcastMetricsPage() {
     onSuccess: async (response) => {
       toast.success(response.message);
       await queryClient.invalidateQueries({
-        queryKey: ["broadcast", broadcastId]
+        queryKey: ["broadcast-detail", broadcastId]
       });
     }
   });
 
   const firstPage = data?.pages[0];
   const broadcast = firstPage?.data.broadcast;
-  const recipients = useMemo(
-    () => data?.pages.flatMap((page) => page.data.recipients || []) || [],
-    [data?.pages]
-  );
+  const recipients = useMemo(() => {
+    const uniqueRecipients = new Map<string, BroadcastRecipient>();
+    data?.pages
+      .flatMap((page) => page.data.recipients || [])
+      .forEach((recipient) => uniqueRecipients.set(recipient._id, recipient));
+    return Array.from(uniqueRecipients.values());
+  }, [data?.pages]);
   const recipientsTotal =
     data?.pages[data.pages.length - 1]?.data.recipientsPagination?.total || 0;
   const stats = broadcast?.stats;

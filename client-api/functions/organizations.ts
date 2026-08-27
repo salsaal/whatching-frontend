@@ -9,6 +9,8 @@ import {
   AddAgentPayload,
   AddAgentResponse,
   BillingHistoryResponse,
+  BillingProfile,
+  BillingProfileResponse,
   CancelSubscriptionResponse,
   ChangePlanResponse,
   OrganizationResponse,
@@ -19,6 +21,7 @@ import {
   StartTrialResponse,
   SupportRequestResponse,
   SupportRequestsResponse,
+  SyncSubscriptionResponse,
   SubscribeResponse,
   TeamResponse,
   WhatsAppPhoneNumberResponse,
@@ -221,7 +224,7 @@ export const updateTeamMemberPermissions = async ({
 };
 
 export const purchaseSubscription = async (payload: {
-  tier: "basic" | "pro" | "enterprise" | string;
+  tier: "basic" | "pro";
 }): Promise<SubscribeResponse> => {
   const res = await api.post<SubscribeResponse>(
     ORGANIZATION_ENDPOINTS.BILLING_SUBSCRIBE,
@@ -241,10 +244,27 @@ export const startFreeTrial = async (payload: {
 };
 
 export const changeSubscriptionPlan = async (payload: {
-  tier: "basic" | "pro" | "enterprise" | string;
+  tier: "basic" | "pro";
 }): Promise<ChangePlanResponse> => {
   const res = await api.post<ChangePlanResponse>(
     ORGANIZATION_ENDPOINTS.BILLING_CHANGE_PLAN,
+    payload
+  );
+  return res.data;
+};
+
+export const getBillingProfile = async (): Promise<BillingProfileResponse> => {
+  const res = await api.get<BillingProfileResponse>(
+    ORGANIZATION_ENDPOINTS.BILLING_PROFILE
+  );
+  return res.data;
+};
+
+export const updateBillingProfile = async (
+  payload: BillingProfile
+): Promise<BillingProfileResponse> => {
+  const res = await api.patch<BillingProfileResponse>(
+    ORGANIZATION_ENDPOINTS.BILLING_PROFILE,
     payload
   );
   return res.data;
@@ -256,6 +276,14 @@ export const getBillingHistory = async (): Promise<BillingHistoryResponse> => {
   );
   return res.data;
 };
+
+export const syncBillingSubscription =
+  async (): Promise<SyncSubscriptionResponse> => {
+    const res = await api.post<SyncSubscriptionResponse>(
+      ORGANIZATION_ENDPOINTS.BILLING_SYNC
+    );
+    return res.data;
+  };
 
 export const cancelSubscription =
   async (): Promise<CancelSubscriptionResponse> => {
