@@ -1,4 +1,5 @@
 import {
+  AlertCircle,
   BarChart3,
   Megaphone,
   Contact,
@@ -12,6 +13,7 @@ import {
   Menu,
   MessageCircle,
   Settings,
+  Target,
   UserRound,
   Workflow,
   X,
@@ -65,9 +67,10 @@ const navigation = [
   { label: "Instagram", href: "/instagram", icon: Instagram },
   { label: "Conversations", href: "/conversations", icon: MessageCircle },
   { label: "Contacts", href: "/contacts", icon: Contact },
+  { label: "Campaigns", href: "/campaigns", icon: Target },
   { label: "Media", href: "/media", icon: Images },
-  { label: "Settings", href: "/settings", icon: Settings },
-  { label: "Help", href: "/settings/help", icon: LifeBuoy }
+  { label: "Help", href: "/settings/help", icon: LifeBuoy },
+  { label: "Settings", href: "/settings", icon: Settings }
 ];
 
 export default function AppLayout({
@@ -79,6 +82,7 @@ export default function AppLayout({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isLogoutOpen, setIsLogoutOpen] = useState(false);
   const [planBannerDismissed, setPlanBannerDismissed] = useState(false);
+  const [cancelBannerDismissed, setCancelBannerDismissed] = useState(false);
   const logout = useAuthStore((state) => state.logout);
   const {
     activeOrganization,
@@ -118,6 +122,31 @@ export default function AppLayout({
     router.pathname === "/overview" ||
     router.pathname === "/plans" ||
     router.pathname.startsWith("/settings");
+  const cancelBannerKey =
+    activeOrgId && activeOrganization?.subscriptionCurrentPeriodEnd
+      ? `whatching:dismissed-cancel-banner:${activeOrgId}:${activeOrganization.subscriptionCurrentPeriodEnd}`
+      : null;
+
+  useEffect(() => {
+    if (!cancelBannerKey || typeof window === "undefined") return;
+    try {
+      setCancelBannerDismissed(
+        window.localStorage.getItem(cancelBannerKey) === "1"
+      );
+    } catch {
+      // Ignore storage access errors (private browsing, etc).
+    }
+  }, [cancelBannerKey]);
+
+  const dismissCancelBanner = () => {
+    setCancelBannerDismissed(true);
+    if (!cancelBannerKey) return;
+    try {
+      window.localStorage.setItem(cancelBannerKey, "1");
+    } catch {
+      // Ignore storage access errors (private browsing, etc).
+    }
+  };
   const daysUntilAccessEnds = getDaysUntil(
     activeOrganization?.subscriptionCurrentPeriodEnd
   );
@@ -380,30 +409,45 @@ export default function AppLayout({
           </div>
         )}
 
-        {!hideHeader && canceledWithAccess && shouldShowCancelledPlanBanner && (
-          <div className="px-4 pt-3 sm:px-6 lg:px-8">
-            <div className="mx-auto flex max-w-7xl flex-col gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-950 sm:flex-row sm:items-center">
-              <X className="size-4 shrink-0 text-red-600" />
-              <p className="min-w-0 flex-1">
-                Your plan is cancelled. Paid features will stop working on{" "}
-                <span className="font-semibold">
-                  {formatDate(activeOrganization?.subscriptionCurrentPeriodEnd)}
-                </span>
-                {typeof daysUntilAccessEnds === "number"
-                  ? ` (${daysUntilAccessEnds} day${daysUntilAccessEnds === 1 ? "" : "s"} left).`
-                  : "."}
-              </p>
-              <Button
-                type="button"
-                size="sm"
-                className="h-8 shrink-0"
-                onClick={() => router.push("/plans")}
-              >
-                Renew plan
-              </Button>
+        {!hideHeader &&
+          canceledWithAccess &&
+          shouldShowCancelledPlanBanner &&
+          !cancelBannerDismissed && (
+            <div className="px-4 pt-3 sm:px-6 lg:px-8">
+              <div className="mx-auto flex max-w-7xl flex-col gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-950 sm:flex-row sm:items-center">
+                <AlertCircle className="size-4 shrink-0 text-red-600" />
+                <p className="min-w-0 flex-1">
+                  Your plan is cancelled. Paid features will stop working on{" "}
+                  <span className="font-semibold">
+                    {formatDate(
+                      activeOrganization?.subscriptionCurrentPeriodEnd
+                    )}
+                  </span>
+                  {typeof daysUntilAccessEnds === "number"
+                    ? ` (${daysUntilAccessEnds} day${daysUntilAccessEnds === 1 ? "" : "s"} left).`
+                    : "."}
+                </p>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-8 shrink-0"
+                  onClick={() => router.push("/plans")}
+                >
+                  Renew plan
+                </Button>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="size-8 shrink-0 text-red-900"
+                  tooltip="Dismiss"
+                  onClick={dismissCancelBanner}
+                >
+                  <X className="size-4" />
+                </Button>
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
         <main className={cn(fullBleed ? "p-0" : "px-4 py-6 sm:px-6 lg:px-8")}>
           {children}

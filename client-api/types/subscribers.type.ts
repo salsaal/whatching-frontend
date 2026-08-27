@@ -5,6 +5,9 @@ export interface Subscriber {
   firstName?: string;
   lastName?: string;
   tags: string[];
+  broadcastEligibility?: "eligible" | "retained_only";
+  broadcastEligibilityReason?: string;
+  broadcastEligibilityMode?: "auto" | "excluded";
   isOptedIn: boolean;
   lastInteraction?: string;
   lastInboundAt?: string;
@@ -92,13 +95,6 @@ export interface ImportSubscribersResponse {
       dryRun: boolean;
       currentSubscriberCount: number;
     };
-  };
-}
-
-export interface TagsResponse {
-  status: string;
-  data: {
-    tags: string[];
   };
 }
 

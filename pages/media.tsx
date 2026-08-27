@@ -29,6 +29,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { QueryErrorState } from "@/components/shared/QueryErrorState";
 import { Skeleton } from "@/components/ui/skeleton";
 import AppLayout from "@/layouts/AppLayout";
 import { cn } from "@/lib/utils";
@@ -78,7 +80,7 @@ export default function MediaPage() {
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [uploadError, setUploadError] = useState("");
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["media"],
     queryFn: getAllMedia,
     refetchOnMount: "always"
@@ -287,6 +289,10 @@ export default function MediaPage() {
           )}
         </section>
 
+        {isError && (
+          <QueryErrorState message="Media could not be loaded for this organisation." />
+        )}
+
         {isLoading ? (
           <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {Array.from({ length: 8 }).map((_, index) => (
@@ -339,13 +345,12 @@ export default function MediaPage() {
             })}
           </section>
         ) : (
-          <section className="flex min-h-72 flex-col items-center justify-center rounded-lg bg-white p-8 text-center shadow-xs">
-            <p className="font-heading text-xl font-semibold">
-              No {activeTab} files found
-            </p>
-            <p className="mt-2 max-w-md text-sm text-muted-foreground">
-              Upload files to build this organisation media library.
-            </p>
+          <section className="rounded-lg bg-white shadow-xs">
+            <EmptyState
+              icon={ImageIcon}
+              title={`No ${activeTab} files found`}
+              description="Upload files to build this organisation media library."
+            />
           </section>
         )}
       </div>

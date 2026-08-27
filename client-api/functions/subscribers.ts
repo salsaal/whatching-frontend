@@ -6,9 +6,14 @@ import {
   ImportSubscribersResponse,
   SubscriberPayload,
   SubscriberResponse,
-  SubscribersResponse,
-  TagsResponse
+  SubscribersResponse
 } from "../types/subscribers.type";
+import {
+  CreateTagPayload,
+  TagResponse,
+  TagsResponse,
+  UpdateTagPayload
+} from "../types/tags.type";
 
 export const getAllSubscribers = async (
   params: {
@@ -60,6 +65,20 @@ export const updateSubscriber = async ({
   return res.data;
 };
 
+export const updateSubscriberBroadcastEligibility = async ({
+  subscriberId,
+  mode
+}: {
+  subscriberId: string;
+  mode: "auto" | "excluded";
+}): Promise<SubscriberResponse> => {
+  const res = await api.patch<SubscriberResponse>(
+    SUBSCRIBER_ENDPOINTS.BROADCAST_ELIGIBILITY(subscriberId),
+    { mode }
+  );
+  return res.data;
+};
+
 export const importSubscribers = async (
   payload: ImportSubscribersPayload
 ): Promise<ImportSubscribersResponse> => {
@@ -95,13 +114,30 @@ export const getTags = async (): Promise<TagsResponse> => {
   return res.data;
 };
 
-export const createTag = async (tag: string): Promise<TagsResponse> => {
-  const res = await api.post<TagsResponse>(SUBSCRIBER_ENDPOINTS.TAGS, { tag });
+export const createTag = async (
+  payload: string | CreateTagPayload
+): Promise<TagResponse> => {
+  const body = typeof payload === "string" ? { name: payload } : payload;
+  const res = await api.post<TagResponse>(SUBSCRIBER_ENDPOINTS.TAGS, body);
   return res.data;
 };
 
-export const deleteTag = async (tag: string): Promise<TagsResponse> => {
-  const res = await api.delete<TagsResponse>(
+export const updateTag = async ({
+  tagId,
+  payload
+}: {
+  tagId: string;
+  payload: UpdateTagPayload;
+}): Promise<TagResponse> => {
+  const res = await api.patch<TagResponse>(
+    SUBSCRIBER_ENDPOINTS.TAG_BY_ID(tagId),
+    payload
+  );
+  return res.data;
+};
+
+export const deleteTag = async (tag: string): Promise<TagResponse> => {
+  const res = await api.delete<TagResponse>(
     SUBSCRIBER_ENDPOINTS.TAG_BY_NAME(tag)
   );
   return res.data;

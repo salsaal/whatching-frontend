@@ -59,6 +59,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { QueryErrorState } from "@/components/shared/QueryErrorState";
 import { CardGridLoadingSkeleton } from "@/components/ui/loading-skeletons";
 import { Switch } from "@/components/ui/switch";
 import AppLayout from "@/layouts/AppLayout";
@@ -91,7 +93,7 @@ export default function FlowsPage() {
   );
 
   const queryKey = ["bot-canvases", activeOrganization?._id];
-  const { data, isLoading, refetch, isFetching } = useQuery({
+  const { data, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey,
     queryFn: listBotCanvases,
     enabled: Boolean(activeOrganization?._id),
@@ -296,6 +298,10 @@ export default function FlowsPage() {
           </div>
         </section>
 
+        {isError && (
+          <QueryErrorState message="Flows could not be loaded for this organisation." />
+        )}
+
         <section className="grid gap-4 lg:grid-cols-3">
           {isLoading ? (
             <div className="lg:col-span-3">
@@ -457,23 +463,21 @@ export default function FlowsPage() {
             })
           ) : (
             <Card className="rounded-lg lg:col-span-3">
-              <CardContent className="flex flex-col items-center justify-center p-10 text-center">
-                <Workflow className="mb-3 size-10 text-primary" />
-                <h2 className="font-heading text-2xl font-semibold">
-                  No flows yet
-                </h2>
-                <p className="mt-2 max-w-md text-sm text-muted-foreground">
-                  Create a canvas to start building WhatsApp automation.
-                </p>
-                <Button
-                  className="mt-4 cursor-pointer"
-                  disabled={isCreating}
-                  onClick={() => createCanvasMutate({})}
-                >
-                  <Plus className="size-4" />
-                  Add flow
-                </Button>
-              </CardContent>
+              <EmptyState
+                icon={Workflow}
+                title="No flows yet"
+                description="Create a canvas to start building WhatsApp automation."
+                action={
+                  <Button
+                    className="cursor-pointer"
+                    disabled={isCreating}
+                    onClick={() => createCanvasMutate({})}
+                  >
+                    <Plus className="size-4" />
+                    Add flow
+                  </Button>
+                }
+              />
             </Card>
           )}
         </section>

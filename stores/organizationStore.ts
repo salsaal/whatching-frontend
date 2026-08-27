@@ -34,6 +34,7 @@ export interface Organization {
   _id: string;
   name: string;
   slug: string;
+  timezone?: string;
   planTier: string;
   subscriptionStatus: string;
   subscriptionCancelAtPeriodEnd?: boolean;
@@ -51,7 +52,6 @@ export interface Organization {
   trialStartedAt?: string;
   trialEndsAt?: string;
   trialConsumedAt?: string;
-  walletBalance: number;
   billingProfile?: OrganizationBillingProfile | null;
   metaConfig: OrganizationMetaConfig;
   usage: OrganizationUsage;

@@ -40,7 +40,6 @@ import {
   Send,
   Settings2,
   ShieldAlert,
-  Sparkles,
   Tags,
   Trash2,
   UserCheck,
@@ -156,18 +155,12 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger
-} from "@/components/ui/tooltip";
 import AppLayout from "@/layouts/AppLayout";
 import { cn } from "@/lib/utils";
 import { useOrganizationStore } from "@/stores/organizationStore";
 
 type PageTab = "profile" | "canvas" | "rules" | "media" | "setup";
 type CanvasMode = "draft" | "published";
-const COMMENT_AUTOMATION_ENABLED = false;
 const instagramEdgeStyle = { strokeWidth: 1.25, strokeDasharray: "4 5" };
 type MediaPickerTarget =
   | { kind: "node"; type: "IMAGE" | "VIDEO" }
@@ -759,28 +752,6 @@ type InstagramPageProps = {
   canvasOnly?: boolean;
   forcedCanvasId?: string;
 };
-
-function InstagramComingSoonOverlay() {
-  return (
-    <div className="absolute inset-0 z-[60] flex items-center justify-center bg-white/35 px-4 backdrop-blur-[6px]">
-      <div className="pointer-events-none text-center">
-        <div className="mx-auto flex size-14 items-center justify-center rounded-md bg-white/90 text-pink-600 shadow-sm ring-1 ring-border">
-          <Instagram className="size-7" />
-        </div>
-        <div className="mt-5 flex items-center justify-center gap-2 text-xs font-semibold uppercase tracking-[0.24em] text-primary">
-          <Sparkles className="size-4" />
-          Whatching Instagram
-        </div>
-        <h2 className="mt-2 font-heading text-4xl font-semibold text-foreground">
-          Coming soon
-        </h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Instagram automation is temporarily unavailable.
-        </p>
-      </div>
-    </div>
-  );
-}
 
 export function InstagramPage({
   canvasOnly = false,
@@ -2927,10 +2898,6 @@ export function InstagramPage({
                   toast.error("Connect Instagram first.");
                   return;
                 }
-                if (value === "rules" && !COMMENT_AUTOMATION_ENABLED) {
-                  toast.info("Comment automation is coming soon.");
-                  return;
-                }
                 setActiveTab(value as PageTab);
               }}
             >
@@ -2939,19 +2906,9 @@ export function InstagramPage({
                 <TabsTrigger value="canvas" disabled={!isReady}>
                   Message Flow
                 </TabsTrigger>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="inline-flex h-full">
-                      <TabsTrigger
-                        value="rules"
-                        disabled={!isReady || !COMMENT_AUTOMATION_ENABLED}
-                      >
-                        Comment Automation
-                      </TabsTrigger>
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent sideOffset={6}>Coming soon</TooltipContent>
-                </Tooltip>
+                <TabsTrigger value="rules" disabled={!isReady}>
+                  Comment Automation
+                </TabsTrigger>
                 <TabsTrigger value="media" disabled={!isReady}>
                   Media
                 </TabsTrigger>
@@ -3501,7 +3458,6 @@ export function InstagramPage({
             </div>
           </div>
         )}
-        <InstagramComingSoonOverlay />
       </div>
 
       <AlertDialog

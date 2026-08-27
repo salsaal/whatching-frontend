@@ -18,13 +18,17 @@ export const ORGANIZATION_ENDPOINTS = {
   GET_ORGANIZATION: `${ORGANIZATIONS_BASE}/`,
   DELETE_ORGANIZATION: ORGANIZATIONS_BASE,
   SETUP: `${ORGANIZATIONS_BASE}/setup`,
+  UPDATE_SETTINGS: `${ORGANIZATIONS_BASE}/settings`,
   INTEGRATION_STATUS: `${ORGANIZATIONS_BASE}/integration-status`,
   CONNECT_META: `${ORGANIZATIONS_BASE}/connect-meta`,
   CONNECT_META_EMBEDDED_SIGNUP: `${ORGANIZATIONS_BASE}/connect-meta/embedded-signup`,
   SYNC_INTEGRATION: `${ORGANIZATIONS_BASE}/integration/sync`,
   COEXISTENCE_CONTACT_SYNC: `${ORGANIZATIONS_BASE}/integration/contact-sync`,
+  TEMPLATE_INSIGHTS_STATUS: `${ORGANIZATIONS_BASE}/whatsapp/template-insights/status`,
+  TEMPLATE_INSIGHTS_ENABLE: `${ORGANIZATIONS_BASE}/whatsapp/template-insights/enable`,
   WHATSAPP_PHONE_NUMBERS: `${ORGANIZATIONS_BASE}/whatsapp/phone-numbers`,
   WHATSAPP_PHONE_NUMBERS_SYNC: `${ORGANIZATIONS_BASE}/whatsapp/phone-numbers/sync`,
+  WHATSAPP_PHONE_NUMBERS_MANUAL_CONNECT: `${ORGANIZATIONS_BASE}/whatsapp/phone-numbers/manual-connect`,
   WHATSAPP_PHONE_NUMBER: (phoneNumberRecordId: string) =>
     `${ORGANIZATIONS_BASE}/whatsapp/phone-numbers/${phoneNumberRecordId}`,
   WHATSAPP_OUTBOUND_READINESS: (phoneNumberRecordId: string) =>
@@ -48,9 +52,16 @@ export const ORGANIZATION_ENDPOINTS = {
   BILLING_CHANGE_PLAN: `${ORGANIZATIONS_BASE}/billing/change-plan`,
   BILLING_PROFILE: `${ORGANIZATIONS_BASE}/billing/profile`,
   BILLING_SYNC: `${ORGANIZATIONS_BASE}/billing/sync`,
-  BILLING_TOPUP_WALLET: `${ORGANIZATIONS_BASE}/billing/topup-wallet`,
   BILLING_HISTORY: `${ORGANIZATIONS_BASE}/billing/history`,
   BILLING_CANCEL: `${ORGANIZATIONS_BASE}/billing/cancel`,
+  BILLING_INVOICES: `${ORGANIZATIONS_BASE}/billing/invoices`,
+  BILLING_INVOICE_PDF: (invoiceId: string) =>
+    `${ORGANIZATIONS_BASE}/billing/invoices/${invoiceId}/pdf`,
+  BILLING_INVOICE_RETRY: (invoiceId: string) =>
+    `${ORGANIZATIONS_BASE}/billing/invoices/${invoiceId}/retry`,
+  BILLING_AI_TOKEN_PACKAGES: `${ORGANIZATIONS_BASE}/billing/ai-token-packages`,
+  BILLING_AI_TOKEN_USAGE: `${ORGANIZATIONS_BASE}/billing/ai-token-usage`,
+  BILLING_AI_TOKEN_TOPUP: `${ORGANIZATIONS_BASE}/billing/ai-token-topup`,
   SUPPORT_REQUESTS: `${ORGANIZATIONS_BASE}/support-requests`,
   SUPPORT_REQUEST: (supportRequestId: string) =>
     `${ORGANIZATIONS_BASE}/support-requests/${supportRequestId}`
@@ -86,10 +97,15 @@ export const SUBSCRIBER_ENDPOINTS = {
   TAGS: `${ORGANIZATIONS_BASE}/tags`,
   TAG_BY_NAME: (tag: string) =>
     `${ORGANIZATIONS_BASE}/tags/${encodeURIComponent(tag)}`,
+  TAG_BY_ID: (tagId: string) => `${ORGANIZATIONS_BASE}/tags/${tagId}`,
   SUBSCRIBER_TAGS: (subscriberId: string) =>
     `${ORGANIZATIONS_BASE}/subscribers/${subscriberId}/tags`,
   SUBSCRIBER_TAG_BY_NAME: (subscriberId: string, tag: string) =>
-    `${ORGANIZATIONS_BASE}/subscribers/${subscriberId}/tags/${encodeURIComponent(tag)}`
+    `${ORGANIZATIONS_BASE}/subscribers/${subscriberId}/tags/${encodeURIComponent(tag)}`,
+  BROADCAST_ELIGIBILITY: (subscriberId: string) =>
+    `${ORGANIZATIONS_BASE}/subscribers/${subscriberId}/broadcast-eligibility`,
+  CAMPAIGN_TOUCHES: (subscriberId: string) =>
+    `${ORGANIZATIONS_BASE}/subscribers/${subscriberId}/campaign-touches`
 };
 
 export const MEDIA_ENDPOINTS = {
@@ -113,7 +129,10 @@ export const BROADCAST_ENDPOINTS = {
 };
 
 export const ANALYTICS_ENDPOINTS = {
-  DASHBOARD: `${ORGANIZATIONS_BASE}/analytics/dashboard`
+  DASHBOARD: `${ORGANIZATIONS_BASE}/analytics/dashboard`,
+  CAMPAIGNS: `${ORGANIZATIONS_BASE}/analytics/campaigns`,
+  CONVERSATION_COSTS: `${ORGANIZATIONS_BASE}/analytics/conversation-costs`,
+  TEMPLATE_ANALYTICS: `${ORGANIZATIONS_BASE}/analytics/templates`
 };
 
 const BOT_BASE = `${ORGANIZATIONS_BASE}/bot`;

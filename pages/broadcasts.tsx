@@ -31,6 +31,7 @@ import {
   getWhatsAppOutboundReadiness,
   testWhatsAppOutboundReadiness
 } from "@/client-api/functions/organizations";
+import { listCampaigns } from "@/client-api/functions/campaigns";
 import { getAllSubscribers, getTags } from "@/client-api/functions/subscribers";
 import { getAllTemplates } from "@/client-api/functions/templates";
 import {
@@ -84,6 +85,8 @@ import {
   SelectTrigger,
   SelectValue
 } from "@/components/ui/select";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { QueryErrorState } from "@/components/shared/QueryErrorState";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import AppLayout from "@/layouts/AppLayout";
@@ -277,6 +280,9 @@ export default function BroadcastsPage() {
   const [selectedSubscriberIds, setSelectedSubscriberIds] = useState<string[]>(
     []
   );
+  const [selectedCampaignSourceIds, setSelectedCampaignSourceIds] = useState<
+    string[]
+  >([]);
   const [subscriberSearch, setSubscriberSearch] = useState("");
   const [retryOnMessagingLimit, setRetryOnMessagingLimit] = useState(true);
   const paymentMethodUrl = buildMetaPaymentMethodUrl({
@@ -304,6 +310,7 @@ export default function BroadcastsPage() {
   const {
     data,
     isLoading,
+    isError,
     isFetchingNextPage,
     hasNextPage,
     fetchNextPage,
@@ -361,6 +368,11 @@ export default function BroadcastsPage() {
     queryKey: ["subscriber-tags"],
     queryFn: getTags
   });
+  const { data: campaignsData } = useQuery({
+    queryKey: ["campaigns", "broadcast-audience"],
+    queryFn: () => listCampaigns({ sort: "recent", limit: 100 }),
+    enabled: isCreateOpen && audienceMode === "campaign"
+  });
   const { data: senderTriggersData } = useQuery({
     queryKey: ["bot-canvas-triggers", senderPhoneNumberId],
     queryFn: () => getBotCanvasTriggers(senderPhoneNumberId),
@@ -399,7 +411,11 @@ export default function BroadcastsPage() {
       );
     return Array.from(uniqueSubscribers.values());
   }, [subscribersData?.pages]);
-  const tags = useMemo(() => tagsData?.data.tags || [], [tagsData?.data.tags]);
+  const tags = useMemo(
+    () => (tagsData?.data.tags || []).map((tag) => tag.name),
+    [tagsData?.data.tags]
+  );
+  const campaigns = campaignsData?.data.campaigns || [];
   const filteredBroadcasts = broadcasts;
 
   const selectedBroadcast = selectedBroadcastData?.data.broadcast;
@@ -637,7 +653,12 @@ export default function BroadcastsPage() {
               mode: "specific",
               subscriberIds: selectedSubscriberIds
             }
-          : { mode: "all" };
+          : audienceMode === "campaign"
+            ? {
+                mode: "campaign",
+                campaignSourceIds: selectedCampaignSourceIds
+              }
+            : { mode: "all" };
 
     const components = buildBroadcastComponents(
       bodyVariables,
@@ -797,6 +818,10 @@ export default function BroadcastsPage() {
           </div>
         </section>
 
+        {isError && (
+          <QueryErrorState message="Broadcasts could not be loaded for this organisation." />
+        )}
+
         <section className="rounded-lg bg-white p-2 shadow-xs">
           {isLoading ? (
             <div className="space-y-3 p-3">
@@ -921,12 +946,11 @@ export default function BroadcastsPage() {
               )}
             </div>
           ) : (
-            <div className="flex min-h-72 flex-col items-center justify-center p-8 text-center">
-              <Megaphone className="size-10 text-primary" />
-              <p className="mt-3 font-heading text-xl font-semibold">
-                No broadcasts found
-              </p>
-            </div>
+            <EmptyState
+              icon={Megaphone}
+              title="No broadcasts found"
+              description="Create a broadcast to reach subscribers by tag, campaign, or your full audience."
+            />
           )}
         </section>
       </div>
@@ -1240,8 +1264,8 @@ export default function BroadcastsPage() {
 
               <div>
                 <Label>Audience</Label>
-                <div className="mt-2 grid gap-2 sm:grid-cols-3">
-                  {(["all", "tags", "specific"] as const).map((mode) => (
+                <div className="mt-2 grid gap-2 sm:grid-cols-4">
+                  {(["all", "tags", "specific", "campaign"] as const).map((mode) => (
                     <button
                       key={mode}
                       type="button"
@@ -1280,6 +1304,46 @@ export default function BroadcastsPage() {
                       {tag}
                     </button>
                   ))}
+                </div>
+              )}
+
+              {audienceMode === "campaign" && (
+                <div className="rounded-sm border p-3">
+                  {campaigns.length ? (
+                    <div className="flex flex-col gap-2">
+                      {campaigns.map((campaign) => (
+                        <label
+                          key={campaign.sourceId}
+                          className="flex items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-muted"
+                        >
+                          <span className="flex items-center gap-2">
+                            <Checkbox
+                              checked={selectedCampaignSourceIds.includes(
+                                campaign.sourceId
+                              )}
+                              onCheckedChange={() =>
+                                setSelectedCampaignSourceIds((current) =>
+                                  current.includes(campaign.sourceId)
+                                    ? current.filter(
+                                        (item) => item !== campaign.sourceId
+                                      )
+                                    : [...current, campaign.sourceId]
+                                )
+                              }
+                            />
+                            {campaign.label}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {campaign.subscriberCount} contacts
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="p-2 text-sm text-muted-foreground">
+                      No campaigns found.
+                    </p>
+                  )}
                 </div>
               )}
 

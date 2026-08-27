@@ -466,3 +466,111 @@ export interface AddAgentResponse {
     };
   };
 }
+
+export interface InvoicePartySnapshot {
+  legalName: string;
+  address: string;
+  state: string;
+  pinCode?: string;
+  gstin?: string;
+  email?: string;
+}
+
+export interface Invoice {
+  _id: string;
+  orgId: string;
+  invoiceNumber: string;
+  financialYear: string;
+  source: "subscription_payment" | "wallet_topup" | "ai_token_topup";
+  provider: "razorpay";
+  status: "pending" | "sent" | "failed";
+  invoiceDate: string;
+  paidAt: string;
+  amountTotalPaise: number;
+  taxableAmountPaise: number;
+  gstAmountPaise: number;
+  cgstAmountPaise: number;
+  sgstAmountPaise: number;
+  igstAmountPaise: number;
+  taxMode: "cgst_sgst" | "igst";
+  pricingMode: "inclusive" | "exclusive";
+  gstRate: number;
+  description: string;
+  seller: InvoicePartySnapshot;
+  buyer: InvoicePartySnapshot;
+  emailSentAt?: string;
+  attemptCount: number;
+  lastError?: string;
+  pdfAvailable: boolean;
+}
+
+export interface InvoicesResponse {
+  status: string;
+  data: {
+    invoices: Invoice[];
+  };
+}
+
+export interface RetryInvoiceResponse {
+  status: string;
+  message: string;
+}
+
+export interface AiTokenPackage {
+  packageId: "1m" | "3m" | "5m" | "10m";
+  label: string;
+  tokens: number;
+  baseAmountPaise: number;
+  gstRate: number;
+  gstAmountPaise: number;
+  amountPaise: number;
+  currency: "INR";
+  pricingMode: "exclusive";
+}
+
+export interface AiTokenPackagesResponse {
+  status: string;
+  data: {
+    packages: AiTokenPackage[];
+  };
+}
+
+export interface AiTokenUsage {
+  used: number;
+  reserved: number;
+  purchased: number;
+  committed: number;
+  includedRemaining: number;
+  topUpRemaining: number;
+  remaining: number;
+  cycleStartedAt: string | null;
+  cycleResetsAt: string | null;
+}
+
+export interface AiTokenUsageResponse {
+  status: string;
+  data: {
+    usage: AiTokenUsage | null;
+    includedLimit: number;
+    planTier: string;
+  };
+}
+
+export interface AiTokenTopupResponse {
+  status: string;
+  message: string;
+  data: {
+    packageId: string;
+    label: string;
+    tokens: number;
+    baseAmountPaise: number;
+    gstAmountPaise: number;
+    amountPaise: number;
+    currency: "INR";
+    pricingMode: "exclusive";
+    paymentLinkId: string;
+    referenceId: string;
+    paymentUrl: string;
+    key: string;
+  };
+}

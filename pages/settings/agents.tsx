@@ -40,6 +40,7 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { QueryErrorState } from "@/components/shared/QueryErrorState";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -399,7 +400,7 @@ export default function AgentsSettingsPage() {
   const [editTarget, setEditTarget] = useState<TeamMember | null>(null);
   const [removeTarget, setRemoveTarget] = useState<TeamMember | null>(null);
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["team", activeOrganization?._id],
     queryFn: getTeam,
     enabled: Boolean(activeOrganization?._id),
@@ -502,6 +503,10 @@ export default function AgentsSettingsPage() {
             </CardContent>
           </Card>
         </section>
+
+        {isError && (
+          <QueryErrorState message="Team members could not be loaded for this organisation." />
+        )}
 
         {isLoading ? (
           <TeamSkeleton />

@@ -8,16 +8,21 @@ import {
   IntegrationStatusResponse,
   AddAgentPayload,
   AddAgentResponse,
+  AiTokenPackagesResponse,
+  AiTokenTopupResponse,
+  AiTokenUsageResponse,
   BillingHistoryResponse,
   BillingProfile,
   BillingProfileResponse,
   CancelSubscriptionResponse,
   ChangePlanResponse,
+  InvoicesResponse,
   OrganizationResponse,
   OrganizationsResponse,
   PermissionAccessState,
   RequestCoexistenceContactSyncPayload,
   CreateSupportRequestPayload,
+  RetryInvoiceResponse,
   StartTrialResponse,
   SupportRequestResponse,
   SupportRequestsResponse,
@@ -32,6 +37,16 @@ import {
 export const getMyOrganizations = async (): Promise<OrganizationsResponse> => {
   const res = await api.get<OrganizationsResponse>(
     ORGANIZATION_ENDPOINTS.MY_ORGANIZATIONS
+  );
+  return res.data;
+};
+
+export const updateOrganizationSettings = async (
+  payload: { timezone: string }
+): Promise<OrganizationResponse> => {
+  const res = await api.patch<OrganizationResponse>(
+    ORGANIZATION_ENDPOINTS.UPDATE_SETTINGS,
+    payload
   );
   return res.data;
 };
@@ -76,6 +91,16 @@ export const connectMeta = async (
 ): Promise<OrganizationResponse> => {
   const res = await api.patch<OrganizationResponse>(
     ORGANIZATION_ENDPOINTS.CONNECT_META,
+    payload
+  );
+  return res.data;
+};
+
+export const manualConnectWhatsAppNumber = async (
+  payload: ConnectMetaPayload
+): Promise<OrganizationResponse> => {
+  const res = await api.post<OrganizationResponse>(
+    ORGANIZATION_ENDPOINTS.WHATSAPP_PHONE_NUMBERS_MANUAL_CONNECT,
     payload
   );
   return res.data;
@@ -292,6 +317,55 @@ export const cancelSubscription =
     );
     return res.data;
   };
+
+export const listInvoices = async (): Promise<InvoicesResponse> => {
+  const res = await api.get<InvoicesResponse>(
+    ORGANIZATION_ENDPOINTS.BILLING_INVOICES
+  );
+  return res.data;
+};
+
+export const downloadInvoicePdf = async (invoiceId: string): Promise<Blob> => {
+  const res = await api.get(
+    ORGANIZATION_ENDPOINTS.BILLING_INVOICE_PDF(invoiceId),
+    { responseType: "blob" }
+  );
+  return res.data as Blob;
+};
+
+export const retryInvoice = async (
+  invoiceId: string
+): Promise<RetryInvoiceResponse> => {
+  const res = await api.post<RetryInvoiceResponse>(
+    ORGANIZATION_ENDPOINTS.BILLING_INVOICE_RETRY(invoiceId)
+  );
+  return res.data;
+};
+
+export const getAiTokenPackages =
+  async (): Promise<AiTokenPackagesResponse> => {
+    const res = await api.get<AiTokenPackagesResponse>(
+      ORGANIZATION_ENDPOINTS.BILLING_AI_TOKEN_PACKAGES
+    );
+    return res.data;
+  };
+
+export const getAiTokenUsage = async (): Promise<AiTokenUsageResponse> => {
+  const res = await api.get<AiTokenUsageResponse>(
+    ORGANIZATION_ENDPOINTS.BILLING_AI_TOKEN_USAGE
+  );
+  return res.data;
+};
+
+export const topupAiTokens = async (
+  packageId: string
+): Promise<AiTokenTopupResponse> => {
+  const res = await api.post<AiTokenTopupResponse>(
+    ORGANIZATION_ENDPOINTS.BILLING_AI_TOKEN_TOPUP,
+    { packageId }
+  );
+  return res.data;
+};
 
 export const getSupportRequests = async (
   params: { page?: number; limit?: number; status?: string } = {}

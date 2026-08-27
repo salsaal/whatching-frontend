@@ -1,6 +1,21 @@
 # Current State
 
-This document reflects the frontend and verified sibling-backend contracts on 2026-08-08.
+This document reflects the frontend and verified sibling-backend contracts on 2026-08-27.
+
+## 2026-08-27 — Backend feature-parity pass
+
+A full audit compared this frontend against `../Whatching_backend`'s current routes/models and closed the gaps found:
+
+- Backend: fixed the production 15-minute logout bug — `authController.ts` refresh-cookie `sameSite` is now `'none'` in production, `'lax'` otherwise (previously hardcoded `'lax'`, breaking cross-site refresh). Deploy this and confirm `CORS_ORIGINS` matches the exact frontend origin.
+- Fixed a real (previously unknown) bug: the org tags list endpoint returns full `Tag` objects, but the frontend's `TagsResponse` type still declared `tags: string[]` — this only failed at runtime, not at typecheck. New `client-api/types/tags.type.ts` carries the correct `Tag`/`TagAutomation` shape.
+- Automatic subscriber tagging: `TagFormDialog` supports `mode` (manual/bot_decides), `channelScope`, and keyword/AI/inactivity automation triggers. `TagAssignmentLog` audit trail is still backend-gap (no GET route exists) — raised as a backend follow-up, not built.
+- Billing: added Invoices (list/PDF download/retry) and AI token top-up (packages, usage, Razorpay payment-link top-up) to `/settings/billing`. `topup-wallet` intentionally left out of scope — confirmed legacy/unused by the backend team.
+- Campaign attribution: `/analytics` now has Campaigns and Costs tabs (Costs gated to owner/admin via new `useCurrentMembership()` hook). Broadcast audience now supports a `campaign` mode alongside all/tags/specific. Subscriber detail shows campaign touch history.
+- Meta cost & template-click analytics live under the Costs tab, including the permanent, one-way template-insights opt-in consent flow.
+- Manual WhatsApp number connect (fallback to Embedded Signup) added to Overview. Org timezone editing added at `/settings/general`. Subscriber broadcast-eligibility toggle added to the subscriber detail dialog.
+- Removed unused `next-auth`/`nookies` dependencies and their dead call sites.
+- Added a shared `QueryErrorState` component and wired `isError` handling into contacts, media, conversations, and settings/agents (remaining ~29 pages still rely on toast-only mutation error feedback — not covered in this pass).
+- Instagram Comment Automation tab remains behind its `COMMENT_AUTOMATION_ENABLED` flag in `pages/instagram.tsx` — a product decision, not an engineering gap.
 
 ## Completed
 

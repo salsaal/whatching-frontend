@@ -7,6 +7,7 @@ import {
   RefreshCw,
   Send,
   Smartphone,
+  Target,
   Users,
   Gauge
 } from "lucide-react";
@@ -16,13 +17,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
+import Link from "next/link";
+
+import { listCampaigns } from "@/client-api/functions/campaigns";
 import {
   connectMetaEmbeddedSignup,
+  getAiTokenUsage,
   getWhatsAppOutboundReadiness,
   getWhatsAppPhoneNumbers,
+  manualConnectWhatsAppNumber,
   syncMetaIntegration,
   testWhatsAppOutboundReadiness
 } from "@/client-api/functions/organizations";
+import ManualConnectDialog from "@/components/whatsapp/ManualConnectDialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -31,9 +38,11 @@ import {
   DialogHeader,
   DialogTitle
 } from "@/components/ui/dialog";
+import { useCurrentMembership } from "@/hooks/useCurrentMembership";
 import AppLayout from "@/layouts/AppLayout";
 import WhatsAppNumbersPanel from "@/components/whatsapp/WhatsAppNumbersPanel";
 import { buildMetaPaymentMethodUrl } from "@/lib/metaBilling";
+import { cn, formatCompactNumber } from "@/lib/utils";
 import { useOrganizationStore } from "@/stores/organizationStore";
 
 interface EmbeddedSignupSession {
@@ -162,6 +171,7 @@ export default function OverviewPage() {
   const [verificationPhoneNumberRecordId, setVerificationPhoneNumberRecordId] =
     useState("");
   const [lastSignupError, setLastSignupError] = useState("");
+  const [isManualConnectOpen, setIsManualConnectOpen] = useState(false);
   const pendingAuthResponseRef = useRef<FacebookAuthResponse | null>(null);
   const signupSessionRef = useRef<EmbeddedSignupSession | null>(null);
   const isConnectingRef = useRef(false);
@@ -183,6 +193,17 @@ export default function OverviewPage() {
     queryFn: getWhatsAppPhoneNumbers,
     enabled: Boolean(activeOrgId && isMetaReady),
     refetchOnMount: "always"
+  });
+  const { data: campaignsData } = useQuery({
+    queryKey: ["campaigns", "overview-count"],
+    queryFn: () => listCampaigns({ limit: 1 }),
+    enabled: Boolean(activeOrgId)
+  });
+  const { isOwner } = useCurrentMembership();
+  const { data: aiTokenUsageData } = useQuery({
+    queryKey: ["ai-token-usage", activeOrgId],
+    queryFn: getAiTokenUsage,
+    enabled: Boolean(activeOrgId) && isOwner
   });
   const verificationNumber = useMemo(() => {
     const phoneNumbers = phoneNumbersData?.data.phoneNumbers || [];
@@ -355,6 +376,30 @@ export default function OverviewPage() {
       }
     });
 
+  const { mutate: manualConnectMutate, isPending: isManualConnecting } =
+    useMutation({
+      mutationFn: manualConnectWhatsAppNumber,
+      onSuccess: async (data) => {
+        const organization = data.data.organization;
+        upsertOrganization(organization);
+        updateIntegrationFromOrganization(organization);
+        setIsManualConnectOpen(false);
+        toast.success("WhatsApp number connected");
+
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: ["organization", activeOrgId]
+          }),
+          queryClient.invalidateQueries({
+            queryKey: ["integration-status", activeOrgId]
+          }),
+          queryClient.invalidateQueries({
+            queryKey: ["whatsapp-phone-numbers", activeOrgId]
+          })
+        ]);
+      }
+    });
+
   const tryConnectMeta = useCallback(
     (
       session: EmbeddedSignupSession | null,
@@ -399,17 +444,27 @@ export default function OverviewPage() {
     [connectMetaMutate]
   );
 
+  const aiTokensRemaining = aiTokenUsageData?.data.usage?.remaining;
   const stats = [
     {
       label: "Subscribers",
-      value: activeOrganization?.usage?.subscribersCount || 0,
+      value: formatCompactNumber(activeOrganization?.usage?.subscribersCount || 0),
       icon: Users
     },
-    {
-      label: "AI tokens used",
-      value: activeOrganization?.usage?.aiTokensUsed || 0,
-      icon: Bot
-    },
+    isOwner && typeof aiTokensRemaining === "number"
+      ? {
+          label: "AI tokens remaining",
+          value: formatCompactNumber(Math.max(0, aiTokensRemaining)),
+          icon: Bot,
+          href: "/settings/billing#ai-tokens",
+          tooltip: "Included plan tokens plus any top-ups, minus usage this cycle."
+        }
+      : {
+          label: "AI tokens used",
+          value: formatCompactNumber(activeOrganization?.usage?.aiTokensUsed || 0),
+          icon: Bot,
+          href: isOwner ? "/settings/billing#ai-tokens" : undefined
+        },
     {
       label: "Daily message limit",
       value:
@@ -420,9 +475,11 @@ export default function OverviewPage() {
       tooltip: "Business-initiated conversations in a rolling 24-hour period."
     },
     {
-      label: "Templates queued",
-      value: 0,
-      icon: Send
+      label: "Campaigns",
+      value: formatCompactNumber(campaignsData?.data.pagination.total || 0),
+      icon: Target,
+      href: "/campaigns",
+      tooltip: "Distinct Click-to-WhatsApp ad campaigns that have driven contacts."
     }
   ];
   const setupItems = useMemo(
@@ -448,6 +505,7 @@ export default function OverviewPage() {
       isMetaReady
     ]
   );
+  const isSetupComplete = setupItems.every((item) => item.done);
 
   useEffect(() => {
     if (!metaAppId) return;
@@ -597,146 +655,81 @@ export default function OverviewPage() {
         <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
           {stats.map((stat) => {
             const Icon = stat.icon;
-
-            return (
-              <div
-                key={stat.label}
-                className="rounded-lg border bg-white p-5 shadow-xs"
-              >
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p
-                      className={
-                        stat.tooltip
-                          ? "cursor-help text-sm text-muted-foreground underline decoration-dotted"
-                          : "text-sm text-muted-foreground"
-                      }
-                      title={stat.tooltip}
-                    >
-                      {stat.label}
-                    </p>
-                    <p className="mt-2 font-heading text-2xl font-semibold">
-                      {stat.value}
-                    </p>
-                  </div>
-                  <div className="flex size-11 items-center justify-center rounded-sm bg-primary/10">
-                    <Icon className="size-5 text-primary" />
-                  </div>
+            const cardClassName = cn(
+              "rounded-lg border bg-white p-5 shadow-xs",
+              stat.href &&
+                "block transition hover:border-primary/40 hover:shadow-md"
+            );
+            const content = (
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p
+                    className={
+                      stat.tooltip
+                        ? "cursor-help text-sm text-muted-foreground underline decoration-dotted"
+                        : "text-sm text-muted-foreground"
+                    }
+                    title={stat.tooltip}
+                  >
+                    {stat.label}
+                  </p>
+                  <p className="mt-2 font-heading text-2xl font-semibold">
+                    {stat.value}
+                  </p>
                 </div>
+                <div className="flex size-11 items-center justify-center rounded-sm bg-primary/10">
+                  <Icon className="size-5 text-primary" />
+                </div>
+              </div>
+            );
+
+            return stat.href ? (
+              <Link key={stat.label} href={stat.href} className={cardClassName}>
+                {content}
+              </Link>
+            ) : (
+              <div key={stat.label} className={cardClassName}>
+                {content}
               </div>
             );
           })}
         </section>
 
-        <section className="grid gap-5 lg:grid-cols-[1.25fr_0.75fr]">
-          <div className="rounded-lg border bg-white p-6 shadow-xs">
-            <h2 className="font-heading text-xl font-semibold">
-              Setup checklist
-            </h2>
-            <div className="mt-5 space-y-3">
-              {setupItems.map((item) => (
-                <div
-                  key={item.label}
-                  className="flex items-center justify-between rounded-sm border px-4 py-3"
-                >
-                  <span className="text-sm font-medium">{item.label}</span>
-                  <span
-                    className={
-                      item.done ? "text-primary" : "text-muted-foreground"
-                    }
-                  >
-                    {item.done ? "Done" : "Pending"}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-lg border bg-white p-6 shadow-xs">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 className="font-heading text-xl font-semibold">
-                  WhatsApp Business API
-                </h2>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Connect your customer&apos;s Meta Business and WhatsApp number
-                  through Embedded Signup.
+        {isSetupComplete ? (
+          <section className="flex flex-col gap-4 rounded-lg border bg-white p-5 shadow-xs sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex size-11 shrink-0 items-center justify-center rounded-sm bg-primary/10 text-primary">
+                <CheckCircle2 className="size-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="font-medium">
+                  WhatsApp Business API connected
                 </p>
-              </div>
-              <div className="flex size-11 shrink-0 items-center justify-center rounded-sm bg-primary/10">
-                <Smartphone className="size-5 text-primary" />
-              </div>
-            </div>
-
-            <div className="mt-5 space-y-3 rounded-sm bg-muted/50 p-4 text-sm">
-              <div>
-                <p className="text-xs text-muted-foreground">Number</p>
-                <p className="mt-1 font-medium">
+                <p className="truncate text-sm text-muted-foreground">
                   {integration?.displayPhoneNumber ||
-                    activeOrganization?.metaConfig?.displayPhoneNumber ||
-                    "No number connected yet"}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">
-                  Business account
-                </p>
-                <p className="mt-1 font-medium">
+                    activeOrganization?.metaConfig?.displayPhoneNumber}{" "}
+                  ·{" "}
                   {integration?.businessAccountName ||
-                    activeOrganization?.metaConfig?.businessAccountName ||
-                    "Not connected"}
+                    activeOrganization?.metaConfig?.businessAccountName}
                 </p>
               </div>
-              {signupSession && !isMetaReady && (
-                <div className="rounded-sm bg-white p-3 text-xs text-muted-foreground">
-                  Received WABA {signupSession.wabaId} and phone number{" "}
-                  {signupSession.phoneNumberId}. Waiting for authorization to
-                  finish.
-                </div>
-              )}
             </div>
-
-            {lastSignupError && (
-              <div className="mt-4 flex gap-2 rounded-sm bg-destructive/10 p-3 text-sm text-destructive">
-                <AlertCircle className="mt-0.5 size-4 shrink-0" />
-                <span>{lastSignupError}</span>
-              </div>
-            )}
-
-            {!metaAppId || !metaConfigId ? (
-              <div className="mt-4 rounded-sm bg-amber-50 p-3 text-sm text-amber-800">
-                Add `NEXT_PUBLIC_META_APP_ID` and
-                `NEXT_PUBLIC_META_EMBEDDED_SIGNUP_CONFIG_ID` to enable Meta
-                Embedded Signup.
-              </div>
-            ) : null}
-
-            <div className="mt-5 flex flex-col gap-2 sm:flex-row">
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 type="button"
-                className="w-full sm:w-auto"
-                disabled={!metaAppId || !metaConfigId || isConnectingMeta}
-                onClick={
-                  isMetaReady
-                    ? () =>
-                        document
-                          .getElementById("whatsapp-numbers")
-                          ?.scrollIntoView({ behavior: "smooth" })
-                    : startEmbeddedSignup
+                variant="outline"
+                onClick={() =>
+                  document
+                    .getElementById("whatsapp-numbers")
+                    ?.scrollIntoView({ behavior: "smooth" })
                 }
               >
-                {isConnectingMeta ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <Smartphone className="size-4" />
-                )}
-                {isMetaReady ? "Manage numbers" : "Connect Meta"}
+                Manage numbers
               </Button>
               <Button
                 type="button"
                 variant="outline"
-                className="w-full sm:w-auto"
-                disabled={!isMetaReady || isSyncingIntegration}
+                disabled={isSyncingIntegration}
                 onClick={() => syncIntegrationMutate()}
               >
                 {isSyncingIntegration ? (
@@ -746,9 +739,145 @@ export default function OverviewPage() {
                 )}
                 Sync status
               </Button>
+              <button
+                type="button"
+                className="text-sm text-muted-foreground underline-offset-2 hover:text-primary hover:underline"
+                onClick={() => setIsManualConnectOpen(true)}
+              >
+                Connect another number manually
+              </button>
             </div>
-          </div>
-        </section>
+          </section>
+        ) : (
+          <section className="grid gap-5 lg:grid-cols-[1.25fr_0.75fr]">
+            <div className="rounded-lg border bg-white p-6 shadow-xs">
+              <h2 className="font-heading text-xl font-semibold">
+                Setup checklist
+              </h2>
+              <div className="mt-5 space-y-3">
+                {setupItems.map((item) => (
+                  <div
+                    key={item.label}
+                    className="flex items-center justify-between rounded-sm border px-4 py-3"
+                  >
+                    <span className="text-sm font-medium">{item.label}</span>
+                    <span
+                      className={
+                        item.done ? "text-primary" : "text-muted-foreground"
+                      }
+                    >
+                      {item.done ? "Done" : "Pending"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-lg border bg-white p-6 shadow-xs">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="font-heading text-xl font-semibold">
+                    WhatsApp Business API
+                  </h2>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Connect your customer&apos;s Meta Business and WhatsApp
+                    number through Embedded Signup.
+                  </p>
+                </div>
+                <div className="flex size-11 shrink-0 items-center justify-center rounded-sm bg-primary/10">
+                  <Smartphone className="size-5 text-primary" />
+                </div>
+              </div>
+
+              <div className="mt-5 space-y-3 rounded-sm bg-muted/50 p-4 text-sm">
+                <div>
+                  <p className="text-xs text-muted-foreground">Number</p>
+                  <p className="mt-1 font-medium">
+                    {integration?.displayPhoneNumber ||
+                      activeOrganization?.metaConfig?.displayPhoneNumber ||
+                      "No number connected yet"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">
+                    Business account
+                  </p>
+                  <p className="mt-1 font-medium">
+                    {integration?.businessAccountName ||
+                      activeOrganization?.metaConfig?.businessAccountName ||
+                      "Not connected"}
+                  </p>
+                </div>
+                {signupSession && !isMetaReady && (
+                  <div className="rounded-sm bg-white p-3 text-xs text-muted-foreground">
+                    Received WABA {signupSession.wabaId} and phone number{" "}
+                    {signupSession.phoneNumberId}. Waiting for authorization
+                    to finish.
+                  </div>
+                )}
+              </div>
+
+              {lastSignupError && (
+                <div className="mt-4 flex gap-2 rounded-sm bg-destructive/10 p-3 text-sm text-destructive">
+                  <AlertCircle className="mt-0.5 size-4 shrink-0" />
+                  <span>{lastSignupError}</span>
+                </div>
+              )}
+
+              {!metaAppId || !metaConfigId ? (
+                <div className="mt-4 rounded-sm bg-amber-50 p-3 text-sm text-amber-800">
+                  Add `NEXT_PUBLIC_META_APP_ID` and
+                  `NEXT_PUBLIC_META_EMBEDDED_SIGNUP_CONFIG_ID` to enable Meta
+                  Embedded Signup.
+                </div>
+              ) : null}
+
+              <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:items-center">
+                <Button
+                  type="button"
+                  className="w-full sm:w-auto"
+                  disabled={!metaAppId || !metaConfigId || isConnectingMeta}
+                  onClick={
+                    isMetaReady
+                      ? () =>
+                          document
+                            .getElementById("whatsapp-numbers")
+                            ?.scrollIntoView({ behavior: "smooth" })
+                      : startEmbeddedSignup
+                  }
+                >
+                  {isConnectingMeta ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Smartphone className="size-4" />
+                  )}
+                  {isMetaReady ? "Manage numbers" : "Connect Meta"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full sm:w-auto"
+                  disabled={!isMetaReady || isSyncingIntegration}
+                  onClick={() => syncIntegrationMutate()}
+                >
+                  {isSyncingIntegration ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="size-4" />
+                  )}
+                  Sync status
+                </Button>
+                <button
+                  type="button"
+                  className="text-sm text-muted-foreground underline-offset-2 hover:text-primary hover:underline"
+                  onClick={() => setIsManualConnectOpen(true)}
+                >
+                  Connect manually
+                </button>
+              </div>
+            </div>
+          </section>
+        )}
         {isMetaReady && verificationNumber && (
           <section className="rounded-lg border bg-white p-5 shadow-xs">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -890,6 +1019,13 @@ export default function OverviewPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ManualConnectDialog
+        open={isManualConnectOpen}
+        isSaving={isManualConnecting}
+        onOpenChange={setIsManualConnectOpen}
+        onSave={manualConnectMutate}
+      />
     </AppLayout>
   );
 }

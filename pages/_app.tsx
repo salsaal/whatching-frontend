@@ -267,7 +267,6 @@ export default function CustomApp({ Component, pageProps }: AppProps) {
         <meta name="twitter:title" content={meta.title} />
         <meta name="twitter:description" content={meta.description} />
       </Head>
-      {/* <SessionProvider session={pageProps.session}> */}
       <QueryClientProvider client={queryClient}>
         <NuqsAdapter>
           <Toaster richColors position="top-right" />
@@ -276,7 +275,6 @@ export default function CustomApp({ Component, pageProps }: AppProps) {
           </RouteGuard>
         </NuqsAdapter>
       </QueryClientProvider>
-      {/* </SessionProvider> */}
     </main>
   );
 }

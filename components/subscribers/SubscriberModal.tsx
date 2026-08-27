@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 
+import { getSubscriberCampaignTouches } from "@/client-api/functions/campaigns";
+import { updateSubscriberBroadcastEligibility } from "@/client-api/functions/subscribers";
 import {
   Subscriber,
   SubscriberPayload
@@ -23,6 +26,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 
 interface SubscriberModalProps {
   open: boolean;
@@ -56,6 +60,21 @@ export default function SubscriberModal({
     setLastName(subscriber?.lastName || "");
     setSelectedTags(subscriber?.tags || []);
   }, [subscriber, open]);
+
+  const { data: campaignTouchesData } = useQuery({
+    queryKey: ["subscriber-campaign-touches", subscriber?._id],
+    queryFn: () => getSubscriberCampaignTouches(subscriber!._id),
+    enabled: open && Boolean(subscriber?._id)
+  });
+
+  const { mutate: toggleBroadcastEligibility, isPending: isTogglingEligibility } =
+    useMutation({
+      mutationFn: updateSubscriberBroadcastEligibility,
+      meta: { showToast: false, invalidateQueries: ["subscribers"] }
+    });
+
+  const campaignSources = campaignTouchesData?.data.campaignSources || [];
+  const campaignTouches = campaignTouchesData?.data.touches || [];
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -159,6 +178,59 @@ export default function SubscriberModal({
               </DropdownMenu>
             </div>
           </div>
+
+          {subscriber && (
+            <div className="flex items-center justify-between rounded-sm border p-3">
+              <div>
+                <p className="text-sm font-medium">Exclude from broadcasts</p>
+                <p className="text-xs text-muted-foreground">
+                  {subscriber.broadcastEligibility === "retained_only"
+                    ? subscriber.broadcastEligibilityReason
+                      ? `Auto-restricted: ${subscriber.broadcastEligibilityReason}`
+                      : "Currently restricted from broadcasts."
+                    : "Currently eligible for broadcasts."}
+                </p>
+              </div>
+              <Switch
+                checked={subscriber.broadcastEligibilityMode === "excluded"}
+                disabled={isTogglingEligibility}
+                onCheckedChange={(checked) =>
+                  toggleBroadcastEligibility({
+                    subscriberId: subscriber._id,
+                    mode: checked ? "excluded" : "auto"
+                  })
+                }
+              />
+            </div>
+          )}
+
+          {subscriber && (campaignSources.length > 0 || campaignTouches.length > 0) && (
+            <div className="space-y-2 rounded-sm border p-3">
+              <p className="text-sm font-medium">Campaign attribution</p>
+              {campaignSources.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {campaignSources.map((source) => (
+                    <span
+                      key={source.sourceId}
+                      className="inline-flex items-center rounded-sm bg-muted px-2 py-1 text-xs"
+                    >
+                      {source.label} ({source.touchCount})
+                    </span>
+                  ))}
+                </div>
+              )}
+              {campaignTouches.length > 0 && (
+                <ul className="max-h-32 space-y-1 overflow-y-auto text-xs text-muted-foreground">
+                  {campaignTouches.map((touch) => (
+                    <li key={touch._id}>
+                      {new Date(touch.occurredAt).toLocaleDateString("en-IN")}{" "}
+                      — {touch.headline || touch.sourceId}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
 
           <DialogFooter>
             <Button

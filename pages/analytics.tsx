@@ -15,21 +15,26 @@ import {
   YAxis
 } from "recharts";
 import {
-  AlertCircle,
   Bot,
   Contact,
   Inbox,
   MessageCircle,
-  Send
+  Minus,
+  Send,
+  TrendingDown,
+  TrendingUp
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
 import { getDashboardAnalytics } from "@/client-api/functions/analytics";
-import { AnalyticsRange } from "@/client-api/types/analytics.type";
+import { AnalyticsRange, AnalyticsTrend } from "@/client-api/types/analytics.type";
+import CostsTab from "@/components/analytics/CostsTab";
+import { QueryErrorState } from "@/components/shared/QueryErrorState";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useCurrentMembership } from "@/hooks/useCurrentMembership";
 import AppLayout from "@/layouts/AppLayout";
 import { cn } from "@/lib/utils";
 import { useOrganizationStore } from "@/stores/organizationStore";
@@ -49,6 +54,7 @@ export default function AnalyticsPage() {
     (state) => state.activeOrganization
   );
   const [range, setRange] = useState<AnalyticsRange>("30d");
+  const { isOwnerOrAdmin } = useCurrentMembership();
   const timezone = useMemo(
     () => Intl.DateTimeFormat().resolvedOptions().timeZone,
     []
@@ -66,17 +72,20 @@ export default function AnalyticsPage() {
         {
           label: "Total contacts",
           value: dashboard.cards.totalContacts,
-          icon: Contact
+          icon: Contact,
+          trend: dashboard.trends?.totalContacts
         },
         {
           label: "Conversations",
           value: dashboard.cards.conversations,
-          icon: Inbox
+          icon: Inbox,
+          trend: dashboard.trends?.conversations
         },
         {
           label: "Messages sent",
           value: dashboard.cards.messagesSent,
-          icon: Send
+          icon: Send,
+          trend: dashboard.trends?.messagesSent
         },
         {
           label: "Unread",
@@ -165,10 +174,7 @@ export default function AnalyticsPage() {
         </section>
 
         {isError && (
-          <div className="flex items-center gap-2 rounded-sm border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">
-            <AlertCircle className="size-4" />
-            Analytics could not be loaded for this organisation.
-          </div>
+          <QueryErrorState message="Analytics could not be loaded for this organisation." />
         )}
 
         {isLoading || !dashboard ? (
@@ -193,13 +199,28 @@ export default function AnalyticsPage() {
                       </p>
                       <Icon className="size-4 text-primary" />
                     </div>
-                    <p className="mt-4 font-heading text-3xl font-semibold">
-                      {numberFormat.format(item.value)}
-                    </p>
+                    <div className="mt-4 flex items-end justify-between gap-2">
+                      <p className="font-heading text-3xl font-semibold">
+                        {numberFormat.format(item.value)}
+                      </p>
+                      {item.trend && <TrendBadge trend={item.trend} />}
+                    </div>
                   </div>
                 );
               })}
             </section>
+
+            {isOwnerOrAdmin && (
+              <>
+                <div className="flex items-center gap-3 pt-1">
+                  <h2 className="font-heading text-lg font-semibold text-muted-foreground">
+                    Meta spend &amp; template performance
+                  </h2>
+                  <div className="h-px flex-1 bg-border" />
+                </div>
+                <CostsTab range={range} />
+              </>
+            )}
 
             <section className="rounded-lg bg-white p-5 shadow-xs">
               <div className="mb-5 flex items-center justify-between">
@@ -462,5 +483,36 @@ function HealthRow({
       <span className="text-muted-foreground">{label}</span>
       <span className="font-medium capitalize">{value}</span>
     </div>
+  );
+}
+
+function TrendBadge({ trend }: { trend: AnalyticsTrend }) {
+  const isNew = trend.previous === 0 && trend.current > 0;
+  const isFlat = trend.previous === 0 && trend.current === 0;
+  const isUp = trend.changePercent > 0;
+  const isDown = trend.changePercent < 0;
+
+  if (isFlat) return null;
+
+  const Icon = isNew || isUp ? TrendingUp : isDown ? TrendingDown : Minus;
+  const label = isNew
+    ? "New"
+    : `${isUp ? "+" : ""}${trend.changePercent}%`;
+
+  return (
+    <span
+      className={cn(
+        "mb-1 inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
+        isUp || isNew
+          ? "bg-emerald-50 text-emerald-700"
+          : isDown
+            ? "bg-red-50 text-red-700"
+            : "bg-muted text-muted-foreground"
+      )}
+      title="vs. the previous equivalent period"
+    >
+      <Icon className="size-3" />
+      {label}
+    </span>
   );
 }

@@ -5,6 +5,12 @@ export interface AnalyticsPoint {
   [key: string]: string | number;
 }
 
+export interface AnalyticsTrend {
+  current: number;
+  previous: number;
+  changePercent: number;
+}
+
 export interface DashboardAnalytics {
   generatedAt: string;
   range: {
@@ -21,6 +27,11 @@ export interface DashboardAnalytics {
     messagesReceived: number;
     unreadMessages: number;
     unreadConversations: number;
+  };
+  trends?: {
+    totalContacts: AnalyticsTrend;
+    conversations: AnalyticsTrend;
+    messagesSent: AnalyticsTrend;
   };
   messageActivity: AnalyticsPoint[];
   conversationStatus: {
@@ -94,5 +105,69 @@ export interface DashboardAnalyticsResponse {
   status: string;
   data: {
     dashboard: DashboardAnalytics;
+  };
+}
+
+export type ConversationCostGroupBy = "category" | "type" | "country" | "phone";
+
+export interface ConversationCostBreakdownRow {
+  key: string;
+  conversationCount: number;
+  cost: number;
+}
+
+export interface ConversationCostResponse {
+  status: string;
+  data: {
+    range: { start: string; end: string };
+    groupBy: ConversationCostGroupBy;
+    currency: string | null;
+    totals: {
+      conversationCount: number;
+      cost: number;
+    };
+    breakdown: ConversationCostBreakdownRow[];
+  };
+}
+
+export interface TemplateAnalyticsClick {
+  type: string;
+  buttonContent?: string;
+  count: number;
+}
+
+export interface TemplateAnalyticsRow {
+  templateId: string;
+  name: string | null;
+  language: string | null;
+  category: string | null;
+  sent: number;
+  delivered: number;
+  read: number;
+  amountSpent: number;
+  clicks: TemplateAnalyticsClick[];
+}
+
+export interface TemplateAnalyticsResponse {
+  status: string;
+  data: {
+    range: { start: string; end: string };
+    templates: TemplateAnalyticsRow[];
+  };
+}
+
+export interface TemplateInsightsStatusResponse {
+  status: string;
+  data: {
+    wabaId: string;
+    templateInsightsEnabled: boolean;
+  };
+}
+
+export interface TemplateInsightsEnableResponse {
+  status: string;
+  data: {
+    wabaId: string;
+    [key: string]: unknown;
   };
 }

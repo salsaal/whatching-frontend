@@ -104,6 +104,7 @@ import {
   SelectValue
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { QueryErrorState } from "@/components/shared/QueryErrorState";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import AppLayout from "@/layouts/AppLayout";
@@ -1187,7 +1188,8 @@ export default function ConversationsPage() {
   const {
     data: conversationsData,
     isFetching: isConversationsFetching,
-    isLoading: isConversationsLoading
+    isLoading: isConversationsLoading,
+    isError: isConversationsError
   } = useQuery({
     queryKey: ["conversations", activeOrganization?._id, queryParams],
     queryFn: () => getConversations(queryParams),
@@ -2123,7 +2125,11 @@ export default function ConversationsPage() {
             </div>
 
             <div ref={listScrollRef} className="min-h-0 flex-1 overflow-y-auto">
-              {isConversationsLoading ? (
+              {isConversationsError ? (
+                <div className="p-3">
+                  <QueryErrorState message="Conversations could not be loaded for this organisation." />
+                </div>
+              ) : isConversationsLoading ? (
                 <div className="space-y-3 p-3">
                   {Array.from({ length: 6 }).map((_, index) => (
                     <Skeleton key={index} className="h-24 rounded-lg" />

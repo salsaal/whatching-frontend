@@ -2,11 +2,12 @@
 
 import {
   Brain,
+  ChevronRight,
   CreditCard,
   Loader2,
   Settings,
+  SlidersHorizontal,
   Trash2,
-  UserPlus,
   UsersRound
 } from "lucide-react";
 import Link from "next/link";
@@ -27,47 +28,43 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useCurrentMembership } from "@/hooks/useCurrentMembership";
 import AppLayout from "@/layouts/AppLayout";
+import { cn } from "@/lib/utils";
 import { useOrganizationStore } from "@/stores/organizationStore";
 
 const settingsLinks = [
   {
+    href: "/settings/general",
+    title: "General",
+    description: "Workspace name, slug, and timezone.",
+    icon: SlidersHorizontal,
+    ownerOnly: false
+  },
+  {
     href: "/settings/agents",
-    title: "Agents",
-    description:
-      "Invite staff, manage team access, and prepare agents for inbox assignment.",
+    title: "Agents & permissions",
+    description: "Invite staff, manage roles, and assign inbox access.",
     icon: UsersRound,
-    badge: "Team"
+    ownerOnly: false
   },
   {
     href: "/settings/billing",
     title: "Billing",
-    description:
-      "Review billing activity, subscription status, and cancellation controls.",
+    description: "Plan, invoices, AI token top-ups, and payment history.",
     icon: CreditCard,
-    badge: "Plan"
+    ownerOnly: true
   },
   {
     href: "/settings/knowledge",
-    title: "Knowledge Source",
-    description:
-      "Manage text and file sources used by AI fallback and support answers.",
+    title: "Knowledge source",
+    description: "Text and file sources used by the AI fallback assistant.",
     icon: Brain,
-    badge: "AI"
+    ownerOnly: false
   }
-  // {
-  //   href: "/settings/help",
-  //   title: "Help & support",
-  //   description:
-  //     "Create support tickets and track requests for this workspace.",
-  //   icon: LifeBuoy,
-  //   badge: "Support"
-  // }
 ];
 
 export default function SettingsPage() {
@@ -77,6 +74,10 @@ export default function SettingsPage() {
   );
   const clearOrganizations = useOrganizationStore(
     (state) => state.clearOrganizations
+  );
+  const { isOwner } = useCurrentMembership();
+  const visibleSettingsLinks = settingsLinks.filter(
+    (item) => !item.ownerOnly || isOwner
   );
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [confirmation, setConfirmation] = useState("");
@@ -122,78 +123,70 @@ export default function SettingsPage() {
           </div>
         </section>
 
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {settingsLinks.map((item) => {
+        <section className="overflow-hidden rounded-lg bg-white shadow-xs">
+          {visibleSettingsLinks.map((item, index) => {
             const Icon = item.icon;
             return (
-              <Link key={item.href} href={item.href}>
-                <Card className="h-full rounded-lg transition hover:border-primary/40 hover:shadow-md">
-                  <CardContent className="flex h-full gap-4 p-5">
-                    <div className="flex size-12 shrink-0 items-center justify-center rounded-sm bg-primary/10 text-primary">
-                      <Icon className="size-5" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <h2 className="font-heading text-xl font-semibold">
-                          {item.title}
-                        </h2>
-                        <Badge variant="secondary">{item.badge}</Badge>
-                      </div>
-                      <p className="mt-2 text-sm text-muted-foreground">
-                        {item.description}
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "flex items-center gap-4 p-4 transition hover:bg-muted/50",
+                  index > 0 && "border-t"
+                )}
+              >
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-sm bg-primary/10 text-primary">
+                  <Icon className="size-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h2 className="font-medium">{item.title}</h2>
+                  <p className="mt-0.5 text-sm text-muted-foreground">
+                    {item.description}
+                  </p>
+                </div>
+                <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
               </Link>
             );
           })}
         </section>
 
-        <section className="rounded-lg border border-dashed bg-muted/30 p-5">
-          <div className="flex gap-3">
-            <UserPlus className="mt-0.5 size-5 text-primary" />
-            <div>
-              <p className="font-medium">Agent assignment starts here</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Add agents first, then assign conversations to them from the new
-                Conversations inbox.
-              </p>
-            </div>
-          </div>
-        </section>
-
-        <section className="rounded-lg border border-destructive/25 bg-white p-5 shadow-xs">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div className="flex gap-3">
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-sm bg-destructive/10 text-destructive">
-                <Trash2 className="size-5" />
+        {isOwner && (
+          <section className="rounded-lg border border-destructive/25 bg-destructive/5 p-5">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-destructive">
+              Danger zone
+            </p>
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div className="flex gap-3">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-sm bg-destructive/10 text-destructive">
+                  <Trash2 className="size-5" />
+                </div>
+                <div>
+                  <p className="font-medium text-destructive">
+                    Delete organization
+                  </p>
+                  <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+                    This permanently deletes subscribers, conversations,
+                    messages, broadcasts, media, flows, Instagram automation,
+                    team access, and settings. Active subscriptions must be
+                    cancelled first.
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="font-medium text-destructive">
-                  Delete organization
-                </p>
-                <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-                  This permanently deletes subscribers, conversations, messages,
-                  broadcasts, media, flows, Instagram automation, team access,
-                  and settings. Active subscriptions must be cancelled first.
-                </p>
-              </div>
+              <Button
+                type="button"
+                variant="destructive"
+                className="shrink-0 cursor-pointer"
+                tooltip="Permanently delete this organization and its data"
+                onClick={() => {
+                  setConfirmation("");
+                  setDeleteOpen(true);
+                }}
+              >
+                Delete organization
+              </Button>
             </div>
-            <Button
-              type="button"
-              variant="destructive"
-              className="cursor-pointer"
-              tooltip="Permanently delete this organization and its data"
-              onClick={() => {
-                setConfirmation("");
-                setDeleteOpen(true);
-              }}
-            >
-              Delete organization
-            </Button>
-          </div>
-        </section>
+          </section>
+        )}
       </div>
 
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>

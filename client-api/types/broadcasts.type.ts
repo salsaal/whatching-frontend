@@ -15,10 +15,11 @@ export interface BroadcastTemplateSummary {
 }
 
 export interface BroadcastAudience {
-  mode: "all" | "tags" | "specific";
+  mode: "all" | "tags" | "specific" | "campaign";
   tags?: string[];
   tagMatch?: "any" | "all";
   subscriberIds?: string[];
+  campaignSourceIds?: string[];
   optedInOnly?: boolean;
 }
 

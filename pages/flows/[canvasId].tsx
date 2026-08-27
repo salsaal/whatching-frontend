@@ -43,7 +43,7 @@ import {
   X,
   XCircle
 } from "lucide-react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -53,8 +53,10 @@ import {
   getBotStatus,
   publishBotCanvasDraftById,
   saveBotCanvasDraftById,
+  updateBotCanvas,
   validateBotCanvasById
 } from "@/client-api/functions/bot";
+import { InlineEditableTitle } from "@/components/shared/InlineEditableTitle";
 import {
   BotAction,
   BotActionType,
@@ -1708,6 +1710,8 @@ function FlowsBuilder() {
   const hydratedRef = useRef(false);
   const latestDraftRef = useRef<BotCanvasDraftState | null>(null);
 
+  const queryClient = useQueryClient();
+
   const {
     data: draftData,
     isLoading: isDraftLoading,
@@ -1717,6 +1721,21 @@ function FlowsBuilder() {
     queryFn: () => getBotCanvas(canvasId),
     enabled: Boolean(activeOrganization?._id && canvasId),
     refetchOnMount: "always"
+  });
+
+  const { mutate: renameCanvasMutate } = useMutation({
+    mutationFn: updateBotCanvas,
+    meta: { showToast: false },
+    onSuccess: () => {
+      toast.success("Flow renamed.");
+      refetchDraft();
+      queryClient.invalidateQueries({
+        queryKey: ["bot-canvases", activeOrganization?._id]
+      });
+    },
+    onError: () => {
+      toast.error("Could not rename this flow.");
+    }
   });
 
   const {
@@ -2443,7 +2462,13 @@ function FlowsBuilder() {
                 <ArrowLeft className="size-4" />
               </Button>
               <Bot className="size-5 text-primary" />
-              <h1 className="font-heading text-2xl font-semibold">Flows</h1>
+              <InlineEditableTitle
+                value={draftData?.data?.canvas?.name || ""}
+                placeholder="Untitled flow"
+                className="font-heading text-2xl font-semibold"
+                disabled={!draftData?.data?.canvas?.name}
+                onSave={(name) => renameCanvasMutate({ canvasId, name })}
+              />
               <Badge
                 variant={
                   status?.defaultFlowReady && status?.optOutFlowReady

@@ -46,6 +46,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from "@/components/ui/alert-dialog";
+import { QueryErrorState } from "@/components/shared/QueryErrorState";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import AppLayout from "@/layouts/AppLayout";
@@ -145,6 +146,7 @@ export default function TemplatesPage() {
   const {
     data,
     isLoading: isTemplatesLoading,
+    isError: isTemplatesError,
     refetch: refetchTemplates
   } = useQuery({
     queryKey: templatesQueryKey,
@@ -398,6 +400,10 @@ export default function TemplatesPage() {
             </div>
           </div>
         </section>
+
+        {isTemplatesError && (
+          <QueryErrorState message="Templates could not be loaded for this organisation." />
+        )}
 
         <TemplatesTable
           templates={filteredTemplates}

@@ -1,16 +1,16 @@
 "use client";
 
 import {
+  Contact as ContactIcon,
   RefreshCw,
   Download,
   Edit3,
   Instagram,
   Plus,
   Search,
-  Tag,
+  Tag as TagIcon,
   Trash2,
-  Upload,
-  X
+  Upload
 } from "lucide-react";
 import { ElementType, useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
@@ -30,15 +30,20 @@ import {
   getAllSubscribers,
   getTags,
   importSubscribers,
-  updateSubscriber
+  updateSubscriber,
+  updateTag
 } from "@/client-api/functions/subscribers";
 import { WhatsAppPhoneNumber } from "@/client-api/types/organizations.type";
 import {
   Subscriber,
   SubscriberPayload
 } from "@/client-api/types/subscribers.type";
+import { CreateTagPayload, Tag, UpdateTagPayload } from "@/client-api/types/tags.type";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { QueryErrorState } from "@/components/shared/QueryErrorState";
 import ImportSubscribersModal from "@/components/subscribers/ImportSubscribersModal";
 import SubscriberModal from "@/components/subscribers/SubscriberModal";
+import TagFormDialog from "@/components/subscribers/TagFormDialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -51,13 +56,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import AppLayout from "@/layouts/AppLayout";
@@ -80,7 +78,7 @@ const contactChannelOptions: Array<{
   label: string;
   icon: ElementType;
 }> = [
-  { value: "all", label: "All", icon: Tag },
+  { value: "all", label: "All", icon: TagIcon },
   { value: "whatsapp", label: "WhatsApp", icon: FaWhatsapp },
   { value: "instagram", label: "Instagram", icon: Instagram }
 ];
@@ -121,9 +119,8 @@ export default function ContactsPage() {
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectedTagFilters, setSelectedTagFilters] = useState<string[]>([]);
-  const [tagInput, setTagInput] = useState("");
-  const [editingTag, setEditingTag] = useState<string | null>(null);
-  const [deleteTagTarget, setDeleteTagTarget] = useState<string | null>(null);
+  const [editingTag, setEditingTag] = useState<Tag | null>(null);
+  const [deleteTagTarget, setDeleteTagTarget] = useState<Tag | null>(null);
   const [deleteSubscriberTarget, setDeleteSubscriberTarget] =
     useState<Subscriber | null>(null);
   const [isTagsModalOpen, setIsTagsModalOpen] = useState(false);
@@ -136,6 +133,7 @@ export default function ContactsPage() {
   const {
     data,
     isLoading,
+    isError,
     isFetchingNextPage,
     hasNextPage,
     fetchNextPage,
@@ -343,56 +341,23 @@ export default function ContactsPage() {
     });
 
   const { mutate: saveTag, isPending: isSavingTag } = useMutation({
-    mutationFn: async (tag: string) => {
-      const trimmedTag = tag.trim();
-      if (!trimmedTag) return null;
-
-      try {
-        await createTag(trimmedTag);
-      } catch (error) {
-        const latestTags = await getTags();
-        if (!latestTags.data.tags.includes(trimmedTag)) throw error;
-      }
-      if (editingTag && editingTag !== trimmedTag) {
-        await deleteTag(editingTag);
-      }
-
-      return null;
-    },
+    mutationFn: (payload: CreateTagPayload | UpdateTagPayload) =>
+      editingTag
+        ? updateTag({ tagId: editingTag.id, payload })
+        : createTag(payload as CreateTagPayload),
     onSuccess: () => {
-      setTagInput("");
       setEditingTag(null);
       setIsTagsModalOpen(false);
       refetchTags();
       toast.success(editingTag ? "Tag updated." : "Tag added.");
     },
-    onError: async (error: AxiosError<{ message?: string }>) => {
-      const trimmedTag = tagInput.trim();
-      if (trimmedTag) {
-        try {
-          const latestTags = await getTags();
-          if (latestTags.data.tags.includes(trimmedTag)) {
-            setTagInput("");
-            setEditingTag(null);
-            setIsTagsModalOpen(false);
-            refetchTags();
-            toast.success(editingTag ? "Tag updated." : "Tag added.");
-            return;
-          }
-        } catch {
-          // Fall through to the original error message.
-        }
-      }
-      if (trimmedTag) {
-        refetchTags();
-        return;
-      }
+    onError: (error: AxiosError<{ message?: string }>) => {
       toast.error(error.response?.data?.message || "Unable to save tag.");
     }
   });
 
   const { mutate: removeTag, isPending: isDeletingTag } = useMutation({
-    mutationFn: deleteTag,
+    mutationFn: (tag: Tag) => deleteTag(tag.name),
     onSuccess: () => {
       setDeleteTagTarget(null);
       refetchTags();
@@ -444,20 +409,13 @@ export default function ContactsPage() {
     );
   };
 
-  const handleSaveTag = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    saveTag(tagInput);
-  };
-
-  const openEditTag = (tag: string) => {
+  const openEditTag = (tag: Tag) => {
     setEditingTag(tag);
-    setTagInput(tag);
     setIsTagsModalOpen(true);
   };
 
   const resetTagForm = () => {
     setEditingTag(null);
-    setTagInput("");
   };
 
   const toggleTagFilter = (tag: string) => {
@@ -690,20 +648,43 @@ export default function ContactsPage() {
               <Skeleton className="h-10 w-32 shrink-0" />
             ) : availableTags.length ? (
               availableTags.map((item) => (
-                <button
-                  key={item}
-                  type="button"
-                  onClick={() => toggleTagFilter(item)}
+                <div
+                  key={item.id}
                   className={cn(
-                    "inline-flex h-10 shrink-0 cursor-pointer items-center gap-2 rounded-sm px-3 text-sm font-medium text-muted-foreground transition",
+                    "group inline-flex h-10 shrink-0 items-center gap-1 rounded-sm pr-1 text-sm font-medium text-muted-foreground transition",
                     "hover:bg-accent hover:text-accent-foreground",
-                    selectedTagFilters.includes(item) &&
+                    selectedTagFilters.includes(item.name) &&
                       "bg-primary/10 text-primary shadow-xs"
                   )}
                 >
-                  <Tag className="size-4" />
-                  {item}
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => toggleTagFilter(item.name)}
+                    className="inline-flex h-full cursor-pointer items-center gap-2 pl-3"
+                  >
+                    <TagIcon className="size-4" />
+                    {item.name}
+                    {item.mode === "bot_decides" && (
+                      <span className="rounded-sm bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase text-muted-foreground">
+                        Auto
+                      </span>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    className="hidden shrink-0 cursor-pointer rounded-sm p-1 hover:text-primary group-hover:inline-flex"
+                    onClick={() => openEditTag(item)}
+                  >
+                    <Edit3 className="size-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    className="hidden shrink-0 cursor-pointer rounded-sm p-1 hover:text-destructive group-hover:inline-flex"
+                    onClick={() => setDeleteTagTarget(item)}
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                </div>
               ))
             ) : (
               <span className="inline-flex h-10 items-center text-sm text-muted-foreground">
@@ -744,6 +725,10 @@ export default function ContactsPage() {
           </p>
         </section>
 
+        {isError && (
+          <QueryErrorState message="Contacts could not be loaded for this organisation." />
+        )}
+
         <section className="rounded-lg bg-white p-2 shadow-xs">
           {isLoading ? (
             <div className="space-y-3 p-3">
@@ -758,6 +743,12 @@ export default function ContactsPage() {
                 </div>
               ))}
             </div>
+          ) : filteredSubscribers.length === 0 ? (
+            <EmptyState
+              icon={ContactIcon}
+              title="No contacts found"
+              description="Import subscribers or add one manually to start building your audience."
+            />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -892,7 +883,7 @@ export default function ContactsPage() {
         open={isSubscriberModalOpen}
         subscriber={selectedSubscriber}
         isSaving={isSaving}
-        availableTags={availableTags}
+        availableTags={availableTags.map((item) => item.name)}
         onOpenChange={setIsSubscriberModalOpen}
         onSave={saveSubscriber}
       />
@@ -904,71 +895,16 @@ export default function ContactsPage() {
         onImport={importBulk}
       />
 
-      <Dialog
+      <TagFormDialog
         open={isTagsModalOpen}
+        tag={editingTag}
+        isSaving={isSavingTag}
         onOpenChange={(open) => {
           setIsTagsModalOpen(open);
           if (!open) resetTagForm();
         }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{editingTag ? "Edit tag" : "Add tag"}</DialogTitle>
-          </DialogHeader>
-
-          <form onSubmit={handleSaveTag} className="space-y-4">
-            <Input
-              value={tagInput}
-              onChange={(event) => setTagInput(event.target.value)}
-              placeholder="Tag name"
-              className="border-0 bg-muted/70 shadow-none"
-            />
-
-            {availableTags.length > 0 && (
-              <div className="space-y-2 rounded-sm border p-3">
-                <p className="text-sm font-medium">Existing tags</p>
-                <div className="flex flex-wrap gap-2">
-                  {availableTags.map((item) => (
-                    <span
-                      key={item}
-                      className="inline-flex items-center gap-2 rounded-sm bg-muted px-2.5 py-1.5 text-sm"
-                    >
-                      {item}
-                      <button
-                        type="button"
-                        className="text-primary"
-                        onClick={() => openEditTag(item)}
-                      >
-                        <Edit3 className="size-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        className="text-destructive"
-                        onClick={() => setDeleteTagTarget(item)}
-                      >
-                        <X className="size-3.5" />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setIsTagsModalOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" isLoading={isSavingTag}>
-                {editingTag ? "Update tag" : "Create tag"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+        onSave={saveTag}
+      />
 
       <AlertDialog
         open={Boolean(deleteTagTarget)}
@@ -978,7 +914,8 @@ export default function ContactsPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete tag?</AlertDialogTitle>
             <AlertDialogDescription>
-              This removes {deleteTagTarget} from the organisation tag list.
+              This removes &quot;{deleteTagTarget?.name}&quot; from the
+              organisation tag list.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -989,7 +926,7 @@ export default function ContactsPage() {
               onClick={() => {
                 if (!deleteTagTarget) return;
                 removeTag(deleteTagTarget);
-                if (editingTag === deleteTagTarget) resetTagForm();
+                if (editingTag?.id === deleteTagTarget.id) resetTagForm();
               }}
             >
               Delete
