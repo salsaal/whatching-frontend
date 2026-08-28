@@ -61,7 +61,8 @@ const settingsLinks = [
   {
     href: "/settings/help",
     title: "Help & support",
-    description: "Create support tickets and track requests for this workspace.",
+    description:
+      "Create support tickets and track requests for this workspace.",
     icon: LifeBuoy,
     ownerOnly: false
   }

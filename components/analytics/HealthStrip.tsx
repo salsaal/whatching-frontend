@@ -47,7 +47,9 @@ export function HealthStrip({ dashboard }: { dashboard: DashboardAnalytics }) {
           </span>
         </span>
         {quality && (
-          <span className="text-muted-foreground">Quality rating: {quality}</span>
+          <span className="text-muted-foreground">
+            Quality rating: {quality}
+          </span>
         )}
         {messagingLimit && (
           <span className="text-muted-foreground">

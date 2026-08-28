@@ -28,7 +28,9 @@ export function CategorySpendCard({
 
   return (
     <div className="rounded-lg bg-white p-5 shadow-xs">
-      <h2 className="font-heading text-lg font-semibold">Where the spend goes</h2>
+      <h2 className="font-heading text-lg font-semibold">
+        Where the spend goes
+      </h2>
       <p className="mb-4 text-sm text-muted-foreground">
         Meta charges per conversation category.
       </p>
@@ -63,7 +65,9 @@ export function CategorySpendCard({
                   />
                 </div>
                 <div className="mt-1.5 flex items-center justify-between text-xs text-muted-foreground">
-                  <span>{numberFormat.format(row.conversationCount)} convos</span>
+                  <span>
+                    {numberFormat.format(row.conversationCount)} convos
+                  </span>
                   <span>{formatCost(costPerConvo)} each</span>
                 </div>
               </div>

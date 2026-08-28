@@ -4,7 +4,10 @@ import { status } from "@/lib/analyticsColors";
 
 const numberFormat = new Intl.NumberFormat("en-IN");
 
-const qualityLabel: Record<string, { label: string; variant: "default" | "secondary" | "outline" }> = {
+const qualityLabel: Record<
+  string,
+  { label: string; variant: "default" | "secondary" | "outline" }
+> = {
   GREEN: { label: "High", variant: "default" },
   YELLOW: { label: "Medium", variant: "secondary" },
   RED: { label: "Low", variant: "outline" }
@@ -22,14 +25,17 @@ export function TemplatePerformanceTable({
   const topSixShare =
     totalSent > 0
       ? Math.round(
-          (sorted.slice(0, 6).reduce((sum, t) => sum + t.sent, 0) / totalSent) * 100
+          (sorted.slice(0, 6).reduce((sum, t) => sum + t.sent, 0) / totalSent) *
+            100
         )
       : 0;
 
   return (
     <div className="rounded-lg bg-white p-5 shadow-xs">
       <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="font-heading text-lg font-semibold">Template performance</h2>
+        <h2 className="font-heading text-lg font-semibold">
+          Template performance
+        </h2>
         {sorted.length > 0 && (
           <p className="text-sm text-muted-foreground">
             {sorted.length >= 6
@@ -66,9 +72,13 @@ export function TemplatePerformanceTable({
                   0
                 );
                 const deliveredRate =
-                  template.sent > 0 ? (template.delivered / template.sent) * 100 : 0;
+                  template.sent > 0
+                    ? (template.delivered / template.sent) * 100
+                    : 0;
                 const readRate =
-                  template.delivered > 0 ? (template.read / template.delivered) * 100 : 0;
+                  template.delivered > 0
+                    ? (template.read / template.delivered) * 100
+                    : 0;
                 const ctr =
                   template.clicks.length > 0 && template.delivered > 0
                     ? (totalClicks / template.delivered) * 100
@@ -103,7 +113,9 @@ export function TemplatePerformanceTable({
                             }}
                           />
                         </div>
-                        <span className="tabular-nums">{readRate.toFixed(1)}%</span>
+                        <span className="tabular-nums">
+                          {readRate.toFixed(1)}%
+                        </span>
                       </div>
                     </td>
                     <td className="py-3 pr-3 text-right tabular-nums">

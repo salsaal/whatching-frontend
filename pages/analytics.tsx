@@ -65,7 +65,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCurrentMembership } from "@/hooks/useCurrentMembership";
 import AppLayout from "@/layouts/AppLayout";
-import { categorical, chartInk, sequentialGreen, status } from "@/lib/analyticsColors";
+import {
+  categorical,
+  chartInk,
+  sequentialGreen,
+  status
+} from "@/lib/analyticsColors";
 import { downloadCsv } from "@/lib/exportCsv";
 import { cn } from "@/lib/utils";
 import { useOrganizationStore } from "@/stores/organizationStore";
@@ -127,7 +132,8 @@ export default function AnalyticsPage() {
   const dashboard = data?.data.dashboard;
   const costs = costsData?.data;
   const templates = templatesData?.data.templates || [];
-  const templateInsightsEnabled = insightsStatusData?.data.templateInsightsEnabled;
+  const templateInsightsEnabled =
+    insightsStatusData?.data.templateInsightsEnabled;
   const currency = costs?.currency || "USD";
 
   const formatCost = (value: number) =>
@@ -141,7 +147,15 @@ export default function AnalyticsPage() {
     if (!templates.length) return;
     downloadCsv(
       `template-performance-${range}.csv`,
-      ["Template", "Category", "Sent", "Delivered", "Read", "Amount spent", "Quality"],
+      [
+        "Template",
+        "Category",
+        "Sent",
+        "Delivered",
+        "Read",
+        "Amount spent",
+        "Quality"
+      ],
       templates.map((template) => [
         template.name || template.templateId,
         template.category || "",
@@ -242,7 +256,9 @@ export default function AnalyticsPage() {
           label: "Total contacts",
           value: numberFormat.format(dashboard.cards.totalContacts),
           trend: dashboard.trends?.totalContacts,
-          sparkline: dashboard.contactGrowth.map((row) => row.totalContacts as number)
+          sparkline: dashboard.contactGrowth.map(
+            (row) => row.totalContacts as number
+          )
         },
         {
           label: "Billable conversations",
@@ -254,13 +270,17 @@ export default function AnalyticsPage() {
           label: "Messages sent",
           value: numberFormat.format(dashboard.cards.messagesSent),
           trend: dashboard.trends?.messagesSent,
-          sparkline: dashboard.messageActivity.map((row) => row.outbound as number)
+          sparkline: dashboard.messageActivity.map(
+            (row) => row.outbound as number
+          )
         },
         {
           label: "Delivery rate",
           value: `${dashboard.cards.deliveryRate ?? 0}%`,
           trend: dashboard.trends?.deliveryRate,
-          sparkline: (dashboard.deliveryRateSeries || []).map((row) => row.rate ?? 0)
+          sparkline: (dashboard.deliveryRateSeries || []).map(
+            (row) => row.rate ?? 0
+          )
         },
         {
           label: "Unread in inbox",
@@ -340,10 +360,12 @@ export default function AnalyticsPage() {
                       </AlertDialogTitle>
                       <AlertDialogDescription>
                         This is a{" "}
-                        <strong>permanent, one-time opt-in on Meta&apos;s side</strong>{" "}
-                        — there is no API to disable it once enabled. Meta
-                        will collect and anonymize chat data for link
-                        tracking on this WhatsApp Business Account.
+                        <strong>
+                          permanent, one-time opt-in on Meta&apos;s side
+                        </strong>{" "}
+                        — there is no API to disable it once enabled. Meta will
+                        collect and anonymize chat data for link tracking on
+                        this WhatsApp Business Account.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <label className="flex items-start gap-2 rounded-sm bg-muted/60 p-3 text-sm">
@@ -390,7 +412,12 @@ export default function AnalyticsPage() {
                 </div>
                 <MessageActivityChart dashboard={dashboard} />
               </section>
-              {costs && <CategorySpendCard breakdown={costs.breakdown} formatCost={formatCost} />}
+              {costs && (
+                <CategorySpendCard
+                  breakdown={costs.breakdown}
+                  formatCost={formatCost}
+                />
+              )}
             </div>
 
             {isLoadingTemplates ? (

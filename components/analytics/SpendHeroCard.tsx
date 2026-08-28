@@ -64,7 +64,11 @@ export function SpendHeroCard({
   costs: ConversationCostResponse["data"];
   formatCost: (value: number) => string;
 }) {
-  const totals = costs.totals || { conversationCount: 0, cost: 0, costPerConversation: 0 };
+  const totals = costs.totals || {
+    conversationCount: 0,
+    cost: 0,
+    costPerConversation: 0
+  };
   const previousPeriod = costs.previousPeriod || {
     conversationCount: 0,
     cost: 0,
@@ -76,7 +80,9 @@ export function SpendHeroCard({
 
   const spendChangePercent =
     previousPeriod.cost > 0
-      ? Math.round(((totals.cost - previousPeriod.cost) / previousPeriod.cost) * 1000) / 10
+      ? Math.round(
+          ((totals.cost - previousPeriod.cost) / previousPeriod.cost) * 1000
+        ) / 10
       : 0;
   const costPerConvoChangePercent =
     previousPeriod.costPerConversation > 0
@@ -135,7 +141,9 @@ export function SpendHeroCard({
             <p className="font-heading text-4xl font-semibold">
               {formatCost(totals.cost)}
             </p>
-            {previousPeriod.cost > 0 && <DeltaBadge percent={spendChangePercent} />}
+            {previousPeriod.cost > 0 && (
+              <DeltaBadge percent={spendChangePercent} />
+            )}
           </div>
           {insight && (
             <p className="mt-2 text-sm text-muted-foreground">
@@ -182,9 +190,7 @@ export function SpendHeroCard({
             />
             <Tooltip
               content={
-                <ChartTooltip
-                  formatValue={(value) => formatCost(value)}
-                />
+                <ChartTooltip formatValue={(value) => formatCost(value)} />
               }
               cursor={{ fill: "rgba(0,0,0,0.03)" }}
             />
