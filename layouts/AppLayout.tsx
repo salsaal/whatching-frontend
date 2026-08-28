@@ -1,13 +1,13 @@
 import {
   AlertCircle,
   BarChart3,
+  Bot,
   Megaphone,
   Contact,
   FileText,
   Images,
   Instagram,
   LayoutDashboard,
-  LifeBuoy,
   Loader2,
   LogOut,
   Menu,
@@ -64,12 +64,12 @@ const navigation = [
   { label: "Templates", href: "/templates", icon: FileText },
   { label: "Broadcasts", href: "/broadcasts", icon: Megaphone },
   { label: "Flows", href: "/flows", icon: Workflow },
+  { label: "AI Assistant", href: "/settings/ai", icon: Bot },
   { label: "Instagram", href: "/instagram", icon: Instagram },
   { label: "Conversations", href: "/conversations", icon: MessageCircle },
   { label: "Contacts", href: "/contacts", icon: Contact },
   { label: "Campaigns", href: "/campaigns", icon: Target },
   { label: "Media", href: "/media", icon: Images },
-  { label: "Help", href: "/settings/help", icon: LifeBuoy },
   { label: "Settings", href: "/settings", icon: Settings }
 ];
 

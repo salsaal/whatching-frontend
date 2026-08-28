@@ -458,7 +458,7 @@ export default function OverviewPage() {
           label: "AI tokens remaining",
           value: formatCompactNumber(Math.max(0, aiTokensRemaining)),
           icon: Bot,
-          href: "/settings/billing#ai-tokens",
+          href: "/settings/ai#usage",
           tooltip:
             "Included plan tokens plus any top-ups, minus usage this cycle."
         }
@@ -468,7 +468,7 @@ export default function OverviewPage() {
             activeOrganization?.usage?.aiTokensUsed || 0
           ),
           icon: Bot,
-          href: isOwner ? "/settings/billing#ai-tokens" : undefined
+          href: isOwner ? "/settings/ai#usage" : undefined
         },
     {
       label: "Daily message limit",

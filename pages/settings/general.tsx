@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue
 } from "@/components/ui/select";
+import { SettingsBackLink } from "@/components/settings/SettingsBackLink";
 import AppLayout from "@/layouts/AppLayout";
 import { useOrganizationStore } from "@/stores/organizationStore";
 
@@ -68,6 +69,7 @@ export default function GeneralSettingsPage() {
   return (
     <AppLayout>
       <div className="mx-auto max-w-3xl space-y-6">
+        <SettingsBackLink />
         <section className="rounded-lg bg-white p-5 shadow-xs">
           <div className="flex items-center gap-3">
             <div className="flex size-11 items-center justify-center rounded-sm bg-primary/10 text-primary">

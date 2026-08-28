@@ -27,6 +27,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { SettingsBackLink } from "@/components/settings/SettingsBackLink";
 import AppLayout from "@/layouts/AppLayout";
 import { useOrganizationStore } from "@/stores/organizationStore";
 
@@ -148,6 +149,7 @@ export default function HelpPage() {
   return (
     <AppLayout>
       <div className="mx-auto max-w-6xl space-y-6">
+        <SettingsBackLink />
         <section className="flex items-center gap-3">
           <div className="flex size-11 items-center justify-center rounded-sm bg-primary/10 text-primary">
             <LifeBuoy className="size-5" />

@@ -11,7 +11,6 @@ import {
 import { AxiosError } from "axios";
 import {
   Bot,
-  BookOpen,
   Edit3,
   Loader2,
   Plus,
@@ -25,11 +24,9 @@ import {
   archiveBotCanvas,
   createBotCanvas,
   getBotCanvas,
-  getBotSettings,
   listBotCanvases,
   updateBotCanvas,
-  updateBotCanvasStatus,
-  updateBotSettings
+  updateBotCanvasStatus
 } from "@/client-api/functions/bot";
 import { BotCanvasRecord } from "@/client-api/types/bot.type";
 import { updateWhatsAppPhoneNumber } from "@/client-api/functions/organizations";
@@ -99,12 +96,6 @@ export default function FlowsPage() {
     enabled: Boolean(activeOrganization?._id),
     refetchOnMount: "always"
   });
-  const { data: settingsData, isLoading: isSettingsLoading } = useQuery({
-    queryKey: ["bot-settings", activeOrganization?._id],
-    queryFn: getBotSettings,
-    enabled: Boolean(activeOrganization?._id)
-  });
-
   const canvases = [...(data?.data?.canvases || [])].sort((a, b) => {
     const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
     const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
@@ -184,17 +175,6 @@ export default function FlowsPage() {
     },
     onError: handleError
   });
-  const { mutate: updateSettingsMutate, isPending: isUpdatingSettings } =
-    useMutation({
-      mutationFn: updateBotSettings,
-      onSuccess: async () => {
-        toast.success("Automation settings updated.");
-        await queryClient.invalidateQueries({
-          queryKey: ["bot-settings", activeOrganization?._id]
-        });
-      },
-      onError: handleError
-    });
 
   return (
     <AppLayout>
@@ -247,55 +227,28 @@ export default function FlowsPage() {
           </div>
         </section>
 
-        <section className="grid gap-3 md:grid-cols-2">
-          <div className="flex items-center justify-between rounded-lg bg-white p-4 shadow-xs">
+        <section className="flex items-center justify-between rounded-lg bg-white p-4 shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="flex size-9 items-center justify-center rounded-sm bg-primary/10 text-primary">
+              <Bot className="size-4" />
+            </div>
             <div>
-              <p className="text-md font-semibold">Active bot</p>
+              <p className="font-medium">Bot &amp; AI fallback</p>
               <p className="text-xs text-muted-foreground">
-                Global switch for automation across every WhatsApp number.
+                Turn automation on/off, manage AI fallback, and the knowledge
+                base it answers from.
               </p>
             </div>
-            <Switch
-              checked={Boolean(settingsData?.data?.settings.isBotEnabled)}
-              disabled={isSettingsLoading || isUpdatingSettings}
-              title="Turn the active WhatsApp flow on or off"
-              onCheckedChange={(checked) =>
-                updateSettingsMutate({ isBotEnabled: checked })
-              }
-            />
           </div>
-          <div className="flex flex-col gap-3 rounded-lg bg-white p-4 shadow-xs sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0 w-full">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-md font-semibold">AI response</p>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-8 shrink-0 cursor-pointer"
-                  onClick={() => router.push("/settings/knowledge")}
-                >
-                  <BookOpen className="size-3.5" />
-                  Add Knowledge base
-                </Button>
-              </div>
-              <div className="flex items-center justify-between mt-4">
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Let AI answer when no route matches. Add knowledge for better
-                  replies.
-                </p>
-                <Switch
-                  className="shrink-0"
-                  checked={Boolean(settingsData?.data?.settings.isAiEnabled)}
-                  disabled={isSettingsLoading || isUpdatingSettings}
-                  title="Allow AI fallback when no flow route matches"
-                  onCheckedChange={(checked) =>
-                    updateSettingsMutate({ isAiEnabled: checked })
-                  }
-                />
-              </div>
-            </div>
-          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="shrink-0 cursor-pointer"
+            onClick={() => router.push("/settings/ai")}
+          >
+            Manage in Settings
+          </Button>
         </section>
 
         {isError && (

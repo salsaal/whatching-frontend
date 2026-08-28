@@ -55,6 +55,7 @@ import PhoneNumberInput, {
   buildInternationalPhoneNumber
 } from "@/components/ui/phone-number-input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SettingsBackLink } from "@/components/settings/SettingsBackLink";
 import AppLayout from "@/layouts/AppLayout";
 import { useOrganizationStore } from "@/stores/organizationStore";
 
@@ -451,6 +452,7 @@ export default function AgentsSettingsPage() {
   return (
     <AppLayout>
       <div className="mx-auto max-w-7xl space-y-6">
+        <SettingsBackLink />
         <section className="flex flex-col gap-4 rounded-lg bg-white p-5 shadow-xs lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-3">
             <div className="flex size-11 items-center justify-center rounded-sm bg-primary/10 text-primary">

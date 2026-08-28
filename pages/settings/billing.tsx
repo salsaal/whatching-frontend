@@ -4,7 +4,6 @@ import {
   AlertTriangle,
   Building2,
   CalendarClock,
-  Coins,
   Download,
   ReceiptText,
   RefreshCw,
@@ -18,13 +17,10 @@ import { toast } from "sonner";
 import {
   cancelSubscription,
   downloadInvoicePdf,
-  getAiTokenPackages,
-  getAiTokenUsage,
   getBillingHistory,
   listInvoices,
   retryInvoice,
-  syncBillingSubscription,
-  topupAiTokens
+  syncBillingSubscription
 } from "@/client-api/functions/organizations";
 import { Invoice } from "@/client-api/types/organizations.type";
 import BillingProfileForm from "@/components/billing/BillingProfileForm";
@@ -42,6 +38,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SettingsBackLink } from "@/components/settings/SettingsBackLink";
 import AppLayout from "@/layouts/AppLayout";
 import {
   calculatePlanTotals,
@@ -51,7 +48,6 @@ import {
   getPlanByTier,
   isSubscriptionCanceledWithAccess
 } from "@/lib/billing";
-import { formatCompactNumber } from "@/lib/utils";
 import { useOrganizationStore } from "@/stores/organizationStore";
 
 function BillingSkeleton() {
@@ -91,26 +87,6 @@ export default function BillingSettingsPage() {
     enabled: Boolean(activeOrganization?._id),
     refetchOnMount: "always"
   });
-
-  const canUseAiTokenTopup =
-    Boolean(activeOrganization) &&
-    activeOrganization?.planTier !== "none" &&
-    activeOrganization?.subscriptionStatus !== "trialing";
-
-  const { data: aiTokenPackagesData } = useQuery({
-    queryKey: ["ai-token-packages"],
-    queryFn: getAiTokenPackages,
-    enabled: canUseAiTokenTopup
-  });
-
-  const { data: aiTokenUsageData, isLoading: isLoadingAiTokenUsage } = useQuery(
-    {
-      queryKey: ["ai-token-usage", activeOrganization?._id],
-      queryFn: getAiTokenUsage,
-      enabled: canUseAiTokenTopup,
-      refetchOnMount: "always"
-    }
-  );
 
   const { mutate: cancelSubscriptionMutate, isPending: isCancelling } =
     useMutation({
@@ -162,20 +138,8 @@ export default function BillingSettingsPage() {
       }
     });
 
-  const { mutate: topupAiTokensMutate, isPending: isToppingUpAiTokens } =
-    useMutation({
-      mutationFn: topupAiTokens,
-      meta: { showToast: false },
-      onSuccess: (res) => {
-        window.open(res.data.paymentUrl, "_blank", "noopener,noreferrer");
-      }
-    });
-
   const transactions = data?.data.transactions || [];
   const invoices = invoicesData?.data.invoices || [];
-  const aiTokenPackages = aiTokenPackagesData?.data.packages || [];
-  const aiTokenUsage = aiTokenUsageData?.data.usage;
-  const aiTokenIncludedLimit = aiTokenUsageData?.data.includedLimit || 0;
   const plan = getPlanByTier(activeOrganization?.planTier);
   const monthlyPrice =
     typeof plan?.monthlyPrice === "number" ? plan.monthlyPrice : null;
@@ -199,6 +163,7 @@ export default function BillingSettingsPage() {
   return (
     <AppLayout>
       <div className="mx-auto max-w-7xl space-y-6">
+        <SettingsBackLink />
         <section className="flex flex-col gap-4 rounded-lg bg-white p-5 shadow-xs lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-sm font-medium text-primary">Settings</p>
@@ -451,100 +416,6 @@ export default function BillingSettingsPage() {
             <div className="rounded-sm bg-muted/50 p-6 text-center text-sm text-muted-foreground">
               No billing transactions yet.
             </div>
-          )}
-        </section>
-
-        <section id="ai-tokens" className="rounded-lg bg-white p-5 shadow-xs">
-          <div className="mb-4 flex items-center gap-2">
-            <Coins className="size-5 text-primary" />
-            <h2 className="font-heading text-xl font-semibold">AI tokens</h2>
-          </div>
-
-          {!canUseAiTokenTopup ? (
-            <div className="rounded-sm bg-muted/50 p-6 text-center text-sm text-muted-foreground">
-              AI token top-ups are available on active Basic or Pro plans.
-            </div>
-          ) : isLoadingAiTokenUsage ? (
-            <BillingSkeleton />
-          ) : (
-            <>
-              {aiTokenUsage && (
-                <div className="mb-4 grid gap-4 sm:grid-cols-3">
-                  <div>
-                    <p className="text-sm text-muted-foreground">
-                      Included plan tokens
-                    </p>
-                    <p className="mt-1 font-heading text-lg font-semibold">
-                      {formatCompactNumber(
-                        Math.max(0, aiTokenUsage.includedRemaining)
-                      )}{" "}
-                      / {formatCompactNumber(aiTokenIncludedLimit)} remaining
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">
-                      Top-up tokens remaining
-                    </p>
-                    <p className="mt-1 font-heading text-lg font-semibold">
-                      {formatCompactNumber(
-                        Math.max(0, aiTokenUsage.topUpRemaining)
-                      )}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">
-                      Used this cycle
-                    </p>
-                    <p className="mt-1 font-heading text-lg font-semibold">
-                      {formatCompactNumber(aiTokenUsage.used)}
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {!activeOrganization?.billingProfile ? (
-                <p className="mb-4 rounded-sm bg-amber-50 p-3 text-sm text-amber-800">
-                  Complete your billing profile above before purchasing AI
-                  tokens so we can issue a GST invoice.
-                </p>
-              ) : null}
-
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                {aiTokenPackages.map((pkg) => (
-                  <div
-                    key={pkg.packageId}
-                    className="flex flex-col justify-between rounded-sm border p-4"
-                  >
-                    <div>
-                      <p className="font-heading text-lg font-semibold">
-                        {pkg.label}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {formatCompactNumber(pkg.tokens)} tokens
-                      </p>
-                      <p className="mt-2 text-lg font-semibold">
-                        {formatCurrency(pkg.baseAmountPaise / 100)}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        + 18% GST ({formatCurrency(pkg.amountPaise / 100)}{" "}
-                        total)
-                      </p>
-                    </div>
-                    <Button
-                      className="mt-4"
-                      size="sm"
-                      disabled={
-                        !activeOrganization?.billingProfile ||
-                        isToppingUpAiTokens
-                      }
-                      onClick={() => topupAiTokensMutate(pkg.packageId)}
-                    >
-                      Top up
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </>
           )}
         </section>
 

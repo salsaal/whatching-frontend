@@ -1,9 +1,9 @@
 "use client";
 
 import {
-  Brain,
   ChevronRight,
   CreditCard,
+  LifeBuoy,
   Loader2,
   Settings,
   SlidersHorizontal,
@@ -54,15 +54,15 @@ const settingsLinks = [
   {
     href: "/settings/billing",
     title: "Billing",
-    description: "Plan, invoices, AI token top-ups, and payment history.",
+    description: "Plan, invoices, and payment history.",
     icon: CreditCard,
     ownerOnly: true
   },
   {
-    href: "/settings/knowledge",
-    title: "Knowledge source",
-    description: "Text and file sources used by the AI fallback assistant.",
-    icon: Brain,
+    href: "/settings/help",
+    title: "Help & support",
+    description: "Create support tickets and track requests for this workspace.",
+    icon: LifeBuoy,
     ownerOnly: false
   }
 ];

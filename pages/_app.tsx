@@ -164,10 +164,10 @@ const pageMeta: Record<string, PageMeta> = {
     description:
       "Create support tickets and attach screenshots for help from the Whatching team."
   },
-  "/settings/knowledge": {
-    title: "Knowledge Base | Whatching",
+  "/settings/ai": {
+    title: "AI Assistant | Whatching",
     description:
-      "Manage text, FAQ, and file knowledge sources used by the Whatching AI agent."
+      "Manage bot status, AI fallback, token usage, top-ups, and the knowledge base for the Whatching AI agent."
   },
   "/templates": {
     title: "Templates | Whatching",

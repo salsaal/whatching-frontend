@@ -27,13 +27,16 @@ export interface DashboardAnalytics {
     messagesReceived: number;
     unreadMessages: number;
     unreadConversations: number;
+    deliveryRate: number;
   };
   trends?: {
     totalContacts: AnalyticsTrend;
     conversations: AnalyticsTrend;
     messagesSent: AnalyticsTrend;
+    deliveryRate: AnalyticsTrend;
   };
   messageActivity: AnalyticsPoint[];
+  deliveryRateSeries: Array<{ date: string; rate: number | null }>;
   conversationStatus: {
     open: number;
     pending: number;
@@ -85,6 +88,18 @@ export interface DashboardAnalytics {
     whatsapp: {
       status: string;
       activePhoneNumbers: number;
+      messagingLimit?: {
+        tier: string | null;
+        limit: number | null;
+        isUnlimited: boolean;
+      };
+      phoneNumbers?: Array<{
+        id: string;
+        displayPhoneNumber: string | null;
+        isDefault: boolean;
+        qualityRating: string | null;
+        lastHealthCheckAt: string | null;
+      }>;
     };
     instagram: {
       status: string;
@@ -116,6 +131,12 @@ export interface ConversationCostBreakdownRow {
   cost: number;
 }
 
+export interface ConversationCostDailyPoint {
+  date: string;
+  conversationCount: number;
+  cost: number;
+}
+
 export interface ConversationCostResponse {
   status: string;
   data: {
@@ -125,7 +146,16 @@ export interface ConversationCostResponse {
     totals: {
       conversationCount: number;
       cost: number;
+      costPerConversation: number;
     };
+    previousPeriod: {
+      conversationCount: number;
+      cost: number;
+      costPerConversation: number;
+    };
+    billable: { conversationCount: number; cost: number };
+    freeTier: { conversationCount: number; cost: number };
+    daily: ConversationCostDailyPoint[];
     breakdown: ConversationCostBreakdownRow[];
   };
 }
@@ -141,6 +171,7 @@ export interface TemplateAnalyticsRow {
   name: string | null;
   language: string | null;
   category: string | null;
+  qualityScore: string | null;
   sent: number;
   delivered: number;
   read: number;
