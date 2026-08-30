@@ -218,14 +218,30 @@ export const getDaysUntil = (date?: string | null) => {
   );
 };
 
+// trialConsumedAt lives on the organisation document, so a brand-new org
+// always starts with it unset -- it does NOT mean the trial is actually
+// available. The backend also dedupes a trial by owner phone number and
+// email across every organisation that owner has ever created (see
+// findPriorOwnerTrial), so a second org can still be rejected with a 409
+// even though this local check passes. Callers that offer a trial action
+// should always pair it with a direct-subscribe fallback (see
+// buildPlanAction's { kind: "trial" } case) rather than assuming success.
+export const canStartFreeTrial = (
+  organization: Organization | null | undefined
+) => {
+  const currentPlan = organization?.planTier || "none";
+  return currentPlan === "none" && !organization?.trialConsumedAt;
+};
+
 export const buildPlanAction = (
   plan: PlanDefinition,
-  organization: Organization | null | undefined
+  organization: Organization | null | undefined,
+  options?: { preferDirectSubscribe?: boolean }
 ): PlanAction => {
   const currentPlan = organization?.planTier || "none";
   const isNoPlan = currentPlan === "none";
   const isTrialing = organization?.subscriptionStatus === "trialing";
-  const canStartTrial = isNoPlan && !organization?.trialConsumedAt;
+  const canStartTrial = canStartFreeTrial(organization);
 
   if (plan.id === "enterprise") {
     return {
@@ -238,13 +254,13 @@ export const buildPlanAction = (
     };
   }
 
-  if (canStartTrial) {
+  if (canStartTrial && !options?.preferDirectSubscribe) {
     return {
       kind: "trial",
       tier: plan.id,
       planName: plan.name,
       label: "Start free trial",
-      description: `Start a 7-day ${plan.name} trial for this organisation. No payment method is required.`
+      description: `Start a 7-day ${plan.name} trial for this organisation. No payment method is required. Only your first trial across all organisations is free -- if you've already used one, subscribe directly instead.`
     };
   }
 

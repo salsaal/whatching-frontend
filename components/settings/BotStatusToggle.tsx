@@ -1,3 +1,4 @@
+import { Bot, Sparkles } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { getBotSettings, updateBotSettings } from "@/client-api/functions/bot";
@@ -21,10 +22,13 @@ export function BotStatusToggle() {
     });
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      <div className="flex items-center justify-between rounded-lg border p-4">
-        <div>
-          <p className="font-medium">Active bot</p>
+    <div className="grid gap-2">
+      <div className="flex items-center gap-3 rounded-lg border p-3">
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-sm bg-primary/10 text-primary">
+          <Bot className="size-4" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium">Active bot</p>
           <p className="text-xs text-muted-foreground">
             Global switch for automation across every WhatsApp number.
           </p>
@@ -38,9 +42,12 @@ export function BotStatusToggle() {
           }
         />
       </div>
-      <div className="flex items-center justify-between rounded-lg border p-4">
-        <div>
-          <p className="font-medium">AI fallback</p>
+      <div className="flex items-center gap-3 rounded-lg border p-3">
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-sm bg-primary/10 text-primary">
+          <Sparkles className="size-4" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium">AI fallback</p>
           <p className="text-xs text-muted-foreground">
             Let AI answer when no flow route matches.
           </p>

@@ -44,14 +44,18 @@ export interface Organization {
   razorpaySubscriptionId?: string;
   scheduledPlanTier?: "basic" | "pro" | null;
   scheduledPlanChangeAt?: string | null;
+  pendingRazorpaySubscriptionId?: string | null;
   pendingRazorpaySubscriptionTier?: "basic" | "pro" | null;
   pendingRazorpaySubscriptionStatus?: string | null;
   pendingRazorpaySubscriptionStartsAt?: string | null;
   pendingRazorpaySubscriptionCheckoutUrl?: string | null;
+  lastPlanChangeFailureReason?: string | null;
+  lastPlanChangeFailureAt?: string | null;
   trialPlanTier?: "basic" | "pro" | null;
   trialStartedAt?: string;
   trialEndsAt?: string;
   trialConsumedAt?: string;
+  trialStartedBy?: string | null;
   billingProfile?: OrganizationBillingProfile | null;
   metaConfig: OrganizationMetaConfig;
   usage: OrganizationUsage;

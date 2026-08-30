@@ -24,6 +24,16 @@ import {
   updateBillingProfile
 } from "@/client-api/functions/organizations";
 import type { BillingProfile } from "@/client-api/types/organizations.type";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,7 +45,11 @@ import {
   SelectValue
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { OwnerOnlyNotice } from "@/components/billing/OwnerOnlyNotice";
+import { useCurrentMembership } from "@/hooks/useCurrentMembership";
+import { useHasUsedFreeTrial } from "@/hooks/useHasUsedFreeTrial";
 import AppLayout from "@/layouts/AppLayout";
+import { loadRazorpayCheckout } from "@/lib/razorpayCheckout";
 import {
   buildPlanAction,
   calculatePlanTotals,
@@ -64,42 +78,7 @@ type PaidCheckoutResponseData = {
   organization?: Organization;
 };
 
-type RazorpayCheckoutResponse = {
-  razorpay_payment_id?: string;
-  razorpay_subscription_id?: string;
-  razorpay_signature?: string;
-};
-
-type RazorpayCheckoutOptions = {
-  key: string;
-  subscription_id: string;
-  name: string;
-  description: string;
-  callback_url?: string;
-  prefill?: {
-    name?: string;
-    email?: string;
-    contact?: string;
-  };
-  notes?: Record<string, string>;
-  theme?: { color?: string };
-  handler?: (response: RazorpayCheckoutResponse) => void;
-  modal?: {
-    confirm_close?: boolean;
-    ondismiss?: () => void;
-  };
-};
-
-declare global {
-  interface Window {
-    Razorpay?: new (options: RazorpayCheckoutOptions) => {
-      open: () => void;
-    };
-  }
-}
-
 const checkoutStorageKey = "whatching:checkout:last";
-const razorpayCheckoutScriptId = "razorpay-checkout-js";
 
 const getErrorMessage = (error: unknown) => {
   const axiosError = error as AxiosError<ApiErrorPayload>;
@@ -119,51 +98,21 @@ const normalizeBillingProfile = (profile: BillingProfile): BillingProfile => ({
   gstin: profile.gstin?.trim().toUpperCase() || ""
 });
 
-const loadRazorpayCheckout = () =>
-  new Promise<void>((resolve, reject) => {
-    if (typeof window === "undefined") {
-      reject(new Error("Razorpay checkout can only open in the browser."));
-      return;
-    }
-
-    if (window.Razorpay) {
-      resolve();
-      return;
-    }
-
-    const existingScript = document.getElementById(
-      razorpayCheckoutScriptId
-    ) as HTMLScriptElement | null;
-
-    if (existingScript) {
-      existingScript.addEventListener("load", () => resolve(), { once: true });
-      existingScript.addEventListener(
-        "error",
-        () => reject(new Error("Razorpay checkout failed to load.")),
-        { once: true }
-      );
-      return;
-    }
-
-    const script = document.createElement("script");
-    script.id = razorpayCheckoutScriptId;
-    script.src = "https://checkout.razorpay.com/v1/checkout.js";
-    script.async = true;
-    script.onload = () => resolve();
-    script.onerror = () =>
-      reject(new Error("Razorpay checkout failed to load."));
-    document.body.appendChild(script);
-  });
-
 export default function CheckoutPage() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
+  const trialUnavailable = useAuthStore((state) => state.trialUnavailable);
+  const markTrialUnavailable = useAuthStore(
+    (state) => state.markTrialUnavailable
+  );
   const activeOrganization = useOrganizationStore(
     (state) => state.activeOrganization
   );
   const upsertOrganization = useOrganizationStore(
     (state) => state.upsertOrganization
   );
+  const { isOwner, isLoading: isMembershipLoading } = useCurrentMembership();
+  const { hasUsedTrial } = useHasUsedFreeTrial();
   const plan = useMemo(() => getPlanByTier(router.query.tier), [router.query]);
   const paidPlan =
     plan?.id === "basic" || plan?.id === "pro"
@@ -173,7 +122,11 @@ export default function CheckoutPage() {
           monthlyPrice: plan.monthlyPrice || 0
         } as typeof plan & { id: PaidPlanTier; monthlyPrice: number })
       : null;
-  const action = plan ? buildPlanAction(plan, activeOrganization) : null;
+  const preferDirectSubscribe =
+    router.query.intent === "subscribe" || trialUnavailable || hasUsedTrial;
+  const action = plan
+    ? buildPlanAction(plan, activeOrganization, { preferDirectSubscribe })
+    : null;
   const isPaidAction =
     action?.kind === "subscribe" || action?.kind === "change";
   const isTrialAction = action?.kind === "trial";
@@ -190,13 +143,16 @@ export default function CheckoutPage() {
   const [billingProfile, setBillingProfile] =
     useState<BillingProfile>(emptyBillingProfile);
 
-  const { data: billingProfileData, isLoading: isBillingProfileLoading } =
-    useQuery({
-      queryKey: ["billing-profile", activeOrganization?._id],
-      queryFn: getBillingProfile,
-      enabled: Boolean(activeOrganization?._id && isPaidAction),
-      refetchOnMount: "always"
-    });
+  const {
+    data: billingProfileData,
+    isLoading: isBillingProfileLoading,
+    isError: isBillingProfileError
+  } = useQuery({
+    queryKey: ["billing-profile", activeOrganization?._id],
+    queryFn: getBillingProfile,
+    enabled: Boolean(activeOrganization?._id && isPaidAction),
+    refetchOnMount: "always"
+  });
 
   useEffect(() => {
     if (!isPaidAction) return;
@@ -258,7 +214,13 @@ export default function CheckoutPage() {
         query: { tier: res.data.trial?.tier || paidPlan?.id, trial: "1" }
       });
     },
-    onError: (error) => toast.error(getErrorMessage(error))
+    onError: (error) => {
+      const message = getErrorMessage(error);
+      if (message.toLowerCase().includes("already been used")) {
+        markTrialUnavailable();
+      }
+      toast.error(message);
+    }
   });
 
   const paidCheckoutMutation = useMutation({
@@ -288,9 +250,25 @@ export default function CheckoutPage() {
       }
 
       if (!subscriptionId || !razorpayKey) {
-        toast.success(
-          "Plan request completed. We are syncing your billing status."
-        );
+        const outcomeMessage =
+          res.message ||
+          "Plan request completed. We are syncing your billing status.";
+        toast.success(outcomeMessage);
+
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem(
+            checkoutStorageKey,
+            JSON.stringify({
+              tier,
+              action: action?.kind,
+              planName: paidPlan?.name,
+              outcomeMessage,
+              wentThroughRazorpay: false,
+              startedAt: new Date().toISOString()
+            })
+          );
+        }
+
         router.push({
           pathname: "/congratulations",
           query: { tier, status: "completed" }
@@ -308,6 +286,7 @@ export default function CheckoutPage() {
           baseAmount: totals?.baseAmount,
           gstAmount: totals?.gstAmount,
           totalAmount: totals?.totalAmount,
+          wentThroughRazorpay: true,
           startedAt: new Date().toISOString()
         };
 
@@ -355,7 +334,12 @@ export default function CheckoutPage() {
               });
             },
             modal: {
-              confirm_close: true
+              confirm_close: true,
+              ondismiss: () => {
+                toast.info(
+                  "Payment window closed. Your plan was not changed -- you can try again anytime."
+                );
+              }
             }
           });
 
@@ -378,12 +362,22 @@ export default function CheckoutPage() {
     canceledWithAccess ||
     isProceeding ||
     (isPaidAction && (isBillingProfileLoading || hasBillingErrors));
+  const isDowngrade =
+    action?.kind === "change" &&
+    activeOrganization?.planTier === "pro" &&
+    paidPlan?.id === "basic";
+  const [isDowngradeConfirmOpen, setIsDowngradeConfirmOpen] = useState(false);
 
   const updateBillingField = (key: keyof BillingProfile, value: string) => {
     setBillingProfile((current) => ({
       ...current,
       [key]: key === "gstin" ? value.toUpperCase() : value
     }));
+  };
+
+  const confirmDowngrade = () => {
+    setIsDowngradeConfirmOpen(false);
+    if (paidPlan) paidCheckoutMutation.mutate(paidPlan.id);
   };
 
   const handleProceed = () => {
@@ -394,9 +388,22 @@ export default function CheckoutPage() {
       return;
     }
 
+    if (isPaidAction && isDowngrade && !hasBillingErrors) {
+      setIsDowngradeConfirmOpen(true);
+      return;
+    }
+
     if (!isPaidAction || hasBillingErrors) return;
     paidCheckoutMutation.mutate(paidPlan.id);
   };
+
+  if (!isMembershipLoading && !isOwner) {
+    return (
+      <AppLayout>
+        <OwnerOnlyNotice />
+      </AppLayout>
+    );
+  }
 
   if (!plan || !paidPlan) {
     return (
@@ -487,6 +494,14 @@ export default function CheckoutPage() {
               </div>
             ) : (
               <>
+                {isBillingProfileError && (
+                  <div className="flex gap-3 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+                    <AlertCircle className="mt-0.5 size-4 shrink-0" />
+                    Couldn&apos;t load your saved billing profile. If
+                    you&apos;ve entered these details before, re-enter them
+                    below to be safe.
+                  </div>
+                )}
                 <div className="rounded-md border bg-muted/40 p-4 text-sm text-muted-foreground">
                   Fields marked required are required by the backend before
                   Razorpay checkout can be created. GSTIN is optional, but must
@@ -686,8 +701,43 @@ export default function CheckoutPage() {
                 ? "Processing"
                 : isTrialAction
                   ? "Start free trial"
-                  : "Proceed to Razorpay"}
+                  : action?.kind === "change"
+                    ? isDowngrade
+                      ? "Confirm downgrade"
+                      : "Confirm plan change"
+                    : "Proceed to Razorpay"}
             </Button>
+
+            <AlertDialog
+              open={isDowngradeConfirmOpen}
+              onOpenChange={setIsDowngradeConfirmOpen}
+            >
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>
+                    Downgrade to {paidPlan?.name}?
+                  </AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This takes effect at the end of your current billing
+                    cycle. You&apos;ll keep Pro features until then, but move
+                    to Basic&apos;s lower subscriber and team-member limits
+                    afterward.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <div className="flex gap-3 rounded-sm bg-amber-50 p-3 text-sm text-amber-800">
+                  <AlertCircle className="mt-0.5 size-4 shrink-0" />
+                  Features that exceed Basic&apos;s limits (extra team
+                  members, additional phone numbers) may stop working once
+                  the downgrade takes effect.
+                </div>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Keep current plan</AlertDialogCancel>
+                  <AlertDialogAction onClick={confirmDowngrade}>
+                    Confirm downgrade
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
 
             {isPaidAction && !isBillingProfileLoading && hasBillingErrors ? (
               <p className="text-center text-xs text-muted-foreground">

@@ -31,9 +31,13 @@ type LastCheckout = {
   gstAmount?: number;
   totalAmount?: number;
   startedAt?: string;
+  outcomeMessage?: string;
+  wentThroughRazorpay?: boolean;
 };
 
 const checkoutStorageKey = "whatching:checkout:last";
+const MAX_AUTO_SYNC_RETRIES = 2;
+const AUTO_SYNC_RETRY_DELAY_MS = 3500;
 
 export default function CongratulationsPage() {
   const router = useRouter();
@@ -44,6 +48,7 @@ export default function CongratulationsPage() {
     (state) => state.upsertOrganization
   );
   const [lastCheckout, setLastCheckout] = useState<LastCheckout | null>(null);
+  const [autoRetryCount, setAutoRetryCount] = useState(0);
   const isTrial = router.query.trial === "1";
   const queryPlan = useMemo(
     () => getPlanByTier(router.query.tier),
@@ -74,16 +79,49 @@ export default function CongratulationsPage() {
   useEffect(() => {
     if (!activeOrganization?._id || isTrial) return;
     syncMutation.mutate();
-    // Run once when landing here; repeated syncs are not useful.
+    // Run once when landing here; further attempts are driven by the
+    // auto-retry effect below and the manual "Check again" button.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeOrganization?._id, isTrial]);
 
-  const planName =
-    queryPlan?.name || lastCheckout?.planName || activeOrganization?.planTier;
   const canceledWithAccess =
     isSubscriptionCanceledWithAccess(activeOrganization);
   const isActive =
     activeOrganization?.subscriptionStatus === "active" && !canceledWithAccess;
+
+  // The Razorpay webhook that flips subscriptionStatus to "active" can lag
+  // a few seconds behind the redirect back here. Retry the sync a couple of
+  // times with a short delay instead of leaving the status stuck on
+  // "syncing" until the user happens to find the Billing page's own sync
+  // button.
+  useEffect(() => {
+    if (isTrial || isActive || syncMutation.isPending) return;
+    if (autoRetryCount >= MAX_AUTO_SYNC_RETRIES) return;
+    if (!activeOrganization?._id) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setAutoRetryCount((count) => count + 1);
+      syncMutation.mutate();
+      // syncMutation identity is stable across renders (useMutation), and
+      // re-running this effect only on its result would refire on every
+      // render since the mutation object itself changes; count/isActive
+      // are the actual retry-loop signals.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, AUTO_SYNC_RETRY_DELAY_MS);
+
+    return () => window.clearTimeout(timeoutId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRetryCount, isActive, isTrial, activeOrganization?._id]);
+
+  const planName =
+    queryPlan?.name || lastCheckout?.planName || activeOrganization?.planTier;
+  const wentThroughRazorpay = lastCheckout?.wentThroughRazorpay !== false;
+  const statusDescription = isTrial
+    ? `Your ${planName || "Whatching"} trial is active for this organisation.`
+    : wentThroughRazorpay
+      ? "Razorpay payment has been submitted. Whatching will keep syncing the subscription status through backend webhooks and the billing sync route."
+      : lastCheckout?.outcomeMessage ||
+        "Your plan request was processed. Whatching will keep syncing the subscription status.";
 
   return (
     <AppLayout>
@@ -121,9 +159,7 @@ export default function CongratulationsPage() {
             {isTrial ? "Free trial started" : "Plan purchased"}
           </h1>
           <p className="mt-3 text-sm text-muted-foreground">
-            {isTrial
-              ? `Your ${planName || "Whatching"} trial is active for this organisation.`
-              : "Razorpay payment has been submitted. Whatching will keep syncing the subscription status through backend webhooks and the billing sync route."}
+            {statusDescription}
           </p>
 
           <div className="mt-6 grid gap-3 rounded-lg border bg-muted/30 p-4 text-left sm:grid-cols-2">
@@ -182,6 +218,21 @@ export default function CongratulationsPage() {
           ) : null}
 
           <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
+            {!isTrial && !isActive && (
+              <Button
+                variant="outline"
+                disabled={syncMutation.isPending}
+                onClick={() => {
+                  setAutoRetryCount(0);
+                  syncMutation.mutate();
+                }}
+              >
+                {syncMutation.isPending ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : null}
+                Check status again
+              </Button>
+            )}
             <Button onClick={() => router.push("/overview")}>
               Go to dashboard
               <ArrowRight className="size-4" />

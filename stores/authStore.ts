@@ -8,9 +8,16 @@ interface AuthState {
   user: AuthUser | null;
   hasHydrated: boolean;
   isAuthenticated: boolean;
+  // The backend dedupes a free trial by owner phone number and email across
+  // every organisation that owner has ever created, not per-organisation --
+  // so once a 409 confirms this user has already used their one trial, we
+  // remember it here (persisted, per-user) instead of making them rediscover
+  // the same error on every future organisation they create.
+  trialUnavailable: boolean;
   setAuth: (payload: { token: string; user: AuthUser }) => void;
   setToken: (token: string) => void;
   setUser: (user: AuthUser | null) => void;
+  markTrialUnavailable: () => void;
   logout: () => void;
   setHasHydrated: (hasHydrated: boolean) => void;
 }
@@ -22,6 +29,7 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       hasHydrated: false,
       isAuthenticated: false,
+      trialUnavailable: false,
       setAuth: ({ token, user }) => {
         const organizationStore = useOrganizationStore.getState();
         const hasOrganizationState =
@@ -44,7 +52,9 @@ export const useAuthStore = create<AuthState>()(
         useOrganizationStore.getState().setOrganizationOwner(user._id);
 
         set((state) => {
-          if (state.user?._id && state.user._id !== user._id) {
+          const isDifferentUser =
+            state.user?._id && state.user._id !== user._id;
+          if (isDifferentUser) {
             useOrganizationStore.getState().clearOrganizations();
             useOrganizationStore.getState().setOrganizationOwner(user._id);
           }
@@ -52,7 +62,8 @@ export const useAuthStore = create<AuthState>()(
           return {
             token,
             user,
-            isAuthenticated: true
+            isAuthenticated: true,
+            trialUnavailable: isDifferentUser ? false : state.trialUnavailable
           };
         });
       },
@@ -73,6 +84,7 @@ export const useAuthStore = create<AuthState>()(
 
         set({ user });
       },
+      markTrialUnavailable: () => set({ trialUnavailable: true }),
       logout: () => {
         if (typeof window !== "undefined") {
           localStorage.removeItem("accessToken");
@@ -84,7 +96,8 @@ export const useAuthStore = create<AuthState>()(
         set({
           token: null,
           user: null,
-          isAuthenticated: false
+          isAuthenticated: false,
+          trialUnavailable: false
         });
       },
       setHasHydrated: (hasHydrated) => set({ hasHydrated })
@@ -95,7 +108,8 @@ export const useAuthStore = create<AuthState>()(
       partialize: (state) => ({
         token: state.token,
         user: state.user,
-        isAuthenticated: state.isAuthenticated
+        isAuthenticated: state.isAuthenticated,
+        trialUnavailable: state.trialUnavailable
       }),
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true);

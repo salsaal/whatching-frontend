@@ -24,6 +24,7 @@ import { KnowledgeSource } from "@/client-api/types/bot.type";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { EmptyState } from "@/components/shared/EmptyState";
 import {
   Dialog,
   DialogContent,
@@ -75,6 +76,7 @@ export function KnowledgeBaseSection() {
   const [selectedSource, setSelectedSource] = useState<KnowledgeSource | null>(
     null
   );
+  const [isAddSourceOpen, setIsAddSourceOpen] = useState(false);
 
   const { data, refetch, isLoading } = useQuery({
     queryKey: ["bot-knowledge-sources", activeOrganization?._id],
@@ -89,6 +91,7 @@ export function KnowledgeBaseSection() {
     onSuccess: () => {
       setForm({ title: "", content: "" });
       setFaqEntries([emptyFaqEntry()]);
+      setIsAddSourceOpen(false);
       toast.success("Knowledge source added.");
       refetch();
     }
@@ -100,6 +103,7 @@ export function KnowledgeBaseSection() {
       setForm({ title: "", content: "" });
       setSourceFile(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
+      setIsAddSourceOpen(false);
       toast.success("File source uploaded.");
       refetch();
     }
@@ -184,15 +188,120 @@ export function KnowledgeBaseSection() {
 
   return (
     <>
-      <div className="grid min-w-0 gap-4 lg:grid-cols-[420px_minmax(0,1fr)]">
-        <Card className="min-w-0 rounded-lg">
-          <CardContent className="space-y-3 p-5">
-            <div>
-              <p className="font-heading text-xl font-semibold">Add source</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Add text, FAQs, or upload a document for AI fallback.
-              </p>
-            </div>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <h2 className="font-heading text-base font-semibold">
+            Knowledge base
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            {sources.length} source{sources.length === 1 ? "" : "s"} for AI
+            fallback answers.
+          </p>
+        </div>
+        <Button size="sm" onClick={() => setIsAddSourceOpen(true)}>
+          <Plus className="size-4" />
+          Add source
+        </Button>
+      </div>
+
+      <div className="min-w-0 space-y-3">
+          {isLoading ? (
+            <ListLoadingSkeleton rows={5} />
+          ) : sources.length ? (
+            sources.map((source) => {
+              const Icon = sourceIcon(source.type);
+              return (
+                <Card key={source._id} className="rounded-lg !p-0">
+                  <CardContent className="flex items-center gap-3 p-4">
+                    <div className="flex size-10 shrink-0 items-center justify-center rounded-sm bg-primary/10 text-primary">
+                      <Icon className="size-5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="truncate font-medium">{source.title}</p>
+                        <Badge variant="secondary" className="capitalize">
+                          {source.type}
+                        </Badge>
+                        <Badge
+                          variant={
+                            source.status === "failed"
+                              ? "destructive"
+                              : "default"
+                          }
+                          className="capitalize"
+                        >
+                          {source.status}
+                        </Badge>
+                      </div>
+                      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                        <span>{source.chunkCount || 0} chunks</span>
+                        <span>
+                          {source.filename ||
+                            `Updated ${formatDate(source.updatedAt)}`}
+                        </span>
+                        {source.ingestError && (
+                          <span className="text-destructive">
+                            {source.ingestError}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      className="cursor-pointer"
+                      tooltip="View source details"
+                      onClick={() => setSelectedSource(source)}
+                    >
+                      <Eye className="size-4" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      className="cursor-pointer"
+                      tooltip="Re-ingest this knowledge source"
+                      onClick={() => reingestSource(source._id)}
+                    >
+                      <RefreshCcw className="size-4" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      className="cursor-pointer text-destructive hover:text-destructive"
+                      tooltip="Archive this knowledge source"
+                      onClick={() => deleteSource(source._id)}
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  </CardContent>
+                </Card>
+              );
+            })
+          ) : (
+            <EmptyState
+              icon={FileText}
+              title="No knowledge sources yet"
+              description="Add text, FAQs, or upload a document so the AI can answer from your own content."
+              action={
+                <Button size="sm" onClick={() => setIsAddSourceOpen(true)}>
+                  <Plus className="size-4" />
+                  Add source
+                </Button>
+              }
+              className="min-h-56 rounded-lg border bg-muted/10"
+            />
+          )}
+        </div>
+
+      <Dialog open={isAddSourceOpen} onOpenChange={setIsAddSourceOpen}>
+        <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-lg">
+          <DialogHeader className="shrink-0">
+            <DialogTitle>Add knowledge source</DialogTitle>
+            <DialogDescription>
+              Add text, FAQs, or upload a document for AI fallback.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
             <div className="grid gap-3 sm:grid-cols-[140px_1fr]">
               <div className="space-y-2 w-full">
                 <Label>Type</Label>
@@ -339,6 +448,8 @@ export function KnowledgeBaseSection() {
                 </p>
               </div>
             )}
+          </div>
+          <DialogFooter className="shrink-0">
             <Button
               className="w-full cursor-pointer"
               disabled={
@@ -354,91 +465,9 @@ export function KnowledgeBaseSection() {
               )}
               Add {sourceType === "faq" ? "FAQ" : sourceType} source
             </Button>
-          </CardContent>
-        </Card>
-
-        <div className="min-w-0 space-y-3">
-          {isLoading ? (
-            <ListLoadingSkeleton rows={5} />
-          ) : sources.length ? (
-            sources.map((source) => {
-              const Icon = sourceIcon(source.type);
-              return (
-                <Card key={source._id} className="rounded-lg !p-0">
-                  <CardContent className="flex items-center gap-3 p-4">
-                    <div className="flex size-10 shrink-0 items-center justify-center rounded-sm bg-primary/10 text-primary">
-                      <Icon className="size-5" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="truncate font-medium">{source.title}</p>
-                        <Badge variant="secondary" className="capitalize">
-                          {source.type}
-                        </Badge>
-                        <Badge
-                          variant={
-                            source.status === "failed"
-                              ? "destructive"
-                              : "default"
-                          }
-                          className="capitalize"
-                        >
-                          {source.status}
-                        </Badge>
-                      </div>
-                      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                        <span>{source.chunkCount || 0} chunks</span>
-                        <span>
-                          {source.filename ||
-                            `Updated ${formatDate(source.updatedAt)}`}
-                        </span>
-                        {source.ingestError && (
-                          <span className="text-destructive">
-                            {source.ingestError}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <Button
-                      size="icon"
-                      variant="outline"
-                      className="cursor-pointer"
-                      tooltip="View source details"
-                      onClick={() => setSelectedSource(source)}
-                    >
-                      <Eye className="size-4" />
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="outline"
-                      className="cursor-pointer"
-                      tooltip="Re-ingest this knowledge source"
-                      onClick={() => reingestSource(source._id)}
-                    >
-                      <RefreshCcw className="size-4" />
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="outline"
-                      className="cursor-pointer text-destructive hover:text-destructive"
-                      tooltip="Archive this knowledge source"
-                      onClick={() => deleteSource(source._id)}
-                    >
-                      <Trash2 className="size-4" />
-                    </Button>
-                  </CardContent>
-                </Card>
-              );
-            })
-          ) : (
-            <Card className="rounded-lg">
-              <CardContent className="p-5 text-sm text-muted-foreground">
-                No knowledge sources yet.
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={Boolean(selectedSource)}

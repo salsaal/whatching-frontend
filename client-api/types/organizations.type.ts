@@ -584,9 +584,28 @@ export interface AiTokenTopupResponse {
     amountPaise: number;
     currency: "INR";
     pricingMode: "exclusive";
-    paymentLinkId: string;
+    orderId: string;
     referenceId: string;
-    paymentUrl: string;
     key: string;
+    prefill: {
+      name?: string;
+      email?: string;
+      contact?: string;
+    };
+  };
+}
+
+export interface VerifyAiTokenTopupPayload {
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+}
+
+export interface VerifyAiTokenTopupResponse {
+  status: string;
+  message: string;
+  data: {
+    usage: AiTokenUsage | null;
+    includedLimit: number;
   };
 }

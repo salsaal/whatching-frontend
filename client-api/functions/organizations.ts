@@ -11,6 +11,8 @@ import {
   AiTokenPackagesResponse,
   AiTokenTopupResponse,
   AiTokenUsageResponse,
+  VerifyAiTokenTopupPayload,
+  VerifyAiTokenTopupResponse,
   BillingHistoryResponse,
   BillingProfile,
   BillingProfileResponse,
@@ -372,6 +374,16 @@ export const topupAiTokens = async (
   const res = await api.post<AiTokenTopupResponse>(
     ORGANIZATION_ENDPOINTS.BILLING_AI_TOKEN_TOPUP,
     { packageId }
+  );
+  return res.data;
+};
+
+export const verifyAiTokenTopup = async (
+  payload: VerifyAiTokenTopupPayload
+): Promise<VerifyAiTokenTopupResponse> => {
+  const res = await api.post<VerifyAiTokenTopupResponse>(
+    ORGANIZATION_ENDPOINTS.BILLING_AI_TOKEN_TOPUP_VERIFY,
+    payload
   );
   return res.data;
 };

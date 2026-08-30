@@ -177,7 +177,9 @@ export default function AppLayout({
           router.pathname === item.href ||
           (item.href === "/settings" &&
             router.pathname.startsWith("/settings/") &&
-            router.pathname !== "/settings/help") ||
+            router.pathname !== "/settings/help" &&
+            router.pathname !== "/settings/ai" &&
+            !router.pathname.startsWith("/settings/ai/")) ||
           (item.href !== "/overview" &&
             item.href !== "/settings" &&
             router.pathname.startsWith(`${item.href}/`));

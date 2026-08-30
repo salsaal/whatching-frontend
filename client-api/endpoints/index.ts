@@ -63,6 +63,7 @@ export const ORGANIZATION_ENDPOINTS = {
   BILLING_AI_TOKEN_PACKAGES: `${ORGANIZATIONS_BASE}/billing/ai-token-packages`,
   BILLING_AI_TOKEN_USAGE: `${ORGANIZATIONS_BASE}/billing/ai-token-usage`,
   BILLING_AI_TOKEN_TOPUP: `${ORGANIZATIONS_BASE}/billing/ai-token-topup`,
+  BILLING_AI_TOKEN_TOPUP_VERIFY: `${ORGANIZATIONS_BASE}/billing/ai-token-topup/verify`,
   SUPPORT_REQUESTS: `${ORGANIZATIONS_BASE}/support-requests`,
   SUPPORT_REQUEST: (supportRequestId: string) =>
     `${ORGANIZATIONS_BASE}/support-requests/${supportRequestId}`

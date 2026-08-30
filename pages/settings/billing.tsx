@@ -26,6 +26,7 @@ import {
 } from "@/client-api/functions/organizations";
 import { Invoice } from "@/client-api/types/organizations.type";
 import BillingProfileForm from "@/components/billing/BillingProfileForm";
+import { OwnerOnlyNotice } from "@/components/billing/OwnerOnlyNotice";
 import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog,
@@ -41,6 +42,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SettingsBackLink } from "@/components/settings/SettingsBackLink";
+import { QueryErrorState } from "@/components/shared/QueryErrorState";
+import { useCurrentMembership } from "@/hooks/useCurrentMembership";
 import AppLayout from "@/layouts/AppLayout";
 import {
   calculatePlanTotals,
@@ -75,18 +78,28 @@ export default function BillingSettingsPage() {
   const upsertOrganization = useOrganizationStore(
     (state) => state.upsertOrganization
   );
+  const { isOwner, isLoading: isMembershipLoading } = useCurrentMembership();
 
-  const { data, isLoading, refetch } = useQuery({
+  const {
+    data,
+    isLoading,
+    isError: isBillingHistoryError,
+    refetch
+  } = useQuery({
     queryKey: ["billing-history", activeOrganization?._id],
     queryFn: getBillingHistory,
-    enabled: Boolean(activeOrganization?._id),
+    enabled: Boolean(activeOrganization?._id) && isOwner,
     refetchOnMount: "always"
   });
 
-  const { data: invoicesData, isLoading: isLoadingInvoices } = useQuery({
+  const {
+    data: invoicesData,
+    isLoading: isLoadingInvoices,
+    isError: isInvoicesError
+  } = useQuery({
     queryKey: ["invoices", activeOrganization?._id],
     queryFn: listInvoices,
-    enabled: Boolean(activeOrganization?._id),
+    enabled: Boolean(activeOrganization?._id) && isOwner,
     refetchOnMount: "always"
   });
 
@@ -193,6 +206,33 @@ export default function BillingSettingsPage() {
     isTrialing &&
     !activeOrganization?.razorpaySubscriptionId &&
     !activeOrganization?.pendingRazorpaySubscriptionCheckoutUrl;
+  // When a plan change is already queued (a replacement subscription
+  // awaiting/at authorization), the backend's cancel endpoint cancels THAT
+  // pending change first, not the currently active plan -- the button and
+  // dialog need to say so, or a user trying to cancel their whole
+  // subscription is surprised to find only the queued change was affected.
+  const hasPendingReplacement = Boolean(
+    activeOrganization?.pendingRazorpaySubscriptionId
+  );
+  // pendingRazorpaySubscriptionCheckoutUrl stays populated even after the
+  // customer has paid the mandate charge (it's only cleared once the plan
+  // actually switches over) -- so it alone can't tell us whether action is
+  // still needed. `pendingRazorpaySubscriptionStatus` can: 'authenticated'
+  // means the payment already cleared and we're just waiting on the date.
+  const pendingReplacementNeedsAuthorization =
+    Boolean(activeOrganization?.pendingRazorpaySubscriptionCheckoutUrl) &&
+    activeOrganization?.pendingRazorpaySubscriptionStatus !== "authenticated";
+
+  if (!isMembershipLoading && !isOwner) {
+    return (
+      <AppLayout>
+        <div className="mx-auto max-w-6xl space-y-6">
+          <SettingsBackLink />
+          <OwnerOnlyNotice />
+        </div>
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout>
@@ -248,14 +288,18 @@ export default function BillingSettingsPage() {
                     title={
                       isTrialWithoutSubscription
                         ? "End your free trial immediately"
-                        : "Stop renewal at the end of the current billing period"
+                        : hasPendingReplacement
+                          ? "Cancel the pending plan change"
+                          : "Stop renewal at the end of the current billing period"
                     }
                     disabled={!canCancel || isCancelling}
                   >
                     <XCircle className="size-4" />
                     {isTrialWithoutSubscription
                       ? "End trial"
-                      : "Cancel subscription"}
+                      : hasPendingReplacement
+                        ? "Cancel pending plan change"
+                        : "Cancel subscription"}
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
@@ -263,29 +307,41 @@ export default function BillingSettingsPage() {
                     <AlertDialogTitle>
                       {isTrialWithoutSubscription
                         ? "End your free trial?"
-                        : "Cancel subscription?"}
+                        : hasPendingReplacement
+                          ? "Cancel the pending plan change?"
+                          : "Cancel subscription?"}
                     </AlertDialogTitle>
                     <AlertDialogDescription>
                       {isTrialWithoutSubscription
                         ? "This ends your free trial immediately. Paid features stop working right away, not at the end of the trial period."
-                        : "Your subscription will remain active until the end of the current billing period. This action will stop renewal."}
+                        : hasPendingReplacement
+                          ? `This cancels the queued change to ${activeOrganization?.pendingRazorpaySubscriptionTier === "basic" ? "Basic" : "Pro"} only. Your current ${activeOrganization?.planTier === "basic" ? "Basic" : "Pro"} plan keeps running as-is -- this does not cancel it.`
+                          : "Your subscription will remain active until the end of the current billing period. This action will stop renewal."}
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <div className="flex gap-3 rounded-sm bg-amber-50 p-3 text-sm text-amber-800">
                     <AlertTriangle className="mt-0.5 size-4 shrink-0" />
                     {isTrialWithoutSubscription
                       ? "This cannot be undone. You can still subscribe to a paid plan at any time."
-                      : "You can continue using paid features until the current cycle ends."}
+                      : hasPendingReplacement
+                        ? "To cancel your active plan instead, wait for this pending change to resolve first."
+                        : "You can continue using paid features until the current cycle ends."}
                   </div>
                   <AlertDialogFooter>
-                    <AlertDialogCancel>Keep subscription</AlertDialogCancel>
+                    <AlertDialogCancel>
+                      {hasPendingReplacement
+                        ? "Keep the pending change"
+                        : "Keep subscription"}
+                    </AlertDialogCancel>
                     <AlertDialogAction
                       onClick={() => cancelSubscriptionMutate()}
                       className="bg-destructive text-white hover:bg-destructive/90"
                     >
                       {isTrialWithoutSubscription
                         ? "End trial"
-                        : "Cancel subscription"}
+                        : hasPendingReplacement
+                          ? "Cancel pending plan change"
+                          : "Cancel subscription"}
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
@@ -293,6 +349,82 @@ export default function BillingSettingsPage() {
             )}
           </div>
         </section>
+
+        {activeOrganization?.lastPlanChangeFailureReason ? (
+          <section className="flex gap-3 rounded-lg border border-destructive/25 bg-destructive/5 p-4 text-sm text-destructive">
+            <XCircle className="mt-0.5 size-4 shrink-0" />
+            <div>
+              <p className="font-medium">Your last plan change failed</p>
+              <p className="mt-1">
+                {activeOrganization.lastPlanChangeFailureReason}
+              </p>
+              {activeOrganization.lastPlanChangeFailureAt && (
+                <p className="mt-1 text-xs text-destructive/70">
+                  {formatDate(activeOrganization.lastPlanChangeFailureAt)}
+                </p>
+              )}
+            </div>
+          </section>
+        ) : null}
+
+        {activeOrganization?.scheduledPlanTier &&
+        pendingReplacementNeedsAuthorization ? (
+          <section className="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+            <div>
+              <p>
+                You started switching to{" "}
+                <span className="font-semibold capitalize">
+                  {activeOrganization.pendingRazorpaySubscriptionTier}
+                </span>
+                , but Razorpay needs a new payment authorization before it can
+                take effect.
+              </p>
+              <p className="mt-1">
+                Your current{" "}
+                <span className="font-semibold capitalize">
+                  {activeOrganization.planTier}
+                </span>{" "}
+                plan keeps running as-is until you finish authorizing --
+                nothing changes automatically. If you complete it in time,{" "}
+                <span className="font-semibold capitalize">
+                  {activeOrganization.scheduledPlanTier}
+                </span>{" "}
+                takes over on{" "}
+                <span className="font-semibold">
+                  {formatDate(activeOrganization.scheduledPlanChangeAt)}
+                </span>
+                .
+              </p>
+            </div>
+            <div>
+              <Button
+                size="sm"
+                onClick={() =>
+                  window.open(
+                    activeOrganization.pendingRazorpaySubscriptionCheckoutUrl ||
+                      undefined,
+                    "_blank",
+                    "noopener,noreferrer"
+                  )
+                }
+              >
+                Complete authorization
+              </Button>
+            </div>
+          </section>
+        ) : activeOrganization?.scheduledPlanTier ? (
+          <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+            A plan change to{" "}
+            <span className="font-semibold capitalize">
+              {activeOrganization.scheduledPlanTier}
+            </span>{" "}
+            is scheduled for{" "}
+            <span className="font-semibold">
+              {formatDate(activeOrganization.scheduledPlanChangeAt)}
+            </span>
+            .
+          </section>
+        ) : null}
 
         <section className="grid gap-4 lg:grid-cols-3">
           <div className="rounded-lg bg-white p-5 shadow-xs">
@@ -396,45 +528,6 @@ export default function BillingSettingsPage() {
           <BillingProfileForm />
         </section>
 
-        {activeOrganization?.scheduledPlanTier ? (
-          <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
-            A plan change to{" "}
-            <span className="font-semibold capitalize">
-              {activeOrganization.scheduledPlanTier}
-            </span>{" "}
-            is scheduled for{" "}
-            <span className="font-semibold">
-              {formatDate(activeOrganization.scheduledPlanChangeAt)}
-            </span>
-            .
-          </section>
-        ) : null}
-
-        {activeOrganization?.pendingRazorpaySubscriptionCheckoutUrl ? (
-          <section className="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950 sm:flex-row sm:items-center sm:justify-between">
-            <p>
-              Razorpay authorization is pending for{" "}
-              <span className="font-semibold capitalize">
-                {activeOrganization.pendingRazorpaySubscriptionTier}
-              </span>
-              .
-            </p>
-            <Button
-              size="sm"
-              onClick={() =>
-                window.open(
-                  activeOrganization.pendingRazorpaySubscriptionCheckoutUrl ||
-                    undefined,
-                  "_blank",
-                  "noopener,noreferrer"
-                )
-              }
-            >
-              Open payment link
-            </Button>
-          </section>
-        ) : null}
-
         <section className="rounded-lg bg-white p-5 shadow-xs">
           <div className="mb-4 flex items-center gap-2">
             <ReceiptText className="size-5 text-primary" />
@@ -445,6 +538,8 @@ export default function BillingSettingsPage() {
 
           {isLoading ? (
             <BillingSkeleton />
+          ) : isBillingHistoryError ? (
+            <QueryErrorState message="Billing history could not be loaded." />
           ) : transactions.length ? (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -493,6 +588,8 @@ export default function BillingSettingsPage() {
 
           {isLoadingInvoices ? (
             <BillingSkeleton />
+          ) : isInvoicesError ? (
+            <QueryErrorState message="Invoices could not be loaded." />
           ) : invoices.length ? (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
