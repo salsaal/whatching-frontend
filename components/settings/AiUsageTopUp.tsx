@@ -42,13 +42,11 @@ export function AiUsageTopUp() {
     activeOrganization?.planTier !== "none" &&
     activeOrganization?.subscriptionStatus !== "trialing";
 
-  const { data: aiTokenPackagesData, isLoading: isLoadingPackages } = useQuery(
-    {
-      queryKey: ["ai-token-packages"],
-      queryFn: getAiTokenPackages,
-      enabled: canUseAiTokenTopup
-    }
-  );
+  const { data: aiTokenPackagesData, isLoading: isLoadingPackages } = useQuery({
+    queryKey: ["ai-token-packages"],
+    queryFn: getAiTokenPackages,
+    enabled: canUseAiTokenTopup
+  });
 
   const verifyMutation = useMutation({
     mutationFn: verifyAiTokenTopup,

@@ -91,12 +91,8 @@ export function AiUsageSummary() {
               <div className="flex size-8 items-center justify-center rounded-sm bg-primary/10 text-primary">
                 <Icon className="size-4" />
               </div>
-              <p className="mt-2 text-xs text-muted-foreground">
-                {stat.label}
-              </p>
-              <p className="font-heading text-sm font-semibold">
-                {stat.value}
-              </p>
+              <p className="mt-2 text-xs text-muted-foreground">{stat.label}</p>
+              <p className="font-heading text-sm font-semibold">{stat.value}</p>
             </div>
           );
         })}

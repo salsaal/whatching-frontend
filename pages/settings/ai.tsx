@@ -39,9 +39,7 @@ export default function AiSettingsPage() {
             <BotStatusToggle />
           </div>
           <div className="pt-5 sm:pt-0 sm:pl-5">
-            <h2 className="mb-3 font-heading text-base font-semibold">
-              Usage
-            </h2>
+            <h2 className="mb-3 font-heading text-base font-semibold">Usage</h2>
             <AiUsageSummary />
           </div>
         </section>

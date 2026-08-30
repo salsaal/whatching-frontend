@@ -718,17 +718,17 @@ export default function CheckoutPage() {
                     Downgrade to {paidPlan?.name}?
                   </AlertDialogTitle>
                   <AlertDialogDescription>
-                    This takes effect at the end of your current billing
-                    cycle. You&apos;ll keep Pro features until then, but move
-                    to Basic&apos;s lower subscriber and team-member limits
+                    This takes effect at the end of your current billing cycle.
+                    You&apos;ll keep Pro features until then, but move to
+                    Basic&apos;s lower subscriber and team-member limits
                     afterward.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <div className="flex gap-3 rounded-sm bg-amber-50 p-3 text-sm text-amber-800">
                   <AlertCircle className="mt-0.5 size-4 shrink-0" />
-                  Features that exceed Basic&apos;s limits (extra team
-                  members, additional phone numbers) may stop working once
-                  the downgrade takes effect.
+                  Features that exceed Basic&apos;s limits (extra team members,
+                  additional phone numbers) may stop working once the downgrade
+                  takes effect.
                 </div>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Keep current plan</AlertDialogCancel>

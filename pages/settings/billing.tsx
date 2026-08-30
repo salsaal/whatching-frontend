@@ -384,8 +384,8 @@ export default function BillingSettingsPage() {
                 <span className="font-semibold capitalize">
                   {activeOrganization.planTier}
                 </span>{" "}
-                plan keeps running as-is until you finish authorizing --
-                nothing changes automatically. If you complete it in time,{" "}
+                plan keeps running as-is until you finish authorizing -- nothing
+                changes automatically. If you complete it in time,{" "}
                 <span className="font-semibold capitalize">
                   {activeOrganization.scheduledPlanTier}
                 </span>{" "}

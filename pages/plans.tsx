@@ -62,10 +62,7 @@ export default function PlansPage() {
     );
   }
 
-  const openCheckout = (
-    plan: PlanDefinition,
-    intent?: "subscribe"
-  ) => {
+  const openCheckout = (plan: PlanDefinition, intent?: "subscribe") => {
     if (plan.id === "enterprise") {
       router.push({
         pathname: "/settings/help",
@@ -130,8 +127,8 @@ export default function PlansPage() {
               <span className="font-semibold capitalize">
                 {activeOrganization.pendingRazorpaySubscriptionTier}
               </span>
-              , but it needs a new Razorpay authorization to take effect.
-              Your current plan keeps running until then -- nothing changes
+              , but it needs a new Razorpay authorization to take effect. Your
+              current plan keeps running until then -- nothing changes
               automatically.
             </p>
             <Button size="sm" onClick={() => router.push("/settings/billing")}>
