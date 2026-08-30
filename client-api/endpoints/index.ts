@@ -54,6 +54,7 @@ export const ORGANIZATION_ENDPOINTS = {
   BILLING_SYNC: `${ORGANIZATIONS_BASE}/billing/sync`,
   BILLING_HISTORY: `${ORGANIZATIONS_BASE}/billing/history`,
   BILLING_CANCEL: `${ORGANIZATIONS_BASE}/billing/cancel`,
+  BILLING_RESUME: `${ORGANIZATIONS_BASE}/billing/resume`,
   BILLING_INVOICES: `${ORGANIZATIONS_BASE}/billing/invoices`,
   BILLING_INVOICE_PDF: (invoiceId: string) =>
     `${ORGANIZATIONS_BASE}/billing/invoices/${invoiceId}/pdf`,

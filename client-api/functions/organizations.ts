@@ -22,6 +22,7 @@ import {
   PermissionAccessState,
   RequestCoexistenceContactSyncPayload,
   CreateSupportRequestPayload,
+  ResumeSubscriptionResponse,
   RetryInvoiceResponse,
   StartTrialResponse,
   SupportRequestResponse,
@@ -314,6 +315,14 @@ export const cancelSubscription =
   async (): Promise<CancelSubscriptionResponse> => {
     const res = await api.post<CancelSubscriptionResponse>(
       ORGANIZATION_ENDPOINTS.BILLING_CANCEL
+    );
+    return res.data;
+  };
+
+export const resumeSubscription =
+  async (): Promise<ResumeSubscriptionResponse> => {
+    const res = await api.post<ResumeSubscriptionResponse>(
+      ORGANIZATION_ENDPOINTS.BILLING_RESUME
     );
     return res.data;
   };

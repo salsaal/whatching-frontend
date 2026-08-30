@@ -294,6 +294,22 @@ export interface SyncSubscriptionResponse {
   };
 }
 
+export interface ResumeSubscriptionResponse {
+  status: string;
+  message: string;
+  data: {
+    resumed: boolean;
+    requiresAuthorization: boolean;
+    subscriptionId: string;
+    replacementSubscriptionId: string;
+    paymentUrl: string | null;
+    key: string;
+    planTier: "basic" | "pro";
+    effectiveAt: string;
+    organization: Organization;
+  };
+}
+
 export interface ChangePlanResponse {
   status: string;
   message?: string;

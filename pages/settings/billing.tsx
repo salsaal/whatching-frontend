@@ -12,6 +12,7 @@ import {
   XCircle
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AxiosError } from "axios";
 import { toast } from "sonner";
 
 import {
@@ -19,6 +20,7 @@ import {
   downloadInvoicePdf,
   getBillingHistory,
   listInvoices,
+  resumeSubscription,
   retryInvoice,
   syncBillingSubscription
 } from "@/client-api/functions/organizations";
@@ -103,6 +105,28 @@ export default function BillingSettingsPage() {
       }
     });
 
+  const { mutate: resumeSubscriptionMutate, isPending: isResuming } =
+    useMutation({
+      mutationFn: resumeSubscription,
+      meta: { showToast: false },
+      onSuccess: (res) => {
+        upsertOrganization(res.data.organization);
+        toast.success(res.message);
+        queryClient.invalidateQueries({
+          queryKey: ["organization", activeOrganization?._id]
+        });
+        if (res.data.paymentUrl) {
+          window.open(res.data.paymentUrl, "_blank", "noopener,noreferrer");
+        }
+      },
+      onError: (error: AxiosError<{ message?: string }>) => {
+        toast.error(
+          error.response?.data?.message ||
+            "Could not resume the subscription. Please try again."
+        );
+      }
+    });
+
   const { mutate: syncSubscriptionMutate, isPending: isSyncing } = useMutation({
     mutationFn: syncBillingSubscription,
     meta: { showToast: false },
@@ -154,11 +178,21 @@ export default function BillingSettingsPage() {
     activeOrganization?.subscriptionStatus === "active" &&
     !activeOrganization?.subscriptionCancelAtPeriodEnd;
   const isTrialing = activeOrganization?.subscriptionStatus === "trialing";
+  // A trial never creates a Razorpay subscription, so a pure-trial org has
+  // no razorpaySubscriptionId yet -- it can still end its trial early, so
+  // that case must not require one. Mirrors the backend's own guard in
+  // cancelMySubscription.
   const canCancel =
     Boolean(activeOrganization) &&
     activeOrganization?.planTier !== "none" &&
-    Boolean(activeOrganization?.razorpaySubscriptionId) &&
-    !activeOrganization?.subscriptionCancelAtPeriodEnd;
+    !activeOrganization?.subscriptionCancelAtPeriodEnd &&
+    (Boolean(activeOrganization?.razorpaySubscriptionId) ||
+      Boolean(activeOrganization?.pendingRazorpaySubscriptionCheckoutUrl) ||
+      isTrialing);
+  const isTrialWithoutSubscription =
+    isTrialing &&
+    !activeOrganization?.razorpaySubscriptionId &&
+    !activeOrganization?.pendingRazorpaySubscriptionCheckoutUrl;
 
   return (
     <AppLayout>
@@ -189,42 +223,74 @@ export default function BillingSettingsPage() {
               Sync billing
             </Button>
 
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button
-                  variant="outline"
-                  className="text-destructive hover:text-destructive"
-                  title="Stop renewal at the end of the current billing period"
-                  disabled={!canCancel || isCancelling}
-                >
-                  <XCircle className="size-4" />
-                  Cancel subscription
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Cancel subscription?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Your subscription will remain active until the end of the
-                    current billing period. This action will stop renewal.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <div className="flex gap-3 rounded-sm bg-amber-50 p-3 text-sm text-amber-800">
-                  <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-                  You can continue using paid features until the current cycle
-                  ends.
-                </div>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Keep subscription</AlertDialogCancel>
-                  <AlertDialogAction
-                    onClick={() => cancelSubscriptionMutate()}
-                    className="bg-destructive text-white hover:bg-destructive/90"
+            {canceledWithAccess && (
+              <Button
+                variant="outline"
+                disabled={isResuming}
+                title="Undo the scheduled cancellation and keep this plan"
+                onClick={() => resumeSubscriptionMutate()}
+              >
+                {isResuming ? (
+                  <RefreshCw className="size-4 animate-spin" />
+                ) : (
+                  <RotateCcw className="size-4" />
+                )}
+                Resume subscription
+              </Button>
+            )}
+
+            {!canceledWithAccess && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="text-destructive hover:text-destructive"
+                    title={
+                      isTrialWithoutSubscription
+                        ? "End your free trial immediately"
+                        : "Stop renewal at the end of the current billing period"
+                    }
+                    disabled={!canCancel || isCancelling}
                   >
-                    Cancel subscription
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+                    <XCircle className="size-4" />
+                    {isTrialWithoutSubscription
+                      ? "End trial"
+                      : "Cancel subscription"}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>
+                      {isTrialWithoutSubscription
+                        ? "End your free trial?"
+                        : "Cancel subscription?"}
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                      {isTrialWithoutSubscription
+                        ? "This ends your free trial immediately. Paid features stop working right away, not at the end of the trial period."
+                        : "Your subscription will remain active until the end of the current billing period. This action will stop renewal."}
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <div className="flex gap-3 rounded-sm bg-amber-50 p-3 text-sm text-amber-800">
+                    <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                    {isTrialWithoutSubscription
+                      ? "This cannot be undone. You can still subscribe to a paid plan at any time."
+                      : "You can continue using paid features until the current cycle ends."}
+                  </div>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Keep subscription</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => cancelSubscriptionMutate()}
+                      className="bg-destructive text-white hover:bg-destructive/90"
+                    >
+                      {isTrialWithoutSubscription
+                        ? "End trial"
+                        : "Cancel subscription"}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
           </div>
         </section>
 
