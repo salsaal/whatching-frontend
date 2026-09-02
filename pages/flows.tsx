@@ -268,9 +268,6 @@ export default function FlowsPage() {
               const isAssignedToSelectedNumber =
                 selectedNumber?.activeCanvasId === canvas._id;
               const isOrgFallback = canvas.status === "active";
-              const isCardActive = isSelectedNumberContext
-                ? isAssignedToSelectedNumber
-                : isOrgFallback;
               const assignedNumbers = numbers.filter(
                 (number) => number.activeCanvasId === canvas._id
               );
@@ -302,11 +299,8 @@ export default function FlowsPage() {
                           Updated {formatDate(canvas.updatedAt)}
                         </p>
                       </div>
-                      <Badge
-                        variant={isCardActive ? "default" : "secondary"}
-                        className="capitalize"
-                      >
-                        {isCardActive ? "active" : "inactive"}
+                      <Badge variant={hasPublishedVersion ? "default" : "secondary"}>
+                        {hasPublishedVersion ? "Published" : "Draft"}
                       </Badge>
                     </div>
 

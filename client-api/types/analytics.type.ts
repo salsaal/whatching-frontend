@@ -143,6 +143,7 @@ export interface ConversationCostResponse {
     range: { start: string; end: string };
     groupBy: ConversationCostGroupBy;
     currency: string | null;
+    lastSyncedDate: string | null;
     totals: {
       conversationCount: number;
       cost: number;

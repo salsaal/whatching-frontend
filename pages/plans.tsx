@@ -244,6 +244,24 @@ export default function PlansPage() {
                   ))}
                 </ul>
 
+                {plan.bonusFeatures ? (
+                  <div className="mt-5 border-t pt-5">
+                    <p className="mb-3 text-sm font-semibold">
+                      {plan.bonusFeatures.title}
+                    </p>
+                    <ul className="space-y-3">
+                      {plan.bonusFeatures.items.map((feature) => (
+                        <li key={feature} className="flex gap-2 text-sm">
+                          <Check className="mt-0.5 size-4 shrink-0 text-primary" />
+                          <span className="text-muted-foreground">
+                            {feature}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+
                 {plan.comingSoon?.length ? (
                   <div className="mt-5 border-t pt-5">
                     <p className="mb-3 text-sm font-semibold">

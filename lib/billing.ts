@@ -13,6 +13,7 @@ export type PlanDefinition = {
   description: string;
   highlighted?: boolean;
   features: string[];
+  bonusFeatures?: { title: string; items: string[] };
   comingSoon?: string[];
 };
 
@@ -35,24 +36,22 @@ export const plans: PlanDefinition[] = [
     description: "Ideal for small businesses",
     features: [
       "Bulk WhatsApp Messaging",
-      "5,000 Subscribers",
+      "10k WhatsApp Contacts",
+      "Automatic Lead Qualification",
       "0% Markup Fees",
-      "Owner + 2 Team Members",
-      "Role-Based Team Permissions",
       "Drag & Drop Chatbot Builder",
+      "Automated Follow Up Bot",
       "WhatsApp AI Agent",
-      "100,000 AI Message Tokens",
+      "1M AI Message Tokens",
+      "Owner + 2 Team Members",
+      "Sync WhatsApp Business App",
       "Single Phone Number Integration",
-      "Coexistence with WhatsApp Business App",
       "Messaging Template Management",
       "Analytics Dashboard",
-      "Unlimited Free Incoming Conversations",
-      "Unlimited Chatbot Sessions",
-      "Multi Agent Shared Inbox",
-      "Automated Follow Up Bot",
-      "WhatsApp Chat Widget",
-      "Dedicated Customer Database"
-    ]
+      "Unlimited Free Incoming Conversation",
+      "Multi Agent Shared Inbox"
+    ],
+    comingSoon: ["Track Meta Ad Campaign"]
   },
   {
     id: "pro",
@@ -63,22 +62,23 @@ export const plans: PlanDefinition[] = [
     highlighted: true,
     features: [
       "Includes all Basic features",
-      "15,000 Subscribers",
-      "0% Markup Fees",
-      "Up to 2 Phone Numbers per Organization",
+      "25k WhatsApp Contacts",
+      "Upto 2 Phone Numbers per Organization",
       "Owner + 5 Team Members",
       "Role-Based Team Permissions",
-      "Unlimited AI Message Tokens",
-      "Coexistence with WhatsApp Business App",
-      "WhatsApp AI Agent",
-      'Remove "Powered by Whatching" Branding'
+      "3M AI Message Tokens"
     ],
-    comingSoon: [
-      "Instagram Automations",
-      "Drag & Drop Chatbot Builder for Instagram",
-      "Instagram AI Agent",
-      "Automated Instagram Comments Reply"
-    ]
+    bonusFeatures: {
+      title: "Instagram",
+      items: [
+        "Instagram Automations",
+        "Unlimited Instagram Conversations",
+        "Drag & Drop Chatbot Builder for Instagram",
+        "Instagram AI Agent",
+        "Automated Instagram Comments Reply"
+      ]
+    },
+    comingSoon: ["Whatsapp Forms", "Track Meta Ad Campaign"]
   },
   {
     id: "enterprise",

@@ -120,6 +120,7 @@ export const MEDIA_ENDPOINTS = {
 export const BROADCAST_ENDPOINTS = {
   GET_ALL: `${ORGANIZATIONS_BASE}/broadcasts`,
   CREATE: `${ORGANIZATIONS_BASE}/broadcasts`,
+  AUDIENCE_COUNT: `${ORGANIZATIONS_BASE}/broadcasts/audience/count`,
   GET_BY_ID: (broadcastId: string) =>
     `${ORGANIZATIONS_BASE}/broadcasts/${broadcastId}`,
   START: (broadcastId: string) =>
@@ -163,8 +164,14 @@ export const BOT_ENDPOINTS = {
   KNOWLEDGE_UPLOAD: `${BOT_BASE}/knowledge-sources/upload`,
   KNOWLEDGE_SOURCE_BY_ID: (sourceId: string) =>
     `${BOT_BASE}/knowledge-sources/${sourceId}`,
+  KNOWLEDGE_SOURCE_TOGGLE: (sourceId: string) =>
+    `${BOT_BASE}/knowledge-sources/${sourceId}/toggle`,
   KNOWLEDGE_REINGEST: (sourceId: string) =>
     `${BOT_BASE}/knowledge-sources/${sourceId}/reingest`,
+  KNOWLEDGE_CHUNKS: (sourceId: string) =>
+    `${BOT_BASE}/knowledge-sources/${sourceId}/chunks`,
+  KNOWLEDGE_CHUNK_BY_ID: (chunkId: string) =>
+    `${BOT_BASE}/knowledge-chunks/${chunkId}`,
   STATUS: `${BOT_BASE}/status`
 };
 

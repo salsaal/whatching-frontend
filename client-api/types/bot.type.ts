@@ -166,8 +166,17 @@ export interface KnowledgeSource {
   ingestError?: string;
   chunkCount?: number;
   lastIngestedAt?: string;
+  disabledAt?: string | null;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface KnowledgeChunk {
+  _id: string;
+  order: number;
+  content: string;
+  tokenEstimate: number;
+  disabledAt?: string | null;
 }
 
 export interface BotStatus {
@@ -206,6 +215,12 @@ export type KnowledgeSourcesResponse = ApiResponse<{
 }>;
 export type KnowledgeSourceResponse = ApiResponse<{
   source: KnowledgeSource;
+}>;
+export type KnowledgeChunksResponse = ApiResponse<{
+  chunks: KnowledgeChunk[];
+}>;
+export type KnowledgeChunkResponse = ApiResponse<{
+  chunk: KnowledgeChunk;
 }>;
 export type BotStatusResponse = ApiResponse<{
   status: BotStatus;

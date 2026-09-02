@@ -1,6 +1,7 @@
 import api from "../axiosInstance";
 import { BROADCAST_ENDPOINTS } from "../endpoints";
 import {
+  BroadcastAudience,
   BroadcastResponse,
   BroadcastRetryResponse,
   BroadcastListParams,
@@ -37,6 +38,16 @@ export const createBroadcast = async (
   const res = await api.post<BroadcastResponse>(
     BROADCAST_ENDPOINTS.CREATE,
     payload
+  );
+  return res.data;
+};
+
+export const previewBroadcastAudienceCount = async (
+  audience: BroadcastAudience
+): Promise<ApiResponse<{ count: number }>> => {
+  const res = await api.post<ApiResponse<{ count: number }>>(
+    BROADCAST_ENDPOINTS.AUDIENCE_COUNT,
+    { audience }
   );
   return res.data;
 };

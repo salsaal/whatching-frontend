@@ -24,6 +24,7 @@ import {
   createBroadcast,
   getAllBroadcasts,
   getBroadcastById,
+  previewBroadcastAudienceCount,
   startBroadcast
 } from "@/client-api/functions/broadcasts";
 import { getBotCanvasTriggers } from "@/client-api/functions/bot";
@@ -379,6 +380,36 @@ export default function BroadcastsPage() {
     enabled: Boolean(isCreateOpen && senderPhoneNumberId),
     refetchOnMount: "always"
   });
+  const currentAudience = useMemo<BroadcastAudience>(() => {
+    if (audienceMode === "tags") {
+      return { mode: "tags", tags: selectedTags, tagMatch: "any" };
+    }
+    if (audienceMode === "specific") {
+      return { mode: "specific", subscriberIds: selectedSubscriberIds };
+    }
+    if (audienceMode === "campaign") {
+      return { mode: "campaign", campaignSourceIds: selectedCampaignSourceIds };
+    }
+    return { mode: "all" };
+  }, [
+    audienceMode,
+    selectedTags,
+    selectedSubscriberIds,
+    selectedCampaignSourceIds
+  ]);
+  const isAudienceSelectionReady =
+    audienceMode === "all" ||
+    (audienceMode === "tags" && selectedTags.length > 0) ||
+    (audienceMode === "specific" && selectedSubscriberIds.length > 0) ||
+    (audienceMode === "campaign" && selectedCampaignSourceIds.length > 0);
+  const { data: audienceCountData, isFetching: isAudienceCountLoading } =
+    useQuery({
+      queryKey: ["broadcast-audience-count", currentAudience],
+      queryFn: () => previewBroadcastAudienceCount(currentAudience),
+      enabled: isCreateOpen && isAudienceSelectionReady,
+      placeholderData: (previous) => previous
+    });
+  const audienceCount = audienceCountData?.data?.count;
   const { data: selectedBroadcastData, refetch: refetchSelectedBroadcast } =
     useQuery({
       queryKey: ["broadcast-preview", selectedBroadcastId],
@@ -645,20 +676,7 @@ export default function BroadcastsPage() {
       return;
     }
 
-    const audience: BroadcastAudience =
-      audienceMode === "tags"
-        ? { mode: "tags", tags: selectedTags, tagMatch: "any" }
-        : audienceMode === "specific"
-          ? {
-              mode: "specific",
-              subscriberIds: selectedSubscriberIds
-            }
-          : audienceMode === "campaign"
-            ? {
-                mode: "campaign",
-                campaignSourceIds: selectedCampaignSourceIds
-              }
-            : { mode: "all" };
+    const audience = currentAudience;
 
     const components = buildBroadcastComponents(
       bodyVariables,
@@ -1282,6 +1300,26 @@ export default function BroadcastsPage() {
                     )
                   )}
                 </div>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {!isAudienceSelectionReady ? (
+                    audienceMode === "tags"
+                      ? "Select at least one tag to see how many subscribers will receive this broadcast."
+                      : audienceMode === "campaign"
+                        ? "Select at least one campaign to see how many subscribers will receive this broadcast."
+                        : "Select at least one subscriber to see the recipient count."
+                  ) : isAudienceCountLoading && audienceCount === undefined ? (
+                    "Counting matching subscribers..."
+                  ) : (
+                    <>
+                      <span className="font-heading font-semibold text-foreground">
+                        {(audienceCount ?? 0).toLocaleString("en-IN")}
+                      </span>{" "}
+                      subscriber{audienceCount === 1 ? "" : "s"} will receive
+                      this broadcast
+                      {isAudienceCountLoading ? " (updating...)" : ""}
+                    </>
+                  )}
+                </p>
               </div>
 
               {audienceMode === "tags" && (

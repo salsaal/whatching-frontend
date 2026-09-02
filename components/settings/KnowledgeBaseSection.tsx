@@ -1,5 +1,5 @@
 import { ChangeEvent, useRef, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Eye,
   FileText,
@@ -16,8 +16,11 @@ import { toast } from "sonner";
 import {
   createKnowledgeTextSource,
   deleteKnowledgeSource,
+  listKnowledgeChunks,
   listKnowledgeSources,
   reingestKnowledgeSource,
+  toggleKnowledgeChunk,
+  toggleKnowledgeSource,
   uploadKnowledgeSource
 } from "@/client-api/functions/bot";
 import { KnowledgeSource } from "@/client-api/types/bot.type";
@@ -43,7 +46,9 @@ import {
   SelectTrigger,
   SelectValue
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 import { useOrganizationStore } from "@/stores/organizationStore";
 
 type SourceFormType = "text" | "faq" | "file";
@@ -86,6 +91,28 @@ export function KnowledgeBaseSection() {
 
   const sources = data?.data?.sources || [];
 
+  const queryClient = useQueryClient();
+  const chunksQueryKey = ["knowledge-chunks", selectedSource?._id];
+  const { data: chunksData, isLoading: isLoadingChunks } = useQuery({
+    queryKey: chunksQueryKey,
+    queryFn: () => listKnowledgeChunks(selectedSource!._id),
+    enabled: Boolean(selectedSource?._id)
+  });
+  const chunks = chunksData?.data?.chunks || [];
+
+  const { mutate: toggleChunkMutate, isPending: isTogglingChunk } = useMutation(
+    {
+      mutationFn: toggleKnowledgeChunk,
+      meta: { showToast: false },
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: chunksQueryKey });
+      },
+      onError: () => {
+        toast.error("Couldn't update that chunk. Try again.");
+      }
+    }
+  );
+
   const { mutate: createText, isPending: isCreating } = useMutation({
     mutationFn: createKnowledgeTextSource,
     onSuccess: () => {
@@ -116,6 +143,19 @@ export function KnowledgeBaseSection() {
       refetch();
     }
   });
+
+  const { mutate: toggleSourceMutate, isPending: isTogglingSource } =
+    useMutation({
+      mutationFn: toggleKnowledgeSource,
+      meta: { showToast: false },
+      onSuccess: (res) => {
+        toast.success(res.message || "Knowledge source updated.");
+        refetch();
+      },
+      onError: () => {
+        toast.error("Couldn't update that source. Try again.");
+      }
+    });
 
   const { mutate: reingestSource } = useMutation({
     mutationFn: reingestKnowledgeSource,
@@ -210,8 +250,15 @@ export function KnowledgeBaseSection() {
         ) : sources.length ? (
           sources.map((source) => {
             const Icon = sourceIcon(source.type);
+            const isSourceEnabled = !source.disabledAt;
             return (
-              <Card key={source._id} className="rounded-lg !p-0">
+              <Card
+                key={source._id}
+                className={cn(
+                  "rounded-lg !p-0",
+                  !isSourceEnabled && "opacity-60"
+                )}
+              >
                 <CardContent className="flex items-center gap-3 p-4">
                   <div className="flex size-10 shrink-0 items-center justify-center rounded-sm bg-primary/10 text-primary">
                     <Icon className="size-5" />
@@ -230,6 +277,9 @@ export function KnowledgeBaseSection() {
                       >
                         {source.status}
                       </Badge>
+                      {!isSourceEnabled && (
+                        <Badge variant="secondary">Disabled</Badge>
+                      )}
                     </div>
                     <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
                       <span>{source.chunkCount || 0} chunks</span>
@@ -244,6 +294,21 @@ export function KnowledgeBaseSection() {
                       )}
                     </div>
                   </div>
+                  <Switch
+                    checked={isSourceEnabled}
+                    disabled={isTogglingSource}
+                    title={
+                      isSourceEnabled
+                        ? "Disable this source for AI fallback"
+                        : "Enable this source for AI fallback"
+                    }
+                    onCheckedChange={(checked) =>
+                      toggleSourceMutate({
+                        sourceId: source._id,
+                        disabled: !checked
+                      })
+                    }
+                  />
                   <Button
                     size="icon"
                     variant="outline"
@@ -556,6 +621,62 @@ export function KnowledgeBaseSection() {
                   {selectedSource.ingestError}
                 </div>
               )}
+
+              <div>
+                <p className="mb-2 text-xs font-medium text-muted-foreground">
+                  Chunks -- toggle off any the AI shouldn&apos;t use, without
+                  deleting them
+                </p>
+                {isLoadingChunks ? (
+                  <ListLoadingSkeleton rows={3} />
+                ) : chunks.length ? (
+                  <div className="space-y-2">
+                    {chunks.map((chunk) => {
+                      const isEnabled = !chunk.disabledAt;
+                      return (
+                        <div
+                          key={chunk._id}
+                          className="flex items-start gap-3 rounded-md border p-3"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p
+                              className={cn(
+                                "line-clamp-3 text-sm",
+                                !isEnabled && "text-muted-foreground line-through"
+                              )}
+                            >
+                              {chunk.content}
+                            </p>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              Chunk {chunk.order + 1} &middot;{" "}
+                              {chunk.tokenEstimate} tokens
+                            </p>
+                          </div>
+                          <Switch
+                            checked={isEnabled}
+                            disabled={isTogglingChunk}
+                            title={
+                              isEnabled
+                                ? "Disable this chunk"
+                                : "Enable this chunk"
+                            }
+                            onCheckedChange={(checked) =>
+                              toggleChunkMutate({
+                                chunkId: chunk._id,
+                                disabled: !checked
+                              })
+                            }
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+                    No chunks stored for this source.
+                  </p>
+                )}
+              </div>
             </div>
           )}
           {selectedSource && (

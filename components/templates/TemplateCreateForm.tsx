@@ -314,6 +314,13 @@ export default function TemplateCreateForm({
     templateType === "TEXT" || templateType === "LIMITED_TIME_OFFER";
   const isEditing = Boolean(initialTemplate);
   const isDraftEdit = editKind === "draft";
+  // A draft was never submitted to Meta, so it's still freely editable in
+  // every way (structure included). Only an already-submitted template is
+  // subject to Meta's real edit restrictions: name/category/language/type
+  // and button structure (add/remove/retype) can't change post-creation,
+  // but content -- body/header/footer text and existing button labels/
+  // values -- can, as long as it isn't mid-review.
+  const isMetaTemplateEdit = isEditing && !isDraftEdit;
   const isPendingEdit =
     initialTemplate?.status?.toUpperCase() === "PENDING" ||
     initialTemplate?.status?.toLowerCase() === "pending_review";
@@ -840,7 +847,7 @@ export default function TemplateCreateForm({
               <Select
                 value={category}
                 onValueChange={(value) => setCategory(value)}
-                disabled={isEditing}
+                disabled={isMetaTemplateEdit}
               >
                 <SelectTrigger className="mt-2 h-11 w-full border-0 bg-muted/70 shadow-none">
                   <SelectValue />
@@ -860,7 +867,7 @@ export default function TemplateCreateForm({
               <Select
                 value={language}
                 onValueChange={(value) => setLanguage(value)}
-                disabled={!canEditFields}
+                disabled={isMetaTemplateEdit || !canEditFields}
               >
                 <SelectTrigger className="mt-2 h-11 w-full border-0 bg-muted/70 shadow-none">
                   <SelectValue />
@@ -883,7 +890,7 @@ export default function TemplateCreateForm({
               onChange={(event) =>
                 setName(sanitizeTemplateName(event.target.value))
               }
-              disabled={!canEditFields}
+              disabled={isMetaTemplateEdit || !canEditFields}
               placeholder="seasonal_promo_blast"
               className="mt-2 h-11 border-0 bg-muted/70 shadow-none"
             />
@@ -897,7 +904,7 @@ export default function TemplateCreateForm({
             <Select
               value={templateType}
               onValueChange={(value) => {
-                if (isEditing) return;
+                if (isMetaTemplateEdit) return;
 
                 const nextType = value as TemplateCreationType;
                 setTemplateType(nextType);
@@ -915,7 +922,7 @@ export default function TemplateCreateForm({
                   setSelectedMediaUrl("");
                 }
               }}
-              disabled={isEditing}
+              disabled={isMetaTemplateEdit}
             >
               <SelectTrigger className="mt-2 h-11 w-full border-0 bg-muted/70 shadow-none">
                 <SelectValue />
@@ -1237,7 +1244,7 @@ export default function TemplateCreateForm({
           <RadioGroup
             value={actionMode}
             onValueChange={(value) => setActionMode(value as ActionMode)}
-            disabled={isEditing || !canEditFields}
+            disabled={isMetaTemplateEdit || !canEditFields}
             className="grid gap-3 sm:grid-cols-4"
           >
             {[
@@ -1290,7 +1297,7 @@ export default function TemplateCreateForm({
                         type="button"
                         variant="outline"
                         disabled={
-                          isEditing ||
+                          isMetaTemplateEdit ||
                           !canEditFields ||
                           totalButtonsLeft <= 0 ||
                           (option.value === "URL" && urlButtonsLeft <= 0) ||
@@ -1327,7 +1334,7 @@ export default function TemplateCreateForm({
                       onValueChange={(value) =>
                         updateButtonType(index, value as TemplateButtonType)
                       }
-                      disabled={isEditing || !canEditFields}
+                      disabled={isMetaTemplateEdit || !canEditFields}
                     >
                       <SelectTrigger className="h-10 w-full border-0 bg-white shadow-none">
                         <SelectValue />
@@ -1346,7 +1353,7 @@ export default function TemplateCreateForm({
                       onChange={(event) =>
                         updateButton(index, "text", event.target.value)
                       }
-                      disabled={isEditing || !canEditFields}
+                      disabled={!canEditFields}
                       maxLength={25}
                       placeholder="Button title"
                       className={cn(
@@ -1368,7 +1375,7 @@ export default function TemplateCreateForm({
                         onChange={(event) =>
                           updateButton(index, "url", event.target.value)
                         }
-                        disabled={isEditing || !canEditFields}
+                        disabled={!canEditFields}
                         placeholder="https://whatching.com/sale"
                         className="h-10 border-0 bg-white shadow-none"
                       />
@@ -1383,7 +1390,7 @@ export default function TemplateCreateForm({
                             event.target.value
                           )
                         }
-                        disabled={isEditing || !canEditFields}
+                        disabled={!canEditFields}
                         placeholder="+918777019999"
                         className="h-10 border-0 bg-white shadow-none"
                       />
@@ -1400,7 +1407,7 @@ export default function TemplateCreateForm({
                       size="icon"
                       className="size-10 text-muted-foreground hover:text-destructive"
                       onClick={() => removeButton(index)}
-                      disabled={isEditing || !canEditFields}
+                      disabled={isMetaTemplateEdit || !canEditFields}
                     >
                       <Trash2 className="size-4" />
                     </Button>

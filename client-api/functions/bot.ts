@@ -8,6 +8,8 @@ import {
   BotSettingsPatch,
   BotSettingsResponse,
   BotStatusResponse,
+  KnowledgeChunkResponse,
+  KnowledgeChunksResponse,
   KnowledgeSourceResponse,
   KnowledgeSourcesResponse
 } from "../types/bot.type";
@@ -234,11 +236,48 @@ export const deleteKnowledgeSource = async (
   return res.data;
 };
 
+export const toggleKnowledgeSource = async ({
+  sourceId,
+  disabled
+}: {
+  sourceId: string;
+  disabled: boolean;
+}): Promise<KnowledgeSourceResponse> => {
+  const res = await api.patch<KnowledgeSourceResponse>(
+    BOT_ENDPOINTS.KNOWLEDGE_SOURCE_TOGGLE(sourceId),
+    { disabled }
+  );
+  return res.data;
+};
+
 export const reingestKnowledgeSource = async (
   sourceId: string
 ): Promise<KnowledgeSourceResponse> => {
   const res = await api.post<KnowledgeSourceResponse>(
     BOT_ENDPOINTS.KNOWLEDGE_REINGEST(sourceId)
+  );
+  return res.data;
+};
+
+export const listKnowledgeChunks = async (
+  sourceId: string
+): Promise<KnowledgeChunksResponse> => {
+  const res = await api.get<KnowledgeChunksResponse>(
+    BOT_ENDPOINTS.KNOWLEDGE_CHUNKS(sourceId)
+  );
+  return res.data;
+};
+
+export const toggleKnowledgeChunk = async ({
+  chunkId,
+  disabled
+}: {
+  chunkId: string;
+  disabled: boolean;
+}): Promise<KnowledgeChunkResponse> => {
+  const res = await api.patch<KnowledgeChunkResponse>(
+    BOT_ENDPOINTS.KNOWLEDGE_CHUNK_BY_ID(chunkId),
+    { disabled }
   );
   return res.data;
 };

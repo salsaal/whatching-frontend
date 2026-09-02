@@ -451,7 +451,8 @@ export default function OverviewPage() {
       value: formatCompactNumber(
         activeOrganization?.usage?.subscribersCount || 0
       ),
-      icon: Users
+      icon: Users,
+      href: "/contacts"
     },
     isOwner && typeof aiTokensRemaining === "number"
       ? {
@@ -672,7 +673,10 @@ export default function OverviewPage() {
                   <p
                     className={
                       stat.tooltip
-                        ? "cursor-help text-sm text-muted-foreground underline decoration-dotted"
+                        ? cn(
+                            "text-sm text-muted-foreground underline decoration-dotted",
+                            stat.href ? "cursor-pointer" : "cursor-help"
+                          )
                         : "text-sm text-muted-foreground"
                     }
                     title={stat.tooltip}
@@ -743,13 +747,6 @@ export default function OverviewPage() {
                 )}
                 Sync status
               </Button>
-              <button
-                type="button"
-                className="text-sm text-muted-foreground underline-offset-2 hover:text-primary hover:underline"
-                onClick={() => setIsManualConnectOpen(true)}
-              >
-                Connect another number manually
-              </button>
             </div>
           </section>
         ) : (

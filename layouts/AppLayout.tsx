@@ -2,6 +2,8 @@ import {
   AlertCircle,
   BarChart3,
   Bot,
+  Check,
+  ChevronsUpDown,
   Megaphone,
   Contact,
   FileText,
@@ -41,6 +43,14 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger
+} from "@/components/ui/dropdown-menu";
 import { WhatsAppNumberSwitcher } from "@/components/whatsapp/WhatsAppNumberSwitcher";
 import assets from "@/json/assets";
 import {
@@ -50,7 +60,7 @@ import {
 } from "@/lib/billing";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
-import { useOrganizationStore } from "@/stores/organizationStore";
+import { Organization, useOrganizationStore } from "@/stores/organizationStore";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -86,14 +96,22 @@ export default function AppLayout({
   const logout = useAuthStore((state) => state.logout);
   const {
     activeOrganization,
+    organizations,
     integration,
     hasHydrated,
     setIntegration,
+    setActiveOrganization,
     upsertOrganization,
     clearOrganizations
   } = useOrganizationStore();
 
   const activeOrgId = activeOrganization?._id;
+
+  const handleSwitchOrganization = (organization: Organization) => {
+    if (organization._id === activeOrgId) return;
+    setActiveOrganization(organization);
+    router.push("/overview");
+  };
 
   const { data: organizationData } = useQuery({
     queryKey: ["organization", activeOrgId],
@@ -170,7 +188,7 @@ export default function AppLayout({
   }, [activeOrganization, hasHydrated, router]);
 
   const renderNavLinks = (mobile = false) => (
-    <nav className={cn("space-y-1", mobile ? "px-0" : "px-3 py-4")}>
+    <nav className={cn("space-y-1", mobile ? "px-0" : "px-3 pt-8 pb-4")}>
       {navigation.map((item) => {
         const Icon = item.icon;
         const isActive =
@@ -280,8 +298,13 @@ export default function AppLayout({
 
   return (
     <div className="min-h-screen bg-[#f7faf8] text-foreground">
-      <aside className="group/sidebar fixed inset-y-0 left-0 z-[130] hidden w-20 overflow-hidden bg-white shadow-xs transition-all duration-200 hover:w-64 lg:block">
-        <div className="relative flex h-18 items-center px-4 pointer-events-none">
+      <aside className="group/sidebar fixed inset-y-0 left-0 z-[130] hidden w-20 flex-col overflow-hidden bg-white shadow-xs transition-all duration-200 hover:w-64 lg:flex">
+        <button
+          type="button"
+          onClick={() => router.push("/organisations")}
+          title="Switch organisation"
+          className="relative flex h-18 w-full shrink-0 cursor-pointer items-center border-b px-4"
+        >
           {/* Logo */}
           <div className="w-[150px] opacity-0 transition-opacity duration-200 group-hover/sidebar:opacity-100">
             <Image
@@ -294,20 +317,20 @@ export default function AppLayout({
 
           {/* Icon */}
           <div className="absolute left-1/2 -translate-x-1/2 opacity-100 transition-opacity duration-200 group-hover/sidebar:opacity-0">
-            <div className="flex size-10 items-center justify-center rounded-sm bg-primary/10">
+            <div className="flex size-10 items-center justify-center overflow-hidden rounded-sm bg-primary/10">
               {/* <MessageCircle className="size-5 text-primary" /> */}
               <Image
                 src={assets.whatchingIcon}
                 alt="Whatching"
                 height={200}
                 width={200}
-                className="w-[100px] h-[100px] object-cover text-primary"
+                className="h-[100px] w-[100px] object-cover text-primary"
               />
             </div>
           </div>
-        </div>
+        </button>
 
-        <div className="flex h-[calc(100%-72px)] flex-col justify-between">
+        <div className="flex min-h-0 flex-1 flex-col justify-between overflow-y-auto">
           {renderNavLinks()}
           {renderAccountLinks()}
         </div>
@@ -328,12 +351,41 @@ export default function AppLayout({
                 </Button>
                 <div>
                   <p className="text-xs text-muted-foreground">Organisation</p>
-                  <button
-                    onClick={() => router.push("/organisations")}
-                    className="mt-1 text-left font-heading text-lg font-semibold hover:text-primary"
-                  >
-                    {activeOrganization?.name || "Select organisation"}
-                  </button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        className="mt-1 flex cursor-pointer items-center gap-1 text-left font-heading text-lg font-semibold hover:text-primary"
+                      >
+                        <span className="max-w-[220px] truncate">
+                          {activeOrganization?.name || "Select organisation"}
+                        </span>
+                        <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="w-64">
+                      <DropdownMenuLabel>Switch organisation</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      {organizations.map((organization) => (
+                        <DropdownMenuItem
+                          key={organization._id}
+                          onSelect={() => handleSwitchOrganization(organization)}
+                          className="justify-between gap-2"
+                        >
+                          <span className="truncate">{organization.name}</span>
+                          {organization._id === activeOrgId && (
+                            <Check className="size-4 shrink-0 text-primary" />
+                          )}
+                        </DropdownMenuItem>
+                      ))}
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onSelect={() => router.push("/organisations")}
+                      >
+                        Manage organisations
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </div>
 

@@ -17,6 +17,7 @@ import {
   YAxis
 } from "recharts";
 import {
+  AlertCircle,
   ChevronDown,
   Contact,
   Download,
@@ -397,10 +398,24 @@ export default function AnalyticsPage() {
                 <Skeleton className="h-96 rounded-lg" />
               </div>
             ) : (
-              <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
-                <SpendHeroCard costs={costs} formatCost={formatCost} />
-                <VolumeSummaryCard rows={volumeRows} />
-              </div>
+              <>
+                {!costs.lastSyncedDate && (
+                  <div className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+                    <AlertCircle className="mt-0.5 size-4 shrink-0" />
+                    <p>
+                      Spend hasn&apos;t synced from Meta yet, so the figures
+                      below aren&apos;t confirmed zero -- they just have no
+                      data. Conversation cost snapshots are populated by a
+                      daily background sync; check back after it runs, or
+                      confirm the sync worker is deployed and running.
+                    </p>
+                  </div>
+                )}
+                <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+                  <SpendHeroCard costs={costs} formatCost={formatCost} />
+                  <VolumeSummaryCard rows={volumeRows} />
+                </div>
+              </>
             )}
 
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
@@ -593,7 +608,7 @@ function SecondaryBreakdowns({
   broadcastFunnel: Array<{ stage: string; value: number; fill: string }>;
   collapsible: boolean;
 }) {
-  const [isOpen, setIsOpen] = useState(!collapsible);
+  const [isOpen, setIsOpen] = useState(true);
   const panelNames =
     "Conversation status · Bot vs agent · Channels · New contacts · Broadcasts · Integration health";
 
