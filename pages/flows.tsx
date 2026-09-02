@@ -299,7 +299,9 @@ export default function FlowsPage() {
                           Updated {formatDate(canvas.updatedAt)}
                         </p>
                       </div>
-                      <Badge variant={hasPublishedVersion ? "default" : "secondary"}>
+                      <Badge
+                        variant={hasPublishedVersion ? "default" : "secondary"}
+                      >
                         {hasPublishedVersion ? "Published" : "Draft"}
                       </Badge>
                     </div>

@@ -1302,11 +1302,13 @@ export default function BroadcastsPage() {
                 </div>
                 <p className="mt-2 text-sm text-muted-foreground">
                   {!isAudienceSelectionReady ? (
-                    audienceMode === "tags"
-                      ? "Select at least one tag to see how many subscribers will receive this broadcast."
-                      : audienceMode === "campaign"
-                        ? "Select at least one campaign to see how many subscribers will receive this broadcast."
-                        : "Select at least one subscriber to see the recipient count."
+                    audienceMode === "tags" ? (
+                      "Select at least one tag to see how many subscribers will receive this broadcast."
+                    ) : audienceMode === "campaign" ? (
+                      "Select at least one campaign to see how many subscribers will receive this broadcast."
+                    ) : (
+                      "Select at least one subscriber to see the recipient count."
+                    )
                   ) : isAudienceCountLoading && audienceCount === undefined ? (
                     "Counting matching subscribers..."
                   ) : (

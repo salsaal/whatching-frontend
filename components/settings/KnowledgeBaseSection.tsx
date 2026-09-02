@@ -642,7 +642,8 @@ export function KnowledgeBaseSection() {
                             <p
                               className={cn(
                                 "line-clamp-3 text-sm",
-                                !isEnabled && "text-muted-foreground line-through"
+                                !isEnabled &&
+                                  "text-muted-foreground line-through"
                               )}
                             >
                               {chunk.content}

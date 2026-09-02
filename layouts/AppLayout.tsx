@@ -369,7 +369,9 @@ export default function AppLayout({
                       {organizations.map((organization) => (
                         <DropdownMenuItem
                           key={organization._id}
-                          onSelect={() => handleSwitchOrganization(organization)}
+                          onSelect={() =>
+                            handleSwitchOrganization(organization)
+                          }
                           className="justify-between gap-2"
                         >
                           <span className="truncate">{organization.name}</span>

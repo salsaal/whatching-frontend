@@ -405,9 +405,9 @@ export default function AnalyticsPage() {
                     <p>
                       Spend hasn&apos;t synced from Meta yet, so the figures
                       below aren&apos;t confirmed zero -- they just have no
-                      data. Conversation cost snapshots are populated by a
-                      daily background sync; check back after it runs, or
-                      confirm the sync worker is deployed and running.
+                      data. Conversation cost snapshots are populated by a daily
+                      background sync; check back after it runs, or confirm the
+                      sync worker is deployed and running.
                     </p>
                   </div>
                 )}
