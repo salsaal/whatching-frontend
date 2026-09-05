@@ -3,7 +3,10 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { BadgeCheck, Megaphone } from "lucide-react";
 import { toast } from "sonner";
 
-import { listAdAccounts, selectAdAccount } from "@/client-api/functions/organizations";
+import {
+  listAdAccounts,
+  selectAdAccount
+} from "@/client-api/functions/organizations";
 import { Button } from "@/components/ui/button";
 import {
   Select,

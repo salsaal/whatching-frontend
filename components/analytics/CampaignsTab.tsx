@@ -34,11 +34,20 @@ const labelSourceBadge: Record<
   CampaignSource["labelSource"],
   { text: string; className: string }
 > = {
-  meta_api: { text: "Ads Manager name", className: "bg-primary/10 text-primary" },
+  meta_api: {
+    text: "Ads Manager name",
+    className: "bg-primary/10 text-primary"
+  },
   ref: { text: "From ref tag", className: "bg-primary/10 text-primary" },
   manual: { text: "Manually set", className: "bg-muted text-muted-foreground" },
-  headline: { text: "Guessed (headline)", className: "bg-amber-100 text-amber-800" },
-  fallback: { text: "Guessed (fallback)", className: "bg-amber-100 text-amber-800" }
+  headline: {
+    text: "Guessed (headline)",
+    className: "bg-amber-100 text-amber-800"
+  },
+  fallback: {
+    text: "Guessed (fallback)",
+    className: "bg-amber-100 text-amber-800"
+  }
 };
 
 function EditCampaignLabelDialog({
@@ -72,8 +81,8 @@ function EditCampaignLabelDialog({
         <DialogHeader>
           <DialogTitle>Rename campaign</DialogTitle>
           <DialogDescription>
-            Overrides the guessed label for every subscriber attributed to
-            this source. This can&apos;t be undone automatically.
+            Overrides the guessed label for every subscriber attributed to this
+            source. This can&apos;t be undone automatically.
           </DialogDescription>
         </DialogHeader>
         <Input
@@ -125,9 +134,7 @@ function CampaignPerformanceDialog({
     >
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>
-            {campaign?.campaignName || campaign?.label}
-          </DialogTitle>
+          <DialogTitle>{campaign?.campaignName || campaign?.label}</DialogTitle>
           <DialogDescription>
             Meta ad spend against your own WhatsApp funnel outcomes, last 30
             days.
@@ -253,7 +260,11 @@ export default function CampaignsTab() {
   const { data, isLoading, isError } = useQuery({
     queryKey: ["campaigns", sort, needsReviewOnly],
     queryFn: () =>
-      listCampaigns({ sort, limit: 50, needsReview: needsReviewOnly || undefined })
+      listCampaigns({
+        sort,
+        limit: 50,
+        needsReview: needsReviewOnly || undefined
+      })
   });
 
   const campaigns = data?.data.campaigns || [];
