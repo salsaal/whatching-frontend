@@ -13,6 +13,8 @@ export interface OrganizationMetaConfig {
   messagingLimitTier?: string;
   messagingLimitCount?: number;
   messagingLimitScope?: "business_portfolio";
+  adAccountId?: string;
+  adAccountName?: string;
 }
 
 export interface OrganizationUsage {

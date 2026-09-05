@@ -29,6 +29,7 @@ import {
   syncMetaIntegration,
   testWhatsAppOutboundReadiness
 } from "@/client-api/functions/organizations";
+import AdAccountConnection from "@/components/whatsapp/AdAccountConnection";
 import ManualConnectDialog from "@/components/whatsapp/ManualConnectDialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -949,6 +950,7 @@ export default function OverviewPage() {
           onAddNumber={startEmbeddedSignup}
           addingNumber={isConnectingMeta}
         />
+        <AdAccountConnection />
       </div>
       <Dialog open={isPaymentPromptOpen} onOpenChange={setIsPaymentPromptOpen}>
         <DialogContent>

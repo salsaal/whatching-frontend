@@ -609,3 +609,27 @@ export interface VerifyAiTokenTopupResponse {
     includedLimit: number;
   };
 }
+
+export interface AdAccount {
+  id: string;
+  name: string;
+  account_status?: number;
+  currency?: string;
+}
+
+export interface AdAccountsResponse {
+  status: string;
+  data: {
+    adAccounts: AdAccount[];
+    connectedAdAccountId: string | null;
+  };
+}
+
+export interface SelectAdAccountResponse {
+  status: string;
+  message: string;
+  data: {
+    adAccountId: string;
+    adAccountName: string | null;
+  };
+}

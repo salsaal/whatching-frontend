@@ -23,6 +23,7 @@ import {
   requestCoexistenceContactSync
 } from "@/client-api/functions/organizations";
 import {
+  addSubscriberTags,
   bulkDeleteSubscribers,
   createTag,
   deleteTag,
@@ -30,6 +31,7 @@ import {
   getAllSubscribers,
   getTags,
   importSubscribers,
+  removeSubscriberTag,
   updateSubscriber,
   updateTag
 } from "@/client-api/functions/subscribers";
@@ -297,10 +299,40 @@ export default function ContactsPage() {
   const { mutate: saveSubscriber, isPending: isSaving } = useMutation({
     mutationFn: async (payload: SubscriberPayload) => {
       if (selectedSubscriber) {
-        return updateSubscriber({
+        // The general update endpoint silently drops `tags` -- it's
+        // deliberately only settable through the dedicated attach/detach
+        // routes below, so a full desired-state array has to be diffed
+        // against what the subscriber already has.
+        const { tags: nextTags, ...corePayload } = payload;
+        const result = await updateSubscriber({
           subscriberId: selectedSubscriber._id,
-          payload
+          payload: corePayload
         });
+
+        if (nextTags) {
+          const previousTags = selectedSubscriber.tags || [];
+          const tagsToAdd = nextTags.filter(
+            (tag) => !previousTags.includes(tag)
+          );
+          const tagsToRemove = previousTags.filter(
+            (tag) => !nextTags.includes(tag)
+          );
+
+          if (tagsToAdd.length) {
+            await addSubscriberTags({
+              subscriberId: selectedSubscriber._id,
+              tags: tagsToAdd
+            });
+          }
+          for (const tag of tagsToRemove) {
+            await removeSubscriberTag({
+              subscriberId: selectedSubscriber._id,
+              tag
+            });
+          }
+        }
+
+        return result;
       }
 
       return importSubscribers({

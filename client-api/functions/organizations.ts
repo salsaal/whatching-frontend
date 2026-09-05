@@ -1,6 +1,7 @@
 import api from "../axiosInstance";
 import { ORGANIZATION_ENDPOINTS } from "../endpoints";
 import {
+  AdAccountsResponse,
   ConnectMetaPayload,
   CoexistenceContactSyncResponse,
   DeleteOrganizationResponse,
@@ -26,6 +27,7 @@ import {
   CreateSupportRequestPayload,
   ResumeSubscriptionResponse,
   RetryInvoiceResponse,
+  SelectAdAccountResponse,
   StartTrialResponse,
   SupportRequestResponse,
   SupportRequestsResponse,
@@ -126,6 +128,24 @@ export const syncMetaIntegration =
     );
     return res.data;
   };
+
+export const listAdAccounts = async (): Promise<AdAccountsResponse> => {
+  const res = await api.get<AdAccountsResponse>(
+    ORGANIZATION_ENDPOINTS.AD_ACCOUNTS
+  );
+  return res.data;
+};
+
+export const selectAdAccount = async (payload: {
+  adAccountId: string;
+  adAccountName?: string;
+}): Promise<SelectAdAccountResponse> => {
+  const res = await api.post<SelectAdAccountResponse>(
+    ORGANIZATION_ENDPOINTS.SELECT_AD_ACCOUNT,
+    payload
+  );
+  return res.data;
+};
 
 export const requestCoexistenceContactSync = async (
   payload: RequestCoexistenceContactSyncPayload = {}

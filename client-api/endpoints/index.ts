@@ -23,6 +23,8 @@ export const ORGANIZATION_ENDPOINTS = {
   CONNECT_META: `${ORGANIZATIONS_BASE}/connect-meta`,
   CONNECT_META_EMBEDDED_SIGNUP: `${ORGANIZATIONS_BASE}/connect-meta/embedded-signup`,
   SYNC_INTEGRATION: `${ORGANIZATIONS_BASE}/integration/sync`,
+  AD_ACCOUNTS: `${ORGANIZATIONS_BASE}/integration/ad-accounts`,
+  SELECT_AD_ACCOUNT: `${ORGANIZATIONS_BASE}/integration/ad-account`,
   COEXISTENCE_CONTACT_SYNC: `${ORGANIZATIONS_BASE}/integration/contact-sync`,
   TEMPLATE_INSIGHTS_STATUS: `${ORGANIZATIONS_BASE}/whatsapp/template-insights/status`,
   TEMPLATE_INSIGHTS_ENABLE: `${ORGANIZATIONS_BASE}/whatsapp/template-insights/enable`,
@@ -134,6 +136,10 @@ export const BROADCAST_ENDPOINTS = {
 export const ANALYTICS_ENDPOINTS = {
   DASHBOARD: `${ORGANIZATIONS_BASE}/analytics/dashboard`,
   CAMPAIGNS: `${ORGANIZATIONS_BASE}/analytics/campaigns`,
+  CAMPAIGN_BY_ID: (campaignSourceId: string) =>
+    `${ORGANIZATIONS_BASE}/analytics/campaigns/${campaignSourceId}`,
+  CAMPAIGN_PERFORMANCE: (campaignSourceId: string) =>
+    `${ORGANIZATIONS_BASE}/analytics/campaigns/${campaignSourceId}/performance`,
   CONVERSATION_COSTS: `${ORGANIZATIONS_BASE}/analytics/conversation-costs`,
   TEMPLATE_ANALYTICS: `${ORGANIZATIONS_BASE}/analytics/templates`
 };
