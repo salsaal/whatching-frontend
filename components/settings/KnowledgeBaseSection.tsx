@@ -157,7 +157,9 @@ export function KnowledgeBaseSection() {
       refetch();
     },
     onError: (error: AxiosError<{ message?: string }>) => {
-      toast.error(error.response?.data?.message || "Couldn't upload that file.");
+      toast.error(
+        error.response?.data?.message || "Couldn't upload that file."
+      );
     }
   });
 
@@ -201,7 +203,8 @@ export function KnowledgeBaseSection() {
     },
     onError: (error: AxiosError<{ message?: string }>) => {
       toast.error(
-        error.response?.data?.message || "Couldn't queue that source for re-ingestion."
+        error.response?.data?.message ||
+          "Couldn't queue that source for re-ingestion."
       );
     }
   });
@@ -749,7 +752,9 @@ export function KnowledgeBaseSection() {
           <AlertDialogHeader>
             <AlertDialogTitle>Archive this knowledge source?</AlertDialogTitle>
             <AlertDialogDescription>
-              {sourceToArchive?.title ? `"${sourceToArchive.title}"` : "This source"}{" "}
+              {sourceToArchive?.title
+                ? `"${sourceToArchive.title}"`
+                : "This source"}{" "}
               and all of its chunks will stop being used by the AI immediately.
               This can&apos;t be undone from here.
             </AlertDialogDescription>

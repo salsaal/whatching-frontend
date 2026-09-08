@@ -1383,10 +1383,7 @@ const localValidate = (nodes: BuilderNode[], edges: Edge[]) => {
       invalidIds.add(node.id);
       messages.push(`${title || "Block"}: name and trigger key are required.`);
     }
-    if (
-      node.data.blockType === "text" &&
-      !String(content.text || "").trim()
-    ) {
+    if (node.data.blockType === "text" && !String(content.text || "").trim()) {
       invalidIds.add(node.id);
       messages.push(`${title}: message text is required.`);
     }
@@ -1596,9 +1593,7 @@ const localValidate = (nodes: BuilderNode[], edges: Edge[]) => {
       cards.forEach((card, cardIndex) => {
         if (!String(card.bodyText || "").trim()) {
           invalidIds.add(node.id);
-          messages.push(
-            `${title}: card ${cardIndex + 1} needs body text.`
-          );
+          messages.push(`${title}: card ${cardIndex + 1} needs body text.`);
         }
         if (!["image", "video"].includes(String(card.mediaType || ""))) {
           invalidIds.add(node.id);
@@ -2395,7 +2390,9 @@ function FlowsBuilder() {
 
       const removableIds = changes
         .filter(
-          (change): change is Extract<NodeChange<BuilderNode>, { type: "remove" }> =>
+          (
+            change
+          ): change is Extract<NodeChange<BuilderNode>, { type: "remove" }> =>
             change.type === "remove" &&
             !defaultNodeIds.has(change.id) &&
             !lockedNodeIds.has(change.id)
@@ -2703,8 +2700,8 @@ function FlowsBuilder() {
         </header>
 
         <div className="border-b bg-amber-50 px-4 py-2 text-xs text-amber-800 lg:hidden">
-          The flow builder is drag-and-drop and works best on a larger
-          screen. Some panels may be hard to use here.
+          The flow builder is drag-and-drop and works best on a larger screen.
+          Some panels may be hard to use here.
         </div>
 
         <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[250px_minmax(0,1fr)_320px]">

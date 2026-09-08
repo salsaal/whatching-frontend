@@ -408,7 +408,10 @@ export default function BroadcastsPage() {
   const [debouncedAudience, setDebouncedAudience] =
     useState<BroadcastAudience>(currentAudience);
   useEffect(() => {
-    const timeout = setTimeout(() => setDebouncedAudience(currentAudience), 400);
+    const timeout = setTimeout(
+      () => setDebouncedAudience(currentAudience),
+      400
+    );
     return () => clearTimeout(timeout);
   }, [currentAudience]);
   const { data: audienceCountData, isFetching: isAudienceCountLoading } =

@@ -2932,9 +2932,9 @@ export function InstagramPage({
           isReady &&
           !enabledForPlan && (
             <div className="border-b bg-amber-50 px-5 py-2 text-xs text-amber-800">
-              Your current plan doesn&apos;t include Instagram automation.
-              You can keep building this flow, but saving and publishing
-              will be blocked until you upgrade.
+              Your current plan doesn&apos;t include Instagram automation. You
+              can keep building this flow, but saving and publishing will be
+              blocked until you upgrade.
             </div>
           )}
 
@@ -3572,7 +3572,8 @@ export function InstagramPage({
       <AlertDialog
         open={Boolean(canvasToArchive)}
         onOpenChange={(open) => {
-          if (!open && !deleteCanvasMutation.isPending) setCanvasToArchive(null);
+          if (!open && !deleteCanvasMutation.isPending)
+            setCanvasToArchive(null);
         }}
       >
         <AlertDialogContent>

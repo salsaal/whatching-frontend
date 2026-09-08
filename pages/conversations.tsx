@@ -1573,8 +1573,7 @@ export default function ConversationsPage() {
     },
     onError: (error: AxiosError<{ message?: string }>) => {
       toast.error(
-        error.response?.data?.message ||
-          "Conversation could not be reassigned."
+        error.response?.data?.message || "Conversation could not be reassigned."
       );
     }
   });

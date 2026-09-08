@@ -63,8 +63,7 @@ function Button({
   // tooltip -- it never reaches assistive tech. Fall back to it for
   // aria-label so the button still has an accessible name; an explicit
   // aria-label passed in props always wins (spread order below).
-  const fallbackAriaLabel =
-    typeof tooltip === "string" ? tooltip : undefined;
+  const fallbackAriaLabel = typeof tooltip === "string" ? tooltip : undefined;
 
   const button = (
     <Comp

@@ -51,10 +51,15 @@ export class AppErrorBoundary extends Component<Props, State> {
             </p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => (window.location.href = "/")}>
+            <Button
+              variant="outline"
+              onClick={() => (window.location.href = "/")}
+            >
               Go to dashboard
             </Button>
-            <Button onClick={() => window.location.reload()}>Reload page</Button>
+            <Button onClick={() => window.location.reload()}>
+              Reload page
+            </Button>
           </div>
         </div>
       );
