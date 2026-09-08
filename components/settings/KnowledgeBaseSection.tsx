@@ -1,5 +1,6 @@
 import { ChangeEvent, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AxiosError } from "axios";
 import {
   Eye,
   FileText,
@@ -24,6 +25,16 @@ import {
   uploadKnowledgeSource
 } from "@/client-api/functions/bot";
 import { KnowledgeSource } from "@/client-api/types/bot.type";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -81,6 +92,8 @@ export function KnowledgeBaseSection() {
   const [selectedSource, setSelectedSource] = useState<KnowledgeSource | null>(
     null
   );
+  const [sourceToArchive, setSourceToArchive] =
+    useState<KnowledgeSource | null>(null);
   const [isAddSourceOpen, setIsAddSourceOpen] = useState(false);
 
   const { data, refetch, isLoading } = useQuery({
@@ -100,32 +113,41 @@ export function KnowledgeBaseSection() {
   });
   const chunks = chunksData?.data?.chunks || [];
 
-  const { mutate: toggleChunkMutate, isPending: isTogglingChunk } = useMutation(
-    {
-      mutationFn: toggleKnowledgeChunk,
-      meta: { showToast: false },
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: chunksQueryKey });
-      },
-      onError: () => {
-        toast.error("Couldn't update that chunk. Try again.");
-      }
+  const {
+    mutate: toggleChunkMutate,
+    isPending: isTogglingChunk,
+    variables: togglingChunkVariables
+  } = useMutation({
+    mutationFn: toggleKnowledgeChunk,
+    meta: { showToast: false },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: chunksQueryKey });
+    },
+    onError: () => {
+      toast.error("Couldn't update that chunk. Try again.");
     }
-  );
+  });
 
   const { mutate: createText, isPending: isCreating } = useMutation({
     mutationFn: createKnowledgeTextSource,
+    meta: { showToast: false },
     onSuccess: () => {
       setForm({ title: "", content: "" });
       setFaqEntries([emptyFaqEntry()]);
       setIsAddSourceOpen(false);
       toast.success("Knowledge source added.");
       refetch();
+    },
+    onError: (error: AxiosError<{ message?: string }>) => {
+      toast.error(
+        error.response?.data?.message || "Couldn't add that knowledge source."
+      );
     }
   });
 
   const { mutate: uploadFile, isPending: isUploading } = useMutation({
     mutationFn: uploadKnowledgeSource,
+    meta: { showToast: false },
     onSuccess: () => {
       setForm({ title: "", content: "" });
       setSourceFile(null);
@@ -133,35 +155,54 @@ export function KnowledgeBaseSection() {
       setIsAddSourceOpen(false);
       toast.success("File source uploaded.");
       refetch();
+    },
+    onError: (error: AxiosError<{ message?: string }>) => {
+      toast.error(error.response?.data?.message || "Couldn't upload that file.");
     }
   });
 
   const { mutate: deleteSource } = useMutation({
     mutationFn: deleteKnowledgeSource,
+    meta: { showToast: false },
     onSuccess: () => {
       toast.success("Knowledge source deleted.");
+      setSourceToArchive(null);
       refetch();
+    },
+    onError: (error: AxiosError<{ message?: string }>) => {
+      toast.error(
+        error.response?.data?.message || "Couldn't delete that source."
+      );
     }
   });
 
-  const { mutate: toggleSourceMutate, isPending: isTogglingSource } =
-    useMutation({
-      mutationFn: toggleKnowledgeSource,
-      meta: { showToast: false },
-      onSuccess: (res) => {
-        toast.success(res.message || "Knowledge source updated.");
-        refetch();
-      },
-      onError: () => {
-        toast.error("Couldn't update that source. Try again.");
-      }
-    });
+  const {
+    mutate: toggleSourceMutate,
+    isPending: isTogglingSource,
+    variables: togglingSourceVariables
+  } = useMutation({
+    mutationFn: toggleKnowledgeSource,
+    meta: { showToast: false },
+    onSuccess: (res) => {
+      toast.success(res.message || "Knowledge source updated.");
+      refetch();
+    },
+    onError: () => {
+      toast.error("Couldn't update that source. Try again.");
+    }
+  });
 
   const { mutate: reingestSource } = useMutation({
     mutationFn: reingestKnowledgeSource,
+    meta: { showToast: false },
     onSuccess: () => {
       toast.success("Knowledge source queued for re-ingestion.");
       refetch();
+    },
+    onError: (error: AxiosError<{ message?: string }>) => {
+      toast.error(
+        error.response?.data?.message || "Couldn't queue that source for re-ingestion."
+      );
     }
   });
 
@@ -296,7 +337,10 @@ export function KnowledgeBaseSection() {
                   </div>
                   <Switch
                     checked={isSourceEnabled}
-                    disabled={isTogglingSource}
+                    disabled={
+                      isTogglingSource &&
+                      togglingSourceVariables?.sourceId === source._id
+                    }
                     title={
                       isSourceEnabled
                         ? "Disable this source for AI fallback"
@@ -332,7 +376,7 @@ export function KnowledgeBaseSection() {
                     variant="outline"
                     className="cursor-pointer text-destructive hover:text-destructive"
                     tooltip="Archive this knowledge source"
-                    onClick={() => deleteSource(source._id)}
+                    onClick={() => setSourceToArchive(source)}
                   >
                     <Trash2 className="size-4" />
                   </Button>
@@ -655,7 +699,10 @@ export function KnowledgeBaseSection() {
                           </div>
                           <Switch
                             checked={isEnabled}
-                            disabled={isTogglingChunk}
+                            disabled={
+                              isTogglingChunk &&
+                              togglingChunkVariables?.chunkId === chunk._id
+                            }
                             title={
                               isEnabled
                                 ? "Disable this chunk"
@@ -693,6 +740,33 @@ export function KnowledgeBaseSection() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={Boolean(sourceToArchive)}
+        onOpenChange={(open) => !open && setSourceToArchive(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Archive this knowledge source?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {sourceToArchive?.title ? `"${sourceToArchive.title}"` : "This source"}{" "}
+              and all of its chunks will stop being used by the AI immediately.
+              This can&apos;t be undone from here.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-white hover:bg-destructive/90"
+              onClick={() =>
+                sourceToArchive && deleteSource(sourceToArchive._id)
+              }
+            >
+              Archive
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

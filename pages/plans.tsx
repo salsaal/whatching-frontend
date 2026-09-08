@@ -205,7 +205,7 @@ export default function PlansPage() {
                   </p>
                   {plan.monthlyPrice ? (
                     <p className="mt-1 text-xs text-muted-foreground">
-                      GST is calculated on the checkout page.
+                      +18% GST, added at checkout.
                     </p>
                   ) : null}
                 </div>

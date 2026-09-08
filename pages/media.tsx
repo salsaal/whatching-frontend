@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { AxiosError } from "axios";
+import { toast } from "sonner";
 
 import {
   bulkDeleteMedia,
@@ -101,19 +103,32 @@ export default function MediaPage() {
 
   const { mutate: uploadFiles, isPending: isUploading } = useMutation({
     mutationFn: uploadMedia,
+    meta: { showToast: false },
     onSuccess: () => {
       setSelectedIds([]);
       setUploadError("");
       refetch();
+    },
+    onError: (error: AxiosError<{ message?: string }>) => {
+      toast.error(
+        error.response?.data?.message ||
+          "Upload failed. Check the file and try again."
+      );
     }
   });
 
   const { mutate: deleteSelected, isPending: isDeleting } = useMutation({
     mutationFn: bulkDeleteMedia,
+    meta: { showToast: false },
     onSuccess: () => {
       setSelectedIds([]);
       setIsDeleteOpen(false);
       refetch();
+    },
+    onError: (error: AxiosError<{ message?: string }>) => {
+      toast.error(
+        error.response?.data?.message || "Couldn't delete the selected media."
+      );
     }
   });
 
@@ -256,7 +271,13 @@ export default function MediaPage() {
                 return (
                   <button
                     key={tab.value}
-                    onClick={() => setActiveTab(tab.value)}
+                    onClick={() => {
+                      // Selection is scoped to what's visible -- carrying
+                      // it across tabs let "Delete selected" silently
+                      // delete items the user could no longer see.
+                      setActiveTab(tab.value);
+                      setSelectedIds([]);
+                    }}
                     className={cn(
                       "inline-flex h-10 shrink-0 cursor-pointer items-center gap-2 rounded-sm px-3 text-sm font-medium text-muted-foreground transition hover:-translate-y-0.5 hover:bg-accent hover:text-accent-foreground",
                       active && "bg-primary/10 text-primary shadow-xs"
@@ -323,7 +344,10 @@ export default function MediaPage() {
                   </div>
                   <div className="space-y-2 p-4">
                     <div className="flex items-start justify-between gap-3">
-                      <p className="min-w-0 truncate font-medium">
+                      <p
+                        className="min-w-0 truncate font-medium"
+                        title={item.name}
+                      >
                         {item.name}
                       </p>
                       <a

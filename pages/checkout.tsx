@@ -667,8 +667,8 @@ export default function CheckoutPage() {
                     </span>
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Prices shown are inclusive of GST on the plan page; this
-                    checkout shows the GST split clearly.
+                    Prices shown on the plan page are exclusive of GST; this
+                    checkout shows the GST added on top.
                   </p>
                 </div>
               </div>

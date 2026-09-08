@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { AxiosError } from "axios";
 import { toast } from "sonner";
 
 import {
@@ -424,28 +425,46 @@ export default function AgentsSettingsPage() {
 
   const { mutate: createAgent, isPending: isAdding } = useMutation({
     mutationFn: addAgent,
+    // Local toast already covers success/error messaging below -- suppress
+    // the global MutationCache toast (pages/_app.tsx) to avoid duplicates.
+    meta: { showToast: false },
     onSuccess: async (response) => {
       toast.success(response.message || "Agent added.");
       setIsAddOpen(false);
       await refetch();
+    },
+    onError: (error: AxiosError<{ message?: string }>) => {
+      toast.error(error.response?.data?.message || "Couldn't add agent.");
     }
   });
 
   const { mutate: deleteMember, isPending: isRemoving } = useMutation({
     mutationFn: removeTeamMember,
+    meta: { showToast: false },
     onSuccess: async () => {
       toast.success("Team member removed.");
       setRemoveTarget(null);
       await refetch();
+    },
+    onError: (error: AxiosError<{ message?: string }>) => {
+      toast.error(
+        error.response?.data?.message || "Couldn't remove team member."
+      );
     }
   });
   const { mutate: savePermissions, isPending: isSavingPermissions } =
     useMutation({
       mutationFn: updateTeamMemberPermissions,
+      meta: { showToast: false },
       onSuccess: async () => {
         toast.success("Agent permissions updated.");
         setEditTarget(null);
         await refetch();
+      },
+      onError: (error: AxiosError<{ message?: string }>) => {
+        toast.error(
+          error.response?.data?.message || "Couldn't update permissions."
+        );
       }
     });
 

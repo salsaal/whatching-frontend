@@ -17,6 +17,7 @@ import "@/styles/globals.css";
 import "@xyflow/react/dist/style.css";
 import { ApiResponse } from "@/client-api/types/api";
 import RouteGuard from "@/components/auth/RouteGuard";
+import { AppErrorBoundary } from "@/components/shared/AppErrorBoundary";
 import { NuqsAdapter } from "nuqs/adapters/next/pages";
 
 interface ErrorData {
@@ -220,7 +221,12 @@ export const queryClient = new QueryClient({
         toast.success(apiData.message);
       }
     },
-    onError: (res) => {
+    onError: (res, _v, _c, mutation) => {
+      // Mirrors onSuccess's showToast opt-out above -- a mutation with its
+      // own onError toast (often a more specific message than the raw API
+      // error) previously always got a second, generic toast from here too.
+      if (mutation.meta?.showToast === false) return;
+
       const result = res as unknown as ErrorData;
       if (result?.response?.data?.message) {
         toast.error(result?.response?.data?.message);
@@ -271,7 +277,9 @@ export default function CustomApp({ Component, pageProps }: AppProps) {
         <NuqsAdapter>
           <Toaster richColors position="top-right" />
           <RouteGuard>
-            <Component {...pageProps} />
+            <AppErrorBoundary resetKey={router.asPath}>
+              <Component {...pageProps} />
+            </AppErrorBoundary>
           </RouteGuard>
         </NuqsAdapter>
       </QueryClientProvider>

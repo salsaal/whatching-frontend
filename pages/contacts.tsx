@@ -364,6 +364,7 @@ export default function ContactsPage() {
     useMutation({
       mutationFn: (phoneNumber: WhatsAppPhoneNumber) =>
         requestCoexistenceContactSync({ phoneNumberRecordId: phoneNumber.id }),
+      meta: { showToast: false },
       onSuccess: async (response) => {
         toast.success(response.message || "Contact sync requested.");
         await Promise.all([refetch(), refetchPhoneNumbers()]);
@@ -381,6 +382,7 @@ export default function ContactsPage() {
       editingTag
         ? updateTag({ tagId: editingTag.id, payload })
         : createTag(payload as CreateTagPayload),
+    meta: { showToast: false },
     onSuccess: () => {
       setEditingTag(null);
       setIsTagsModalOpen(false);

@@ -104,6 +104,7 @@ import {
   InstagramCanvasAction,
   InstagramCanvasContent,
   InstagramCanvasNode,
+  InstagramCanvasRecord,
   InstagramCanvasState,
   InstagramCommentRule,
   InstagramCommentRulePayload,
@@ -792,6 +793,11 @@ export function InstagramPage({
   const [isRuleMediaPickerOpen, setIsRuleMediaPickerOpen] = useState(false);
   const [ruleToArchive, setRuleToArchive] =
     useState<InstagramCommentRule | null>(null);
+  const [canvasToRename, setCanvasToRename] =
+    useState<InstagramCanvasRecord | null>(null);
+  const [canvasRenameValue, setCanvasRenameValue] = useState("");
+  const [canvasToArchive, setCanvasToArchive] =
+    useState<InstagramCanvasRecord | null>(null);
   const [pendingRuleMediaIds, setPendingRuleMediaIds] = useState<string[]>([]);
   const [loginSelection, setLoginSelection] = useState<{
     code: string;
@@ -809,6 +815,7 @@ export function InstagramPage({
   });
   const instagram = statusData?.data.instagram;
   const isReady = instagram?.status === "ready";
+  const enabledForPlan = statusData?.data.enabledForPlan !== false;
   const { data: canvasesData, isLoading: isCanvasesLoading } = useQuery({
     queryKey: ["instagram-canvases", activeOrgId],
     queryFn: getInstagramCanvases,
@@ -1070,6 +1077,10 @@ export function InstagramPage({
 
   const connectMutation = useMutation({
     mutationFn: connectInstagramLogin,
+    // Every mutation in this file already shows its own specific
+    // success/error toast -- suppress the global MutationCache's generic
+    // duplicate (pages/_app.tsx).
+    meta: { showToast: false },
     onSuccess: (response) => {
       toast.success("Instagram connected");
       setIsConnectOpen(false);
@@ -1192,6 +1203,7 @@ export function InstagramPage({
 
   const syncStatusMutation = useMutation({
     mutationFn: syncInstagramStatus,
+    meta: { showToast: false },
     onSuccess: () => {
       toast.success("Instagram status refreshed");
       queryClient.invalidateQueries({ queryKey: ["instagram-status"] });
@@ -1201,6 +1213,7 @@ export function InstagramPage({
 
   const syncMediaMutation = useMutation({
     mutationFn: () => syncInstagramMedia({ limit: 50 }),
+    meta: { showToast: false },
     onSuccess: (data) => {
       toast.success(`Synced ${data.data.synced} Instagram media item(s)`);
       queryClient.invalidateQueries({ queryKey: ["instagram-media"] });
@@ -1218,6 +1231,7 @@ export function InstagramPage({
           })
         : saveInstagramCanvasDraft(state);
     },
+    meta: { showToast: false },
     onSuccess: async () => {
       const validation = selectedCanvasId
         ? await validateInstagramCanvasById(selectedCanvasId)
@@ -1269,6 +1283,7 @@ export function InstagramPage({
       selectedCanvasId
         ? validateInstagramCanvasById(selectedCanvasId)
         : validateInstagramCanvas(),
+    meta: { showToast: false },
     onSuccess: (data) => {
       setValidationMessages(data.data.validation.errors);
       toast[data.data.validation.valid ? "success" : "error"](
@@ -1296,6 +1311,7 @@ export function InstagramPage({
       await saveInstagramCanvasDraft(state);
       return publishInstagramCanvas(state);
     },
+    meta: { showToast: false },
     onSuccess: (data) => {
       setValidationMessages(data.data.validation.warnings || []);
       toast.success("Instagram canvas published");
@@ -1319,6 +1335,7 @@ export function InstagramPage({
       createInstagramCanvas({
         name: `Instagram Canvas ${canvases.length + 1}`
       }),
+    meta: { showToast: false },
     onSuccess: (data) => {
       toast.success("Instagram canvas created");
       setSelectedCanvasId(data.data.canvas._id);
@@ -1331,6 +1348,7 @@ export function InstagramPage({
 
   const canvasStatusMutation = useMutation({
     mutationFn: updateInstagramCanvasStatus,
+    meta: { showToast: false },
     onSuccess: (_data, variables) => {
       toast.success(
         variables.status === "active"
@@ -1345,9 +1363,11 @@ export function InstagramPage({
 
   const deleteCanvasMutation = useMutation({
     mutationFn: deleteInstagramCanvas,
+    meta: { showToast: false },
     onSuccess: () => {
-      toast.success("Instagram canvas deleted");
+      toast.success("Instagram canvas archived");
       setSelectedCanvasId("");
+      setCanvasToArchive(null);
       queryClient.invalidateQueries({ queryKey: ["instagram-canvases"] });
     },
     onError: (error) => toast.error(getErrorMessage(error))
@@ -1356,8 +1376,10 @@ export function InstagramPage({
   const renameCanvasMutation = useMutation({
     mutationFn: ({ canvasId, name }: { canvasId: string; name: string }) =>
       updateInstagramCanvas({ canvasId, name }),
+    meta: { showToast: false },
     onSuccess: () => {
       toast.success("Instagram canvas renamed");
+      setCanvasToRename(null);
       queryClient.invalidateQueries({ queryKey: ["instagram-canvases"] });
       queryClient.invalidateQueries({ queryKey: ["instagram-canvas"] });
     },
@@ -1372,6 +1394,7 @@ export function InstagramPage({
             payload: ruleDraft
           })
         : createInstagramCommentRule(ruleDraft),
+    meta: { showToast: false },
     onSuccess: () => {
       toast.success(
         editingRuleId
@@ -1399,6 +1422,7 @@ export function InstagramPage({
       if (action === "disable") return disableInstagramCommentRule(ruleId);
       return deleteInstagramCommentRule(ruleId);
     },
+    meta: { showToast: false },
     onSuccess: (_response, variables) => {
       if (variables.action === "delete") {
         setRuleToArchive(null);
@@ -2597,16 +2621,8 @@ export function InstagramPage({
                       disabled={renameCanvasMutation.isPending}
                       tooltip="Rename this Instagram message flow"
                       onClick={() => {
-                        const name = window.prompt(
-                          "Rename Instagram canvas",
-                          canvas.name
-                        );
-                        if (name?.trim()) {
-                          renameCanvasMutation.mutate({
-                            canvasId: canvas._id,
-                            name: name.trim()
-                          });
-                        }
+                        setCanvasRenameValue(canvas.name);
+                        setCanvasToRename(canvas);
                       }}
                     >
                       Rename
@@ -2618,21 +2634,13 @@ export function InstagramPage({
                       disabled={deleteCanvasMutation.isPending || isActive}
                       tooltip={
                         isActive
-                          ? "Activate another flow before deleting this one"
+                          ? "Activate another flow before archiving this one"
                           : "Archive this Instagram message flow"
                       }
-                      onClick={() => {
-                        if (
-                          window.confirm(
-                            `Delete ${canvas.name}? This archives the Instagram canvas.`
-                          )
-                        ) {
-                          deleteCanvasMutation.mutate(canvas._id);
-                        }
-                      }}
+                      onClick={() => setCanvasToArchive(canvas)}
                     >
                       <Trash2 className="size-4" />
-                      Delete
+                      Archive
                     </Button>
                   </div>
                 </div>
@@ -2919,6 +2927,16 @@ export function InstagramPage({
             </div>
           </div>
         )}
+
+        {(activeTab === "canvas" || activeTab === "rules") &&
+          isReady &&
+          !enabledForPlan && (
+            <div className="border-b bg-amber-50 px-5 py-2 text-xs text-amber-800">
+              Your current plan doesn&apos;t include Instagram automation.
+              You can keep building this flow, but saving and publishing
+              will be blocked until you upgrade.
+            </div>
+          )}
 
         {activeTab === "profile" && !canvasOnly && renderProfile()}
         {canvasOnly && !isReady && renderProfile()}
@@ -3495,6 +3513,93 @@ export function InstagramPage({
                 <Loader2 className="size-4 animate-spin" />
               )}
               Archive automation
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog
+        open={Boolean(canvasToRename)}
+        onOpenChange={(open) => {
+          if (!open && !renameCanvasMutation.isPending) setCanvasToRename(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rename Instagram canvas</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="instagram-canvas-name">Canvas name</Label>
+            <Input
+              id="instagram-canvas-name"
+              value={canvasRenameValue}
+              onChange={(event) => setCanvasRenameValue(event.target.value)}
+              placeholder="Main Instagram flow"
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              className="cursor-pointer"
+              onClick={() => setCanvasToRename(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="cursor-pointer"
+              disabled={
+                !canvasToRename ||
+                !canvasRenameValue.trim() ||
+                renameCanvasMutation.isPending
+              }
+              onClick={() => {
+                if (!canvasToRename) return;
+                renameCanvasMutation.mutate({
+                  canvasId: canvasToRename._id,
+                  name: canvasRenameValue.trim()
+                });
+              }}
+            >
+              {renameCanvasMutation.isPending && (
+                <Loader2 className="size-4 animate-spin" />
+              )}
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog
+        open={Boolean(canvasToArchive)}
+        onOpenChange={(open) => {
+          if (!open && !deleteCanvasMutation.isPending) setCanvasToArchive(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Archive this Instagram flow?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {canvasToArchive ? `“${canvasToArchive.name}”` : "This canvas"}{" "}
+              will be archived and removed from the active flow list.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteCanvasMutation.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-white hover:bg-destructive/90"
+              disabled={deleteCanvasMutation.isPending || !canvasToArchive}
+              onClick={(event) => {
+                event.preventDefault();
+                if (!canvasToArchive) return;
+                deleteCanvasMutation.mutate(canvasToArchive._id);
+              }}
+            >
+              {deleteCanvasMutation.isPending && (
+                <Loader2 className="size-4 animate-spin" />
+              )}
+              Archive flow
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -84,6 +84,10 @@ export default function SettingsPage() {
   const [confirmation, setConfirmation] = useState("");
   const { mutate: deleteOrg, isPending: isDeleting } = useMutation({
     mutationFn: deleteOrganization,
+    // Both toasts below are more specific than the raw API response, so
+    // suppress the global MutationCache's generic success/error toast
+    // (pages/_app.tsx) to avoid showing two toasts for one action.
+    meta: { showToast: false },
     onSuccess: () => {
       toast.success("Organization deleted.");
       clearOrganizations();

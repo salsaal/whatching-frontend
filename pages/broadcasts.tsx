@@ -16,6 +16,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/router";
 import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
+import { AxiosError } from "axios";
 import { toast } from "sonner";
 
 import {
@@ -402,10 +403,18 @@ export default function BroadcastsPage() {
     (audienceMode === "tags" && selectedTags.length > 0) ||
     (audienceMode === "specific" && selectedSubscriberIds.length > 0) ||
     (audienceMode === "campaign" && selectedCampaignSourceIds.length > 0);
+  // Debounced so ticking several checkboxes in a row (tags, subscribers,
+  // campaigns) doesn't refire this query on every single click.
+  const [debouncedAudience, setDebouncedAudience] =
+    useState<BroadcastAudience>(currentAudience);
+  useEffect(() => {
+    const timeout = setTimeout(() => setDebouncedAudience(currentAudience), 400);
+    return () => clearTimeout(timeout);
+  }, [currentAudience]);
   const { data: audienceCountData, isFetching: isAudienceCountLoading } =
     useQuery({
-      queryKey: ["broadcast-audience-count", currentAudience],
-      queryFn: () => previewBroadcastAudienceCount(currentAudience),
+      queryKey: ["broadcast-audience-count", debouncedAudience],
+      queryFn: () => previewBroadcastAudienceCount(debouncedAudience),
       enabled: isCreateOpen && isAudienceSelectionReady,
       placeholderData: (previous) => previous
     });
@@ -528,6 +537,7 @@ export default function BroadcastsPage() {
 
   const { mutate: createDraft, isPending: isCreating } = useMutation({
     mutationFn: createBroadcast,
+    meta: { showToast: false },
     onSuccess: (response) => {
       setBroadcastRetryPreference(
         response.data.broadcast._id,
@@ -545,29 +555,45 @@ export default function BroadcastsPage() {
       setSelectedSubscriberIds([]);
       setRetryOnMessagingLimit(true);
       refetch();
+    },
+    onError: (error: AxiosError<{ message?: string }>) => {
+      toast.error(
+        error.response?.data?.message || "Broadcast draft could not be created."
+      );
     }
   });
   const { mutate: runReadinessTest, isPending: isTestingReadiness } =
     useMutation({
       mutationFn: () => testWhatsAppOutboundReadiness(senderRecordId),
+      meta: { showToast: false },
       onSuccess: async (response) => {
         toast.success(
           response.message ||
             "Broadcast verification started. Waiting for Meta's delivery status."
         );
         await refetchReadiness();
+      },
+      onError: (error: AxiosError<{ message?: string }>) => {
+        toast.error(
+          error.response?.data?.message ||
+            "Broadcast verification could not be started."
+        );
       }
     });
   const { mutate: consentToRetry, isPending: isConsentingToRetry } =
     useMutation({
       mutationFn: consentToBroadcastMessagingLimitRetry,
+      meta: { showToast: false },
       onSuccess: async (response) => {
         toast.success(response.message);
         setBroadcastRetryPreference(response.data.broadcastId, false);
         await Promise.all([refetch(), refetchSelectedBroadcast()]);
       },
-      onError: (_error, broadcastId) => {
+      onError: (error: AxiosError<{ message?: string }>, broadcastId) => {
         setBroadcastRetryPreference(broadcastId, false);
+        toast.error(
+          error.response?.data?.message || "Couldn't resume this broadcast."
+        );
       }
     });
 
@@ -624,22 +650,34 @@ export default function BroadcastsPage() {
 
   const { mutate: startSelected, isPending: isStarting } = useMutation({
     mutationFn: startBroadcast,
+    meta: { showToast: false },
     onSuccess: () => {
       toast.success("Broadcast accepted for processing");
       setScheduleDate(undefined);
       setScheduleTime("09:00");
       refetch();
       refetchSelectedBroadcast();
+    },
+    onError: (error: AxiosError<{ message?: string }>) => {
+      toast.error(
+        error.response?.data?.message || "Broadcast could not be started."
+      );
     }
   });
 
   const { mutate: cancelSelected, isPending: isCanceling } = useMutation({
     mutationFn: cancelBroadcast,
+    meta: { showToast: false },
     onSuccess: () => {
       toast.success("Broadcast canceled");
       setCancelTarget(null);
       refetch();
       refetchSelectedBroadcast();
+    },
+    onError: (error: AxiosError<{ message?: string }>) => {
+      toast.error(
+        error.response?.data?.message || "Broadcast could not be canceled."
+      );
     }
   });
 

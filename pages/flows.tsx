@@ -32,6 +32,7 @@ import { BotCanvasRecord } from "@/client-api/types/bot.type";
 import { updateWhatsAppPhoneNumber } from "@/client-api/functions/organizations";
 import {
   ALL_WHATSAPP_NUMBERS,
+  isUsableWhatsAppNumber,
   useWhatsAppNumberContext
 } from "@/components/whatsapp/WhatsAppNumberSwitcher";
 import {
@@ -126,6 +127,7 @@ export default function FlowsPage() {
 
   const { mutate: createCanvasMutate, isPending: isCreating } = useMutation({
     mutationFn: createBotCanvas,
+    meta: { showToast: false },
     onSuccess: async (response) => {
       toast.success("Flow created.");
       await invalidate();
@@ -137,6 +139,7 @@ export default function FlowsPage() {
 
   const { mutate: renameCanvasMutate, isPending: isRenaming } = useMutation({
     mutationFn: updateBotCanvas,
+    meta: { showToast: false },
     onSuccess: async () => {
       toast.success("Flow renamed.");
       setEditingCanvas(null);
@@ -148,6 +151,7 @@ export default function FlowsPage() {
   const { mutate: setCanvasStatus, isPending: isChangingCanvasStatus } =
     useMutation({
       mutationFn: updateBotCanvasStatus,
+      meta: { showToast: false },
       onSuccess: async () => {
         toast.success("Organisation fallback updated.");
         await invalidate();
@@ -157,6 +161,7 @@ export default function FlowsPage() {
 
   const { mutate: archiveCanvasMutate, isPending: isDeleting } = useMutation({
     mutationFn: archiveBotCanvas,
+    meta: { showToast: false },
     onSuccess: async () => {
       toast.success("Flow archived.");
       setDeleteCanvas(null);
@@ -166,6 +171,7 @@ export default function FlowsPage() {
   });
   const { mutate: assignCanvasMutate, isPending: isAssigning } = useMutation({
     mutationFn: updateWhatsAppPhoneNumber,
+    meta: { showToast: false },
     onSuccess: async () => {
       toast.success("Number flow assignment updated.");
       await queryClient.invalidateQueries({
@@ -269,7 +275,9 @@ export default function FlowsPage() {
                 selectedNumber?.activeCanvasId === canvas._id;
               const isOrgFallback = canvas.status === "active";
               const assignedNumbers = numbers.filter(
-                (number) => number.activeCanvasId === canvas._id
+                (number) =>
+                  number.activeCanvasId === canvas._id &&
+                  isUsableWhatsAppNumber(number)
               );
               const hasPublishedVersion = Boolean(
                 canvas.latestPublishedVersionId || canvas.publishedState
@@ -403,7 +411,7 @@ export default function FlowsPage() {
                         onClick={() => setDeleteCanvas(canvas)}
                       >
                         <Trash2 className="size-4" />
-                        Delete
+                        Archive
                       </Button>
                     </div>
                   </CardContent>
@@ -481,10 +489,10 @@ export default function FlowsPage() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete flow?</AlertDialogTitle>
+            <AlertDialogTitle>Archive flow?</AlertDialogTitle>
             <AlertDialogDescription>
               This archives {deleteCanvas?.name}. Published versions and active
-              automation should be moved to another canvas before deleting.
+              automation should be moved to another canvas before archiving.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -498,7 +506,7 @@ export default function FlowsPage() {
               }}
             >
               {isDeleting && <Loader2 className="mr-2 size-4 animate-spin" />}
-              Delete flow
+              Archive flow
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

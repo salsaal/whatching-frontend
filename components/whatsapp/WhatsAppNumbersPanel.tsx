@@ -60,6 +60,7 @@ export default function WhatsAppNumbersPanel({
   };
   const syncMutation = useMutation({
     mutationFn: syncWhatsAppPhoneNumbers,
+    meta: { showToast: false },
     onSuccess: async () => {
       toast.success("WhatsApp numbers synced.");
       await refresh();
@@ -68,6 +69,7 @@ export default function WhatsAppNumbersPanel({
   });
   const defaultMutation = useMutation({
     mutationFn: setDefaultWhatsAppPhoneNumber,
+    meta: { showToast: false },
     onSuccess: async () => {
       toast.success("Default WhatsApp number updated.");
       await refresh();
@@ -76,6 +78,7 @@ export default function WhatsAppNumbersPanel({
   });
   const activateMutation = useMutation({
     mutationFn: activateWhatsAppPhoneNumber,
+    meta: { showToast: false },
     onSuccess: async () => {
       toast.success("WhatsApp number activated.");
       await refresh();
@@ -84,6 +87,7 @@ export default function WhatsAppNumbersPanel({
   });
   const deactivateMutation = useMutation({
     mutationFn: deactivateWhatsAppPhoneNumber,
+    meta: { showToast: false },
     onSuccess: async () => {
       toast.success("WhatsApp number deactivated.");
       await refresh();

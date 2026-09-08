@@ -15,6 +15,7 @@ import { useRouter } from "next/router";
 import Script from "next/script";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AxiosError } from "axios";
 import { toast } from "sonner";
 
 import Link from "next/link";
@@ -271,12 +272,19 @@ export default function OverviewPage() {
         }
         return testWhatsAppOutboundReadiness(readinessRecordId);
       },
+      meta: { showToast: false },
       onSuccess: async (response) => {
         toast.success(
           response.message ||
             "Broadcast verification started. Waiting for Meta's delivery status."
         );
         await refetchReadiness();
+      },
+      onError: (error: AxiosError<{ message?: string }>) => {
+        toast.error(
+          error.response?.data?.message ||
+            "Broadcast verification could not be started."
+        );
       }
     });
 
@@ -299,6 +307,7 @@ export default function OverviewPage() {
   const { mutate: connectMetaMutate, isPending: isConnectingMeta } =
     useMutation({
       mutationFn: connectMetaEmbeddedSignup,
+      meta: { showToast: false },
       onSuccess: async (data) => {
         const organization = data.data.organization;
         const connectedPhoneNumberId = signupSessionRef.current?.phoneNumberId;
@@ -361,8 +370,12 @@ export default function OverviewPage() {
           );
         }
       },
-      onError: () => {
+      onError: (error: AxiosError<{ message?: string }>) => {
         pendingAuthResponseRef.current = null;
+        toast.error(
+          error.response?.data?.message ||
+            "Meta integration could not be connected."
+        );
       },
       onSettled: () => {
         isConnectingRef.current = false;
@@ -380,6 +393,7 @@ export default function OverviewPage() {
   const { mutate: manualConnectMutate, isPending: isManualConnecting } =
     useMutation({
       mutationFn: manualConnectWhatsAppNumber,
+      meta: { showToast: false },
       onSuccess: async (data) => {
         const organization = data.data.organization;
         upsertOrganization(organization);
@@ -398,6 +412,12 @@ export default function OverviewPage() {
             queryKey: ["whatsapp-phone-numbers", activeOrgId]
           })
         ]);
+      },
+      onError: (error: AxiosError<{ message?: string }>) => {
+        toast.error(
+          error.response?.data?.message ||
+            "WhatsApp number could not be connected."
+        );
       }
     });
 

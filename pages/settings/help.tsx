@@ -9,6 +9,7 @@ import {
   useState
 } from "react";
 import { useInfiniteQuery, useMutation } from "@tanstack/react-query";
+import { AxiosError } from "axios";
 import { ImageIcon, LifeBuoy, Send, X } from "lucide-react";
 import { toast } from "sonner";
 
@@ -81,6 +82,7 @@ export default function HelpPage() {
 
   const { mutate: submitTicket, isPending } = useMutation({
     mutationFn: createSupportRequest,
+    meta: { showToast: false },
     onSuccess: async (response) => {
       toast.success(response.message || "Support request created.");
       setSubject("");
@@ -89,6 +91,11 @@ export default function HelpPage() {
       setImages([]);
       if (fileInputRef.current) fileInputRef.current.value = "";
       await refetch();
+    },
+    onError: (error: AxiosError<{ message?: string }>) => {
+      toast.error(
+        error.response?.data?.message || "Couldn't submit the support request."
+      );
     }
   });
 

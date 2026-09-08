@@ -13,6 +13,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { parseAsString, useQueryState } from "nuqs";
+import { toast } from "sonner";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -309,7 +310,12 @@ export default function TemplatesPage() {
   };
 
   const handleEdit = (template: MessageTemplate) => {
-    if (template.status.toUpperCase() === "PENDING") return;
+    if (template.status.toUpperCase() === "PENDING") {
+      toast.info(
+        "This template is still pending Meta's review and can't be edited yet."
+      );
+      return;
+    }
 
     router.push({
       pathname: `/templates/${getTemplateEditId(template)}`,

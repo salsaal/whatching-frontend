@@ -1,5 +1,6 @@
 import { Bot, Sparkles } from "lucide-react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 import { getBotSettings, updateBotSettings } from "@/client-api/functions/bot";
 import { Switch } from "@/components/ui/switch";
@@ -9,16 +10,28 @@ export function BotStatusToggle() {
   const activeOrganization = useOrganizationStore(
     (state) => state.activeOrganization
   );
+  const queryClient = useQueryClient();
+  const settingsQueryKey = ["bot-settings", activeOrganization?._id];
 
   const { data: settingsData, isLoading: isSettingsLoading } = useQuery({
-    queryKey: ["bot-settings", activeOrganization?._id],
+    queryKey: settingsQueryKey,
     queryFn: getBotSettings,
     enabled: Boolean(activeOrganization?._id)
   });
 
   const { mutate: updateSettingsMutate, isPending: isUpdatingSettings } =
     useMutation({
-      mutationFn: updateBotSettings
+      mutationFn: updateBotSettings,
+      meta: { showToast: false },
+      onSuccess: (response) => {
+        // The switch's `checked` state derives entirely from this cache --
+        // without writing the response back into it, a successful toggle
+        // had no visible effect until something else happened to refetch.
+        queryClient.setQueryData(settingsQueryKey, response);
+      },
+      onError: () => {
+        toast.error("Couldn't update that setting. Try again.");
+      }
     });
 
   return (

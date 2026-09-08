@@ -94,11 +94,17 @@ export default function TemplatesTable({
                 onClick={() => onEdit(template)}
               >
                 <TableCell className="px-4 py-5 font-medium">
-                  <span className="block max-w-[180px] truncate">
+                  <span
+                    className="block max-w-[180px] truncate"
+                    title={template.name}
+                  >
                     {template.name}
                   </span>
                   {templateNeedsMedia(template) && (
-                    <span className="mt-1 inline-flex rounded-sm bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive">
+                    <span
+                      className="mt-1 inline-flex rounded-sm bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-700"
+                      title="This template's header needs a default media attachment before it can be used in a broadcast."
+                    >
                       Media required
                     </span>
                   )}

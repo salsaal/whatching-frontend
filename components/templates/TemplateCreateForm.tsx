@@ -16,6 +16,7 @@ import { useRouter } from "next/router";
 import { parseAsString, useQueryState } from "nuqs";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AxiosError } from "axios";
 import { toast } from "sonner";
 
 import {
@@ -426,36 +427,53 @@ export default function TemplateCreateForm({
     setSelectedMediaUrl(media.cloudinaryUrl);
   }, [selectedMediaData?.data.media, selectedMediaId]);
 
+  const handleMutationError = (
+    error: AxiosError<{ message?: string }>,
+    fallback: string
+  ) => {
+    toast.error(error.response?.data?.message || fallback);
+  };
+
   const { mutate, isPending } = useMutation({
     mutationFn: createTemplate,
+    meta: { showToast: false },
     onSuccess: async (data) => {
       addTemplate(data.data.template);
       toast.success("Template submitted for review");
       await refreshTemplateListCaches();
       router.push("/templates");
-    }
+    },
+    onError: (error: AxiosError<{ message?: string }>) =>
+      handleMutationError(error, "Template could not be submitted.")
   });
 
   const { mutate: saveDraft, isPending: isSavingDraft } = useMutation({
     mutationFn: createDraftTemplate,
+    meta: { showToast: false },
     onSuccess: async (data) => {
       upsertTemplate(mapDraftToTemplate(data.data.draft));
       toast.success("Template saved as draft");
       await refreshTemplateListCaches();
       router.push("/templates");
-    }
+    },
+    onError: (error: AxiosError<{ message?: string }>) =>
+      handleMutationError(error, "Draft could not be saved.")
   });
 
   const { mutate: patchDraft, isPending: isPatchingDraft } = useMutation({
     mutationFn: updateDraftTemplate,
+    meta: { showToast: false },
     onSuccess: (data) => {
       upsertTemplate(mapDraftToTemplate(data.data.draft));
       toast.success("Draft saved");
-    }
+    },
+    onError: (error: AxiosError<{ message?: string }>) =>
+      handleMutationError(error, "Draft could not be saved.")
   });
 
   const { mutate: submitDraft, isPending: isSubmittingDraft } = useMutation({
     mutationFn: submitDraftTemplate,
+    meta: { showToast: false },
     onSuccess: async (data) => {
       if (data.data.template) {
         removeTemplate(data.data.draft._id);
@@ -466,17 +484,22 @@ export default function TemplateCreateForm({
       toast.success("Draft submitted for review");
       await refreshTemplateListCaches();
       router.push("/templates");
-    }
+    },
+    onError: (error: AxiosError<{ message?: string }>) =>
+      handleMutationError(error, "Draft could not be submitted for review.")
   });
 
   const { mutate: patchApproved, isPending: isPatchingApproved } = useMutation({
     mutationFn: updateApprovedTemplate,
+    meta: { showToast: false },
     onSuccess: async (data) => {
       upsertTemplate(data.data.template);
       toast.success("Template edit submitted. Status is now pending.");
       await refreshTemplateListCaches();
       router.push("/templates");
-    }
+    },
+    onError: (error: AxiosError<{ message?: string }>) =>
+      handleMutationError(error, "Template edit could not be submitted.")
   });
 
   useEffect(() => {

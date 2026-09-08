@@ -62,6 +62,7 @@ function EditCampaignLabelDialog({
 
   const { mutate: saveLabel, isPending } = useMutation({
     mutationFn: updateCampaignSource,
+    meta: { showToast: false },
     onSuccess: () => {
       toast.success("Campaign name updated.");
       queryClient.invalidateQueries({ queryKey: ["campaigns"] });

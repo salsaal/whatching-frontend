@@ -56,6 +56,16 @@ import {
   updateBotCanvas,
   validateBotCanvasById
 } from "@/client-api/functions/bot";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle
+} from "@/components/ui/alert-dialog";
 import { InlineEditableTitle } from "@/components/shared/InlineEditableTitle";
 import {
   BotAction,
@@ -1369,33 +1379,45 @@ const localValidate = (nodes: BuilderNode[], edges: Edge[]) => {
         `${title}: trigger key "${node.data.triggerKey}" is duplicated.`
       );
     }
-    if (!node.data.label?.trim() || !node.data.triggerKey.trim())
+    if (!node.data.label?.trim() || !node.data.triggerKey.trim()) {
       invalidIds.add(node.id);
-    if (node.data.blockType === "text" && !String(content.text || "").trim())
+      messages.push(`${title || "Block"}: name and trigger key are required.`);
+    }
+    if (
+      node.data.blockType === "text" &&
+      !String(content.text || "").trim()
+    ) {
       invalidIds.add(node.id);
+      messages.push(`${title}: message text is required.`);
+    }
     if (
       node.data.blockType === "buttons" &&
       !String(content.bodyText || "").trim()
-    )
+    ) {
       invalidIds.add(node.id);
+      messages.push(`${title}: message body is required.`);
+    }
     if (
       node.data.blockType === "list" &&
       (!String(content.bodyText || "").trim() ||
         !String(content.buttonText || "").trim())
     ) {
       invalidIds.add(node.id);
+      messages.push(`${title}: list body and button text are required.`);
     }
     if (
       ["image", "document", "video"].includes(node.data.blockType) &&
       !String(content.mediaId || "").trim()
     ) {
       invalidIds.add(node.id);
+      messages.push(`${title}: select media from the properties panel.`);
     }
     if (
       node.data.blockType === "location" &&
       (content.latitude === undefined || content.longitude === undefined)
     ) {
       invalidIds.add(node.id);
+      messages.push(`${title}: pick a location on the map.`);
     }
     if (
       node.data.blockType === "location_request" &&
@@ -1455,8 +1477,10 @@ const localValidate = (nodes: BuilderNode[], edges: Edge[]) => {
     if (
       node.data.blockType === "product_carousel" &&
       !String(content.catalogId || "").trim()
-    )
+    ) {
       invalidIds.add(node.id);
+      messages.push(`${title}: catalog ID is required.`);
+    }
     if (node.data.blockType === "buttons" && node.data.actions.length > 3) {
       invalidIds.add(node.id);
       messages.push(
@@ -1570,16 +1594,31 @@ const localValidate = (nodes: BuilderNode[], edges: Edge[]) => {
         String(button.type || (button.url ? "url" : "quick_reply"))
       );
       cards.forEach((card, cardIndex) => {
-        if (!String(card.bodyText || "").trim()) invalidIds.add(node.id);
+        if (!String(card.bodyText || "").trim()) {
+          invalidIds.add(node.id);
+          messages.push(
+            `${title}: card ${cardIndex + 1} needs body text.`
+          );
+        }
         if (!["image", "video"].includes(String(card.mediaType || ""))) {
           invalidIds.add(node.id);
           messages.push(
             `${title}: card ${cardIndex + 1} needs image or video media.`
           );
         }
-        if (!String(card.mediaId || "").trim()) invalidIds.add(node.id);
+        if (!String(card.mediaId || "").trim()) {
+          invalidIds.add(node.id);
+          messages.push(
+            `${title}: card ${cardIndex + 1} needs media selected from the library.`
+          );
+        }
         const buttons = (card.buttons || []) as Array<Record<string, unknown>>;
-        if (!buttons.length) invalidIds.add(node.id);
+        if (!buttons.length) {
+          invalidIds.add(node.id);
+          messages.push(
+            `${title}: card ${cardIndex + 1} needs at least one button.`
+          );
+        }
         buttons.forEach((button) => {
           const label = String(button.label || button.title || "").trim();
           if (label.length < 1 || label.length > REPLY_BUTTON_LABEL_MAX) {
@@ -1665,6 +1704,52 @@ const localValidate = (nodes: BuilderNode[], edges: Edge[]) => {
     }
   });
 
+  // Orphan detection is a warning, not a blocker (added to `messages` only,
+  // never `invalidIds`) -- an unreachable block may still be a work-in-progress
+  // draft the user hasn't wired up yet, so it shouldn't block save/publish.
+  const reachable = new Set<string>();
+  const entryNode = nodes.find((node) => node.data.triggerKey === "DEFAULT");
+  if (entryNode) {
+    const queue = [entryNode.id];
+    reachable.add(entryNode.id);
+    while (queue.length) {
+      const currentId = queue.shift()!;
+      edges
+        .filter((edge) => edge.source === currentId)
+        .forEach((edge) => {
+          if (!reachable.has(edge.target)) {
+            reachable.add(edge.target);
+            queue.push(edge.target);
+          }
+        });
+      const currentNode = nodes.find((node) => node.id === currentId);
+      const followUpTargetId = currentNode?.data.followUp?.enabled
+        ? nodes.find(
+            (candidate) =>
+              candidate.data.triggerKey ===
+              currentNode.data.followUp?.targetTriggerKey
+          )?.id
+        : undefined;
+      if (followUpTargetId && !reachable.has(followUpTargetId)) {
+        reachable.add(followUpTargetId);
+        queue.push(followUpTargetId);
+      }
+    }
+  }
+  nodes.forEach((node) => {
+    if (
+      node.data.triggerKey === "OPT_IN" ||
+      node.data.triggerKey === "OPT_OUT" ||
+      node.data.locked ||
+      reachable.has(node.id)
+    ) {
+      return;
+    }
+    messages.push(
+      `${node.data.label}: unreachable — no route from Main Menu leads to this block.`
+    );
+  });
+
   if (invalidIds.size && messages.length === 0) {
     messages.push("Some blocks are missing required content.");
   }
@@ -1698,6 +1783,11 @@ function FlowsBuilder() {
   >("idle");
   const [lastSavedAt, setLastSavedAt] = useState<string>("");
   const [validationMessages, setValidationMessages] = useState<string[]>([]);
+  const [nodeDeletionRequest, setNodeDeletionRequest] = useState<{
+    ids: Set<string>;
+    label: string;
+    cascadesFollowUp: boolean;
+  } | null>(null);
   const [mediaPicker, setMediaPicker] = useState<{
     open: boolean;
     type: "IMAGE" | "DOCUMENT" | "VIDEO";
@@ -1709,6 +1799,7 @@ function FlowsBuilder() {
   });
   const hydratedRef = useRef(false);
   const latestDraftRef = useRef<BotCanvasDraftState | null>(null);
+  const isSaveOrPublishInFlightRef = useRef(false);
 
   const queryClient = useQueryClient();
 
@@ -1878,6 +1969,7 @@ function FlowsBuilder() {
 
   const { mutateAsync: publishDraft, isPending: isPublishing } = useMutation({
     mutationFn: () => publishBotCanvasDraftById({ canvasId }),
+    meta: { showToast: false },
     onSuccess: () => {
       refetchStatus();
       toast.success("Flow published to WhatsApp automation.");
@@ -2239,12 +2331,21 @@ function FlowsBuilder() {
             selectedNode.data.followUp?.targetTriggerKey
         )
       : undefined;
+    const cascadesFollowUp = Boolean(
+      followUpTarget?.data.metadata?.automaticFollowUpTarget
+    );
     const nodeIdsToDelete = new Set([
       selectedNode.id,
-      ...(followUpTarget?.data.metadata?.automaticFollowUpTarget
-        ? [followUpTarget.id]
-        : [])
+      ...(cascadesFollowUp ? [followUpTarget!.id] : [])
     ]);
+    setNodeDeletionRequest({
+      ids: nodeIdsToDelete,
+      label: selectedNode.data.label || "This block",
+      cascadesFollowUp
+    });
+  };
+
+  const commitNodeDeletion = (nodeIdsToDelete: Set<string>) => {
     setNodes((current) =>
       current.filter((node) => !nodeIdsToDelete.has(node.id))
     );
@@ -2254,8 +2355,12 @@ function FlowsBuilder() {
           !nodeIdsToDelete.has(edge.source) && !nodeIdsToDelete.has(edge.target)
       )
     );
-    setSelectedNodeId(null);
-    setPreviewNodeId(null);
+    setSelectedNodeId((current) =>
+      current && nodeIdsToDelete.has(current) ? null : current
+    );
+    setPreviewNodeId((current) =>
+      current && nodeIdsToDelete.has(current) ? null : current
+    );
   };
 
   const handleNodesChange = useCallback(
@@ -2288,10 +2393,51 @@ function FlowsBuilder() {
         toast.error("System blocks cannot be deleted.");
       }
 
+      const removableIds = changes
+        .filter(
+          (change): change is Extract<NodeChange<BuilderNode>, { type: "remove" }> =>
+            change.type === "remove" &&
+            !defaultNodeIds.has(change.id) &&
+            !lockedNodeIds.has(change.id)
+        )
+        .map((change) => change.id);
+      // Node deletion (keyboard Delete/Backspace on the canvas) skips
+      // straight to removal otherwise -- route it through the same
+      // confirmation as the panel's delete button so a follow-up-linked
+      // node can't be cascade-deleted with zero warning.
+      if (removableIds.length) {
+        const removableIdSet = new Set(removableIds);
+        const cascadeIds = new Set<string>();
+        nodes.forEach((node) => {
+          const followUpTarget = node.data.followUp?.enabled
+            ? nodes.find(
+                (candidate) =>
+                  candidate.data.triggerKey ===
+                  node.data.followUp?.targetTriggerKey
+              )
+            : undefined;
+          if (
+            removableIdSet.has(node.id) &&
+            followUpTarget?.data.metadata?.automaticFollowUpTarget
+          ) {
+            cascadeIds.add(followUpTarget.id);
+          }
+        });
+        const allIds = new Set([...removableIdSet, ...cascadeIds]);
+        const label =
+          removableIds.length === 1
+            ? nodes.find((node) => node.id === removableIds[0])?.data.label ||
+              "This block"
+            : `${removableIds.length} blocks`;
+        setNodeDeletionRequest({
+          ids: allIds,
+          label,
+          cascadesFollowUp: cascadeIds.size > 0
+        });
+      }
+
       const allowedChanges = changes.filter(
-        (change) =>
-          change.type !== "remove" ||
-          (!defaultNodeIds.has(change.id) && !lockedNodeIds.has(change.id))
+        (change) => change.type !== "remove"
       );
       if (!allowedChanges.length) return;
       onNodesChange(allowedChanges);
@@ -2304,6 +2450,10 @@ function FlowsBuilder() {
       toast.info("Switch to Draft canvas to save changes.");
       return;
     }
+    // Guards against a rapid double-click re-entering while the previous
+    // save/publish request is still in flight -- `saveState`/`isPublishing`
+    // only reflect that in a later render, not synchronously on click.
+    if (isSaveOrPublishInFlightRef.current) return;
     const validation = localValidate(nodes, edges);
     markInvalid(validation.invalidIds);
     setValidationMessages(validation.messages);
@@ -2314,6 +2464,7 @@ function FlowsBuilder() {
       return;
     }
 
+    isSaveOrPublishInFlightRef.current = true;
     setSaveState("saving");
     try {
       const draft = buildDraftState();
@@ -2342,6 +2493,8 @@ function FlowsBuilder() {
     } catch {
       setSaveState("error");
       toast.error("Unable to save draft");
+    } finally {
+      isSaveOrPublishInFlightRef.current = false;
     }
   };
 
@@ -2359,6 +2512,9 @@ function FlowsBuilder() {
       toast.info("Switch to Draft canvas to publish changes.");
       return;
     }
+    // Same re-entrancy guard as saveCurrentDraft -- prevents a fast double
+    // click from firing two overlapping save+publish sequences.
+    if (isSaveOrPublishInFlightRef.current) return;
     const validation = localValidate(nodes, edges);
     markInvalid(validation.invalidIds);
     setValidationMessages(validation.messages);
@@ -2371,6 +2527,7 @@ function FlowsBuilder() {
     const draft = buildDraftState();
     latestDraftRef.current = draft;
     writeCachedDraft(activeOrganization?._id, canvasId, draft);
+    isSaveOrPublishInFlightRef.current = true;
     try {
       await saveDraft(draft);
       const validationResponse = await validateDraft();
@@ -2392,6 +2549,8 @@ function FlowsBuilder() {
           ?.data?.message || "Backend rejected the publish request.";
       setValidationMessages([message]);
       toast.error(message);
+    } finally {
+      isSaveOrPublishInFlightRef.current = false;
     }
   };
 
@@ -2542,6 +2701,11 @@ function FlowsBuilder() {
             </Button>
           </div>
         </header>
+
+        <div className="border-b bg-amber-50 px-4 py-2 text-xs text-amber-800 lg:hidden">
+          The flow builder is drag-and-drop and works best on a larger
+          screen. Some panels may be hard to use here.
+        </div>
 
         <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[250px_minmax(0,1fr)_320px]">
           <aside className="overflow-y-auto border-r bg-muted/30 p-3 [scrollbar-color:hsl(var(--border))_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border">
@@ -2738,10 +2902,15 @@ function FlowsBuilder() {
                     <X className="size-4" />
                   </button>
                 </div>
-                <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
+                <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto text-xs text-muted-foreground">
                   {validationMessages.slice(0, 4).map((message) => (
                     <li key={message}>{message}</li>
                   ))}
+                  {validationMessages.length > 4 && (
+                    <li className="font-medium">
+                      +{validationMessages.length - 4} more
+                    </li>
+                  )}
                 </ul>
               </div>
             )}
@@ -2852,6 +3021,38 @@ function FlowsBuilder() {
         nodes={visibleNodes}
         edges={visibleEdges}
       />
+      <AlertDialog
+        open={Boolean(nodeDeletionRequest)}
+        onOpenChange={(open) => !open && setNodeDeletionRequest(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this block?</AlertDialogTitle>
+            <AlertDialogDescription>
+              &quot;{nodeDeletionRequest?.label}&quot; and any routes pointing
+              to it will be removed.
+              {nodeDeletionRequest?.cascadesFollowUp
+                ? " Its auto-linked follow-up block will be deleted along with it."
+                : ""}{" "}
+              This can&apos;t be undone from here.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-white hover:bg-destructive/90"
+              onClick={() => {
+                if (nodeDeletionRequest) {
+                  commitNodeDeletion(nodeDeletionRequest.ids);
+                }
+                setNodeDeletionRequest(null);
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 }

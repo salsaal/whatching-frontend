@@ -58,11 +58,20 @@ function Button({
   }) {
   const Comp = asChild ? Slot : "button";
 
+  // An icon-only button (no visible text child) commonly relies solely on
+  // `tooltip` for meaning, but that only renders a hover-only Radix
+  // tooltip -- it never reaches assistive tech. Fall back to it for
+  // aria-label so the button still has an accessible name; an explicit
+  // aria-label passed in props always wins (spread order below).
+  const fallbackAriaLabel =
+    typeof tooltip === "string" ? tooltip : undefined;
+
   const button = (
     <Comp
       data-slot="button"
       className={cn(buttonVariants({ variant, size }), className)}
       disabled={isLoading || props.disabled}
+      aria-label={fallbackAriaLabel}
       {...props}
     >
       <span

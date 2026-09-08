@@ -712,7 +712,9 @@ function ConversationListItem({
       </Avatar>
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">
-          <p className="truncate text-sm font-medium">{name}</p>
+          <p className="truncate text-sm font-medium" title={name}>
+            {name}
+          </p>
           <span className="shrink-0 text-[11px] text-muted-foreground">
             {formatDateTime(
               conversation.lastMessageAt || conversation.updatedAt
@@ -744,6 +746,7 @@ function ConversationListItem({
             <Badge
               variant="outline"
               className="max-w-28 truncate px-1.5 py-0 text-[10px]"
+              title={senderLabel}
             >
               {senderLabel}
             </Badge>
@@ -894,7 +897,9 @@ function MessageBubble({
             className="mb-2 flex items-center gap-2 rounded-lg bg-black/5 p-2"
           >
             <FileText className="size-4" />
-            <span className="truncate">{preview.name || attachmentName}</span>
+            <span className="truncate" title={preview.name || attachmentName}>
+              {preview.name || attachmentName}
+            </span>
           </a>
         ))}
         {location && (
@@ -908,7 +913,7 @@ function MessageBubble({
               <MapPin className="size-4 text-primary" />
             </div>
             <div className="min-w-0">
-              <p className="truncate font-medium">
+              <p className="truncate font-medium" title={location.name}>
                 {location.name || "Shared location"}
               </p>
               <p className="truncate text-xs opacity-75">
@@ -929,7 +934,9 @@ function MessageBubble({
                   <ContactRound className="size-4 text-primary" />
                 </div>
                 <div className="min-w-0">
-                  <p className="truncate font-medium">{contact.name}</p>
+                  <p className="truncate font-medium" title={contact.name}>
+                    {contact.name}
+                  </p>
                   {contact.phone && (
                     <p className="truncate text-xs opacity-75">
                       {contact.phone}
@@ -945,6 +952,7 @@ function MessageBubble({
                       href={toExternalUrl(contact.website)}
                       target="_blank"
                       rel="noreferrer"
+                      title={contact.website}
                       className={cn(
                         "mt-1 inline-flex max-w-full items-center gap-1 truncate text-xs font-medium underline-offset-2 hover:underline",
                         isOutbound ? "text-primary-foreground" : "text-primary"
@@ -1294,6 +1302,7 @@ export default function ConversationsPage() {
   const {
     data: messagesData,
     isLoading: isMessagesLoading,
+    isError: isMessagesError,
     isFetchingNextPage: isFetchingOlderMessages,
     hasNextPage: hasOlderMessages,
     fetchNextPage: fetchOlderMessages
@@ -1557,24 +1566,39 @@ export default function ConversationsPage() {
 
   const { mutate: assignMutate, isPending: isAssigning } = useMutation({
     mutationFn: assignConversation,
+    meta: { showToast: false },
     onSuccess: async () => {
       toast.success("Conversation assignment updated.");
       await invalidateConversations();
+    },
+    onError: (error: AxiosError<{ message?: string }>) => {
+      toast.error(
+        error.response?.data?.message ||
+          "Conversation could not be reassigned."
+      );
     }
   });
 
   const { mutate: updateStatusMutate, isPending: isUpdatingStatus } =
     useMutation({
       mutationFn: updateConversationStatus,
+      meta: { showToast: false },
       onSuccess: async () => {
         toast.success("Conversation status updated.");
         await invalidateConversations();
+      },
+      onError: (error: AxiosError<{ message?: string }>) => {
+        toast.error(
+          error.response?.data?.message ||
+            "Conversation status could not be updated."
+        );
       }
     });
 
   const { mutate: updateContactMutate, isPending: isUpdatingContact } =
     useMutation({
       mutationFn: updateSubscriber,
+      meta: { showToast: false },
       onSuccess: async () => {
         toast.success("Contact name updated.");
         await invalidateConversations();
@@ -1588,6 +1612,7 @@ export default function ConversationsPage() {
 
   const { mutate: sendReply, isPending: isSending } = useMutation({
     mutationFn: sendConversationReply,
+    meta: { showToast: false },
     onSuccess: async () => {
       setReplyText("");
       setReplyTarget(null);
@@ -1595,12 +1620,19 @@ export default function ConversationsPage() {
       setSelectedMedia(null);
       toast.success("Reply queued.");
       await invalidateConversations();
+    },
+    onError: (error: AxiosError<{ message?: string }>) => {
+      toast.error(
+        error.response?.data?.message ||
+          "Reply could not be sent. Check your connection and try again."
+      );
     }
   });
 
   const { mutate: sendTemplateMutate, isPending: isSendingTemplate } =
     useMutation({
       mutationFn: sendTemplateMessage,
+      meta: { showToast: false },
       onSuccess: async () => {
         setIsTemplateModalOpen(false);
         setSelectedTemplateId("");
@@ -2211,6 +2243,8 @@ export default function ConversationsPage() {
                 >
                   {isMessagesLoading ? (
                     <ThreadSkeleton />
+                  ) : isMessagesError ? (
+                    <QueryErrorState message="Messages could not be loaded for this conversation." />
                   ) : messages.length ? (
                     <div className="space-y-3">
                       {isFetchingOlderMessages && (
@@ -2317,7 +2351,10 @@ export default function ConversationsPage() {
                           </div>
                         )}
                         <div className="min-w-0">
-                          <p className="truncate font-medium">
+                          <p
+                            className="truncate font-medium"
+                            title={attachment?.name || selectedMedia?.name}
+                          >
                             {attachment?.name || selectedMedia?.name}
                           </p>
                           <p className="truncate text-xs text-muted-foreground">
@@ -2329,6 +2366,8 @@ export default function ConversationsPage() {
                       </div>
                       <button
                         type="button"
+                        aria-label="Remove attachment"
+                        title="Remove attachment"
                         onClick={() => {
                           setAttachment(null);
                           setSelectedMedia(null);
@@ -2351,6 +2390,8 @@ export default function ConversationsPage() {
                       </div>
                       <button
                         type="button"
+                        aria-label="Cancel reply"
+                        title="Cancel reply"
                         className="cursor-pointer rounded-full p-1 text-muted-foreground hover:bg-white hover:text-foreground"
                         onClick={() => setReplyTarget(null)}
                       >
@@ -2943,7 +2984,10 @@ export default function ConversationsPage() {
                             </div>
                           )}
                           <div className="min-w-0 flex-1">
-                            <p className="truncate font-medium">
+                            <p
+                              className="truncate font-medium"
+                              title={effectiveTemplateHeaderMedia.name}
+                            >
                               {effectiveTemplateHeaderMedia.name}
                             </p>
                             <p className="text-xs capitalize text-muted-foreground">
@@ -3180,7 +3224,9 @@ function MediaLightbox({
       >
         <div className="flex items-center justify-between gap-4 border-b border-white/10 px-4 py-3 text-white">
           <div className="min-w-0">
-            <p className="truncate text-sm font-medium">{preview.name}</p>
+            <p className="truncate text-sm font-medium" title={preview.name}>
+              {preview.name}
+            </p>
             {preview.caption && (
               <p className="truncate text-xs text-white/65">
                 {preview.caption}
