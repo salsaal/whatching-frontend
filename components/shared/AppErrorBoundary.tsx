@@ -2,6 +2,7 @@ import { AlertTriangle } from "lucide-react";
 import { Component, ErrorInfo, ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
+import { captureException } from "@/lib/sentry";
 
 interface Props {
   children: ReactNode;
@@ -26,6 +27,7 @@ export class AppErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error("Unhandled render error", error, info.componentStack);
+    captureException(error, { componentStack: info.componentStack });
   }
 
   componentDidUpdate(prevProps: Props) {

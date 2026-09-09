@@ -18,7 +18,13 @@ import "@xyflow/react/dist/style.css";
 import { ApiResponse } from "@/client-api/types/api";
 import RouteGuard from "@/components/auth/RouteGuard";
 import { AppErrorBoundary } from "@/components/shared/AppErrorBoundary";
+import { initSentry } from "@/lib/sentry";
 import { NuqsAdapter } from "nuqs/adapters/next/pages";
+
+// Module scope so this also runs on the very first client render, not just
+// after some later effect -- initSentry() itself no-ops server-side and
+// when NEXT_PUBLIC_SENTRY_DSN isn't set.
+initSentry();
 
 interface ErrorData {
   response: {
