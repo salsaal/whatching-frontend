@@ -3,7 +3,7 @@ User-agent: *
 Disallow: /
 
 # Host
-Host: http://localhost:3000
+Host: https://app.whatching.com
 
 # Sitemaps
-Sitemap: http://localhost:3000/sitemap.xml
+Sitemap: https://app.whatching.com/sitemap.xml
