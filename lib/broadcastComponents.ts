@@ -1,5 +1,8 @@
 import { MessageTemplate } from "@/client-api/types/templates.type";
-import { extractVariables, getBodyComponent } from "@/components/templates/templateUtils";
+import {
+  extractVariables,
+  getBodyComponent
+} from "@/components/templates/templateUtils";
 
 export type BroadcastVariableSource =
   | "subscriber_field"
@@ -41,7 +44,9 @@ export const getTemplateBodyExample = (
     : "";
 };
 
-export const defaultVariableMapping = (key: string): BroadcastVariableMapping => ({
+export const defaultVariableMapping = (
+  key: string
+): BroadcastVariableMapping => ({
   source: key === "1" ? "subscriber_field" : "literal",
   path: key === "1" ? "firstName" : "",
   fallback: key === "1" ? "Valued Customer" : "",

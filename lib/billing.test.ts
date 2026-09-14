@@ -88,11 +88,15 @@ describe("getDaysUntil", () => {
   });
 
   it("clamps a past date to 0 rather than going negative", () => {
-    expect(getDaysUntil(new Date(Date.now() - 86_400_000).toISOString())).toBe(0);
+    expect(getDaysUntil(new Date(Date.now() - 86_400_000).toISOString())).toBe(
+      0
+    );
   });
 
   it("rounds a future date up to whole days", () => {
-    const days = getDaysUntil(new Date(Date.now() + 3 * 86_400_000).toISOString());
+    const days = getDaysUntil(
+      new Date(Date.now() + 3 * 86_400_000).toISOString()
+    );
     expect(days).toBeGreaterThanOrEqual(2);
     expect(days).toBeLessThanOrEqual(4);
   });
@@ -101,9 +105,11 @@ describe("getDaysUntil", () => {
 describe("canStartFreeTrial", () => {
   it("is only true with no plan and no recorded trial consumption", () => {
     expect(canStartFreeTrial(org({ planTier: "none" }))).toBe(true);
-    expect(canStartFreeTrial(org({ planTier: "none", trialConsumedAt: "2026-01-01" }))).toBe(
-      false
-    );
+    expect(
+      canStartFreeTrial(
+        org({ planTier: "none", trialConsumedAt: "2026-01-01" })
+      )
+    ).toBe(false);
     expect(canStartFreeTrial(org({ planTier: "basic" }))).toBe(false);
     // No organization at all defaults permissively to "none" via the ||
     // fallback -- this is the documented, intentional behavior, not a gap.
@@ -129,7 +135,10 @@ describe("buildPlanAction", () => {
 
   it("offers a direct subscribe for a no-plan org that already used its trial", () => {
     expect(
-      buildPlanAction(proPlan, org({ planTier: "none", trialConsumedAt: "2026-01-01" })).kind
+      buildPlanAction(
+        proPlan,
+        org({ planTier: "none", trialConsumedAt: "2026-01-01" })
+      ).kind
     ).toBe("subscribe");
   });
 
@@ -156,7 +165,9 @@ describe("isSubscriptionCanceledWithAccess", () => {
       isSubscriptionCanceledWithAccess(
         org({
           subscriptionStatus: "canceled",
-          subscriptionCurrentPeriodEnd: new Date(Date.now() + 86_400_000).toISOString()
+          subscriptionCurrentPeriodEnd: new Date(
+            Date.now() + 86_400_000
+          ).toISOString()
         })
       )
     ).toBe(true);
@@ -164,10 +175,14 @@ describe("isSubscriptionCanceledWithAccess", () => {
       isSubscriptionCanceledWithAccess(
         org({
           subscriptionStatus: "canceled",
-          subscriptionCurrentPeriodEnd: new Date(Date.now() - 86_400_000).toISOString()
+          subscriptionCurrentPeriodEnd: new Date(
+            Date.now() - 86_400_000
+          ).toISOString()
         })
       )
     ).toBe(false);
-    expect(isSubscriptionCanceledWithAccess(org({ subscriptionStatus: "active" }))).toBe(false);
+    expect(
+      isSubscriptionCanceledWithAccess(org({ subscriptionStatus: "active" }))
+    ).toBe(false);
   });
 });

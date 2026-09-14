@@ -13,9 +13,15 @@ import {
   statusLabel,
   templateNeedsMedia
 } from "./templateUtils";
-import { MessageTemplate, TemplateComponent, TemplateDraft } from "@/client-api/types/templates.type";
+import {
+  MessageTemplate,
+  TemplateComponent,
+  TemplateDraft
+} from "@/client-api/types/templates.type";
 
-const baseTemplate = (overrides: Partial<MessageTemplate> = {}): MessageTemplate => ({
+const baseTemplate = (
+  overrides: Partial<MessageTemplate> = {}
+): MessageTemplate => ({
   _id: "tpl_1",
   templateId: "tpl_1",
   orgId: "org_1",
@@ -52,10 +58,14 @@ describe("getTemplateType", () => {
   it("defaults to TEXT with no header, and returns the header format otherwise", () => {
     expect(getTemplateType(baseTemplate({ components: [] }))).toBe("TEXT");
     expect(
-      getTemplateType(baseTemplate({ components: [{ type: "HEADER", format: "IMAGE" }] }))
+      getTemplateType(
+        baseTemplate({ components: [{ type: "HEADER", format: "IMAGE" }] })
+      )
     ).toBe("IMAGE");
     expect(
-      getTemplateType(baseTemplate({ components: [{ type: "HEADER", format: "TEXT" }] }))
+      getTemplateType(
+        baseTemplate({ components: [{ type: "HEADER", format: "TEXT" }] })
+      )
     ).toBe("TEXT");
   });
 });
@@ -87,26 +97,27 @@ describe("templateNeedsMedia", () => {
 
 describe("extractVariables", () => {
   it("extracts unique numbered placeholders in first-seen order", () => {
-    expect(extractVariables("Hi {{1}}, your order {{2}} is ready. Thanks {{1}}!")).toEqual([
-      "1",
-      "2"
-    ]);
+    expect(
+      extractVariables("Hi {{1}}, your order {{2}} is ready. Thanks {{1}}!")
+    ).toEqual(["1", "2"]);
     expect(extractVariables("No placeholders here")).toEqual([]);
   });
 });
 
 describe("applyVariableExamples", () => {
   it("substitutes known examples and leaves unknown placeholders untouched", () => {
-    expect(applyVariableExamples("Hi {{1}}, order {{2}}", { "1": "Asha" })).toBe(
-      "Hi Asha, order {{2}}"
-    );
+    expect(
+      applyVariableExamples("Hi {{1}}, order {{2}}", { "1": "Asha" })
+    ).toBe("Hi Asha, order {{2}}");
   });
 });
 
 describe("buildButtonsComponent", () => {
   it("returns null for an empty button list and a BUTTONS component otherwise", () => {
     expect(buildButtonsComponent([])).toBeNull();
-    expect(buildButtonsComponent([{ type: "QUICK_REPLY", text: "Yes" }])).toEqual({
+    expect(
+      buildButtonsComponent([{ type: "QUICK_REPLY", text: "Yes" }])
+    ).toEqual({
       type: "BUTTONS",
       buttons: [{ type: "QUICK_REPLY", text: "Yes" }]
     });
@@ -128,10 +139,12 @@ describe("mapDraftToTemplate", () => {
 
   it("maps lowercase draft statuses to their display equivalents", () => {
     expect(mapDraftToTemplate(baseDraft).status).toBe("DRAFT");
-    expect(mapDraftToTemplate({ ...baseDraft, status: "pending_review" }).status).toBe(
-      "PENDING"
-    );
-    expect(mapDraftToTemplate({ ...baseDraft, status: "REJECTED" }).status).toBe("REJECTED");
+    expect(
+      mapDraftToTemplate({ ...baseDraft, status: "pending_review" }).status
+    ).toBe("PENDING");
+    expect(
+      mapDraftToTemplate({ ...baseDraft, status: "REJECTED" }).status
+    ).toBe("REJECTED");
   });
 
   it("prefers metaTemplateId, then templateId, then _id for the resulting templateId", () => {
@@ -140,8 +153,11 @@ describe("mapDraftToTemplate", () => {
       mapDraftToTemplate({ ...baseDraft, templateId: "tpl_local" }).templateId
     ).toBe("tpl_local");
     expect(
-      mapDraftToTemplate({ ...baseDraft, templateId: "tpl_local", metaTemplateId: "tpl_meta" })
-        .templateId
+      mapDraftToTemplate({
+        ...baseDraft,
+        templateId: "tpl_local",
+        metaTemplateId: "tpl_meta"
+      }).templateId
     ).toBe("tpl_meta");
   });
 
@@ -154,13 +170,19 @@ describe("mapDraftToTemplate", () => {
 describe("getTemplateEditId", () => {
   it("uses the draft id for draft-sourced templates and the templateId otherwise", () => {
     expect(
-      getTemplateEditId(baseTemplate({ source: "draft", draftId: "draft_1", _id: "tpl_1" }))
+      getTemplateEditId(
+        baseTemplate({ source: "draft", draftId: "draft_1", _id: "tpl_1" })
+      )
     ).toBe("draft_1");
     expect(
-      getTemplateEditId(baseTemplate({ source: "draft", draftId: undefined, _id: "tpl_1" }))
+      getTemplateEditId(
+        baseTemplate({ source: "draft", draftId: undefined, _id: "tpl_1" })
+      )
     ).toBe("tpl_1");
     expect(
-      getTemplateEditId(baseTemplate({ source: "meta", templateId: "tpl_meta" }))
+      getTemplateEditId(
+        baseTemplate({ source: "meta", templateId: "tpl_meta" })
+      )
     ).toBe("tpl_meta");
   });
 });
@@ -168,7 +190,9 @@ describe("getTemplateEditId", () => {
 describe("isPendingTemplate", () => {
   it("recognizes both the Meta and local draft pending statuses", () => {
     expect(isPendingTemplate(baseTemplate({ status: "PENDING" }))).toBe(true);
-    expect(isPendingTemplate(baseTemplate({ status: "pending_review" }))).toBe(true);
+    expect(isPendingTemplate(baseTemplate({ status: "pending_review" }))).toBe(
+      true
+    );
     expect(isPendingTemplate(baseTemplate({ status: "APPROVED" }))).toBe(false);
   });
 });

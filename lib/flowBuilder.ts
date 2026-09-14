@@ -6,7 +6,10 @@ import {
   BotCanvasNode,
   BotCanvasNodeContent
 } from "@/client-api/types/bot.type";
-import { BotFlowNodeData, BotFlowReactNode } from "@/components/flows/BotFlowNode";
+import {
+  BotFlowNodeData,
+  BotFlowReactNode
+} from "@/components/flows/BotFlowNode";
 
 export type BuilderNodeData = BotFlowNodeData & {
   content: BotCanvasNodeContent;

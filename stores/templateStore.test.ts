@@ -28,7 +28,9 @@ beforeEach(() => {
 describe("addTemplate", () => {
   it("prepends and de-duplicates by templateId", () => {
     useTemplateStore.getState().addTemplate(template("db_1", "tpl_1"));
-    useTemplateStore.getState().addTemplate(template("db_1", "tpl_1", { name: "renamed" }));
+    useTemplateStore
+      .getState()
+      .addTemplate(template("db_1", "tpl_1", { name: "renamed" }));
     const templates = useTemplateStore.getState().templates;
     expect(templates).toHaveLength(1);
     expect(templates[0].name).toBe("renamed");
@@ -42,9 +44,11 @@ describe("upsertTemplate", () => {
     // _id but the *same* templateId -- upsert must still treat it as the
     // same logical template, not create a duplicate row.
     useTemplateStore.getState().setTemplates([template("draft_1", "draft_1")]);
-    useTemplateStore.getState().upsertTemplate(
-      template("meta_tpl_1", "draft_1", { status: "APPROVED" })
-    );
+    useTemplateStore
+      .getState()
+      .upsertTemplate(
+        template("meta_tpl_1", "draft_1", { status: "APPROVED" })
+      );
 
     const templates = useTemplateStore.getState().templates;
     expect(templates).toHaveLength(1);
@@ -72,12 +76,13 @@ describe("upsertTemplate", () => {
 
 describe("removeTemplate", () => {
   it("removes a template matching either its templateId or its _id", () => {
-    useTemplateStore.getState().setTemplates([
-      template("db_1", "tpl_1"),
-      template("db_2", "tpl_2")
-    ]);
+    useTemplateStore
+      .getState()
+      .setTemplates([template("db_1", "tpl_1"), template("db_2", "tpl_2")]);
     useTemplateStore.getState().removeTemplate("tpl_1");
-    expect(useTemplateStore.getState().templates.map((t) => t._id)).toEqual(["db_2"]);
+    expect(useTemplateStore.getState().templates.map((t) => t._id)).toEqual([
+      "db_2"
+    ]);
 
     useTemplateStore.getState().removeTemplate("db_2");
     expect(useTemplateStore.getState().templates).toEqual([]);

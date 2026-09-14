@@ -45,18 +45,24 @@ describe("addOrganization", () => {
   it("prepends a new organization and de-duplicates by id if it already existed", () => {
     useOrganizationStore.getState().addOrganization(org("a"));
     useOrganizationStore.getState().addOrganization(org("b"));
-    useOrganizationStore.getState().addOrganization(org("a", { name: "Renamed A" }));
+    useOrganizationStore
+      .getState()
+      .addOrganization(org("a", { name: "Renamed A" }));
 
     const ids = useOrganizationStore.getState().organizations.map((o) => o._id);
     expect(ids).toEqual(["a", "b"]);
-    expect(useOrganizationStore.getState().organizations[0].name).toBe("Renamed A");
+    expect(useOrganizationStore.getState().organizations[0].name).toBe(
+      "Renamed A"
+    );
   });
 });
 
 describe("upsertOrganization", () => {
   it("updates an existing organization in place without changing list order", () => {
     useOrganizationStore.getState().setOrganizations([org("a"), org("b")]);
-    useOrganizationStore.getState().upsertOrganization(org("b", { name: "Renamed B" }));
+    useOrganizationStore
+      .getState()
+      .upsertOrganization(org("b", { name: "Renamed B" }));
 
     const state = useOrganizationStore.getState();
     expect(state.organizations.map((o) => o._id)).toEqual(["a", "b"]);
@@ -74,8 +80,12 @@ describe("upsertOrganization", () => {
   it("also refreshes activeOrganization when it's the one being upserted", () => {
     useOrganizationStore.getState().setOrganizations([org("a")]);
     useOrganizationStore.getState().setActiveOrganization(org("a"));
-    useOrganizationStore.getState().upsertOrganization(org("a", { name: "Renamed A" }));
-    expect(useOrganizationStore.getState().activeOrganization?.name).toBe("Renamed A");
+    useOrganizationStore
+      .getState()
+      .upsertOrganization(org("a", { name: "Renamed A" }));
+    expect(useOrganizationStore.getState().activeOrganization?.name).toBe(
+      "Renamed A"
+    );
   });
 });
 

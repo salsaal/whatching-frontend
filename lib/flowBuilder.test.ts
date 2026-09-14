@@ -87,12 +87,19 @@ describe("getListSections / getListRowCount", () => {
 
 describe("defaultContent / getCarouselCards", () => {
   it("returns block-specific starter content", () => {
-    expect(defaultContent("text")).toEqual({ text: "Write your message here." });
-    expect(defaultContent("image")).toEqual({ mediaType: "image", mediaId: "" });
+    expect(defaultContent("text")).toEqual({
+      text: "Write your message here."
+    });
+    expect(defaultContent("image")).toEqual({
+      mediaType: "image",
+      mediaId: ""
+    });
   });
 
   it("getCarouselCards passes through real cards and falls back to the 2-card default otherwise", () => {
-    expect(getCarouselCards({ cards: [{ title: "A" }] })).toEqual([{ title: "A" }]);
+    expect(getCarouselCards({ cards: [{ title: "A" }] })).toEqual([
+      { title: "A" }
+    ]);
     expect(getCarouselCards({})).toHaveLength(2);
   });
 });
@@ -128,7 +135,10 @@ describe("localValidate: required system nodes", () => {
 
 describe("localValidate: per-block content requirements", () => {
   it("flags an empty text block message", () => {
-    const nodes = [...requiredNodes(), buildNode("n1", { content: { text: "" } })];
+    const nodes = [
+      ...requiredNodes(),
+      buildNode("n1", { content: { text: "" } })
+    ];
     const { invalidIds, messages } = localValidate(nodes, []);
     expect(invalidIds.has("n1")).toBe(true);
     expect(messages).toContain("Block: message text is required.");
@@ -141,7 +151,9 @@ describe("localValidate: per-block content requirements", () => {
       buildNode("n2", { triggerKey: "DUPE" })
     ];
     const { messages } = localValidate(nodes, []);
-    expect(messages.some((message) => message.includes("is duplicated"))).toBe(true);
+    expect(messages.some((message) => message.includes("is duplicated"))).toBe(
+      true
+    );
   });
 
   it("flags a buttons block with more than 3 reply actions", () => {
@@ -150,7 +162,12 @@ describe("localValidate: per-block content requirements", () => {
       buildNode("n1", {
         blockType: "buttons",
         content: { bodyText: "Pick one" },
-        actions: [action({ actionId: "a" }), action({ actionId: "b" }), action({ actionId: "c" }), action({ actionId: "d" })]
+        actions: [
+          action({ actionId: "a" }),
+          action({ actionId: "b" }),
+          action({ actionId: "c" }),
+          action({ actionId: "d" })
+        ]
       })
     ];
     const { messages } = localValidate(nodes, []);
@@ -180,7 +197,9 @@ describe("localValidate: per-block content requirements", () => {
       })
     ];
     const { messages } = localValidate(nodes, []);
-    expect(messages.some((message) => message.includes("is duplicated"))).toBe(true);
+    expect(messages.some((message) => message.includes("is duplicated"))).toBe(
+      true
+    );
   });
 
   it("flags a generic_carousel with fewer than 2 cards and mismatched button shapes", () => {
@@ -201,7 +220,9 @@ describe("localValidate: per-block content requirements", () => {
       })
     ];
     const { messages } = localValidate(nodes, []);
-    expect(messages.some((message) => message.includes("2-10 cards"))).toBe(true);
+    expect(messages.some((message) => message.includes("2-10 cards"))).toBe(
+      true
+    );
   });
 
   it("flags an open_url action with an invalid URL", () => {
@@ -231,7 +252,9 @@ describe("localValidate: routing connectivity", () => {
       })
     ];
     const { messages } = localValidate(nodes, []);
-    expect(messages.some((message) => message.includes("is not connected"))).toBe(true);
+    expect(
+      messages.some((message) => message.includes("is not connected"))
+    ).toBe(true);
   });
 
   it("does not require OPT_IN/OPT_OUT routes to be connected", () => {
@@ -240,9 +263,13 @@ describe("localValidate: routing connectivity", () => {
     // unrouted action (also present with no edges) would trip the same
     // message and this test wouldn't isolate the OPT_OUT exemption at all.
     nodes[0].data.actions = [];
-    nodes[2].data.actions = [action({ actionId: "unrouted", replyId: "UNROUTED" })];
+    nodes[2].data.actions = [
+      action({ actionId: "unrouted", replyId: "UNROUTED" })
+    ];
     const { messages } = localValidate(nodes, []);
-    expect(messages.some((message) => message.includes("is not connected"))).toBe(false);
+    expect(
+      messages.some((message) => message.includes("is not connected"))
+    ).toBe(false);
   });
 });
 
@@ -271,7 +298,10 @@ describe("localValidate: orphan detection", () => {
           targetTriggerKey: "FOLLOW_UP_TARGET"
         }
       }),
-      buildNode("target", { label: "Follow Up Target", triggerKey: "FOLLOW_UP_TARGET" })
+      buildNode("target", {
+        label: "Follow Up Target",
+        triggerKey: "FOLLOW_UP_TARGET"
+      })
     ];
     // SOURCE itself must be reachable via a normal edge for this to prove
     // anything about the follow-up hop specifically.
@@ -286,7 +316,9 @@ describe("localValidate: orphan detection", () => {
     ];
     const { messages } = localValidate(nodes, edges);
     expect(
-      messages.some((message) => message.includes("Follow Up Target: unreachable"))
+      messages.some((message) =>
+        message.includes("Follow Up Target: unreachable")
+      )
     ).toBe(false);
   });
 });

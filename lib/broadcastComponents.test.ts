@@ -10,7 +10,9 @@ import {
 } from "./broadcastComponents";
 import type { MessageTemplate } from "@/client-api/types/templates.type";
 
-const template = (overrides: Partial<MessageTemplate> = {}): MessageTemplate => ({
+const template = (
+  overrides: Partial<MessageTemplate> = {}
+): MessageTemplate => ({
   _id: "tpl_1",
   templateId: "tpl_1",
   orgId: "org_1",
@@ -33,13 +35,17 @@ const template = (overrides: Partial<MessageTemplate> = {}): MessageTemplate => 
 describe("getTemplateBodyText / getTemplateBodyVariables", () => {
   it("extracts the body text and its numbered variables in order", () => {
     const t = template();
-    expect(getTemplateBodyText(t)).toBe("Hi {{1}}, your order {{2}} is on the way.");
+    expect(getTemplateBodyText(t)).toBe(
+      "Hi {{1}}, your order {{2}} is on the way."
+    );
     expect(getTemplateBodyVariables(t)).toEqual(["1", "2"]);
   });
 
   it("returns an empty variable list for a template with no body placeholders", () => {
     expect(
-      getTemplateBodyVariables(template({ components: [{ type: "BODY", text: "Hello!" }] }))
+      getTemplateBodyVariables(
+        template({ components: [{ type: "BODY", text: "Hello!" }] })
+      )
     ).toEqual([]);
   });
 });
@@ -79,12 +85,20 @@ describe("defaultVariableMapping", () => {
 
 describe("buildBroadcastComponents", () => {
   it("returns an empty component list when the template has no variables", () => {
-    expect(buildBroadcastComponents([], {})).toEqual({ ok: true, components: [] });
+    expect(buildBroadcastComponents([], {})).toEqual({
+      ok: true,
+      components: []
+    });
   });
 
   it("builds a body component with one parameter per variable, in order", () => {
     const mappings: Record<string, BroadcastVariableMapping> = {
-      "1": { source: "subscriber_field", path: "firstName", fallback: "Friend", literal: "" },
+      "1": {
+        source: "subscriber_field",
+        path: "firstName",
+        fallback: "Friend",
+        literal: ""
+      },
       "2": { source: "literal", path: "", fallback: "", literal: "ORD123" }
     };
     const result = buildBroadcastComponents(["1", "2"], mappings);
@@ -96,7 +110,11 @@ describe("buildBroadcastComponents", () => {
         parameters: [
           {
             type: "text",
-            value: { source: "subscriber_field", path: "firstName", fallback: "Friend" }
+            value: {
+              source: "subscriber_field",
+              path: "firstName",
+              fallback: "Friend"
+            }
           },
           { type: "text", value: { source: "literal", text: "ORD123" } }
         ]
@@ -106,12 +124,24 @@ describe("buildBroadcastComponents", () => {
 
   it("resolves a metadata_field mapping with a trimmed path and optional fallback", () => {
     const result = buildBroadcastComponents("1".split(""), {
-      "1": { source: "metadata_field", path: " orderId ", fallback: "", literal: "" }
+      "1": {
+        source: "metadata_field",
+        path: " orderId ",
+        fallback: "",
+        literal: ""
+      }
     });
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok result");
     expect(result.components[0].parameters).toEqual([
-      { type: "text", value: { source: "metadata_field", path: "orderId", fallback: undefined } }
+      {
+        type: "text",
+        value: {
+          source: "metadata_field",
+          path: "orderId",
+          fallback: undefined
+        }
+      }
     ]);
   });
 
@@ -126,7 +156,10 @@ describe("buildBroadcastComponents", () => {
     const result = buildBroadcastComponents(["1"], {
       "1": { source: "metadata_field", path: "  ", fallback: "", literal: "" }
     });
-    expect(result).toEqual({ ok: false, error: "Add a metadata path for {{1}}" });
+    expect(result).toEqual({
+      ok: false,
+      error: "Add a metadata path for {{1}}"
+    });
   });
 
   it("falls back to defaultVariableMapping for a variable with no explicit mapping", () => {
@@ -136,7 +169,11 @@ describe("buildBroadcastComponents", () => {
     expect(result.components[0].parameters).toEqual([
       {
         type: "text",
-        value: { source: "subscriber_field", path: "firstName", fallback: "Valued Customer" }
+        value: {
+          source: "subscriber_field",
+          path: "firstName",
+          fallback: "Valued Customer"
+        }
       }
     ]);
   });

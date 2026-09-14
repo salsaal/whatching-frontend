@@ -63,18 +63,24 @@ describe("setAuth", () => {
     // org they already had loaded, or silently forget the trial-used flag.
     useAuthStore.getState().setAuth({ token: "tok_2", user: user() });
 
-    expect(useOrganizationStore.getState().activeOrganization?._id).toBe("org_1");
+    expect(useOrganizationStore.getState().activeOrganization?._id).toBe(
+      "org_1"
+    );
     expect(useAuthStore.getState().trialUnavailable).toBe(true);
   });
 
   it("clears cached organization state and resets trialUnavailable when a different user logs in", () => {
-    useAuthStore.getState().setAuth({ token: "tok_1", user: user({ _id: "user_1" }) });
+    useAuthStore
+      .getState()
+      .setAuth({ token: "tok_1", user: user({ _id: "user_1" }) });
     useOrganizationStore.getState().setActiveOrganization(org());
     useAuthStore.getState().markTrialUnavailable();
 
     // A different account logging into the same browser session must never
     // inherit the previous user's organization or trial-used state.
-    useAuthStore.getState().setAuth({ token: "tok_2", user: user({ _id: "user_2" }) });
+    useAuthStore
+      .getState()
+      .setAuth({ token: "tok_2", user: user({ _id: "user_2" }) });
 
     expect(useOrganizationStore.getState().activeOrganization).toBeNull();
     expect(useOrganizationStore.getState().ownerUserId).toBe("user_2");
@@ -84,7 +90,10 @@ describe("setAuth", () => {
   it("clears stale organization state left with no recorded owner (pre-owner-tracking data)", () => {
     // Simulates organization state that predates ownerUserId tracking --
     // present, but with no owner recorded.
-    useOrganizationStore.setState({ activeOrganization: org(), ownerUserId: null });
+    useOrganizationStore.setState({
+      activeOrganization: org(),
+      ownerUserId: null
+    });
 
     useAuthStore.getState().setAuth({ token: "tok_1", user: user() });
 
