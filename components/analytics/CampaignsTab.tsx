@@ -184,58 +184,20 @@ function CampaignPerformanceDialog({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-md bg-primary/5 p-3">
-                <p className="text-xs text-muted-foreground">
-                  Cost per conversation
-                </p>
-                <p className="mt-1 font-heading text-lg font-semibold text-primary">
-                  {performance.costPerConversation != null
-                    ? decimalFormat.format(performance.costPerConversation)
-                    : "-"}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {numberFormat.format(performance.touches.subscriberCount)}{" "}
-                  contacts from this campaign
-                </p>
-              </div>
-              <div className="rounded-md bg-primary/5 p-3">
-                <p className="text-xs text-muted-foreground">
-                  Cost per conversion
-                </p>
-                <p className="mt-1 font-heading text-lg font-semibold text-primary">
-                  {performance.costPerConversion != null
-                    ? decimalFormat.format(performance.costPerConversion)
-                    : "-"}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {performance.conversions.reduce(
-                    (sum, row) => sum + row.subscriberCount,
-                    0
-                  )}{" "}
-                  conversions tagged
-                </p>
-              </div>
+            <div className="rounded-md bg-primary/5 p-3">
+              <p className="text-xs text-muted-foreground">
+                Cost per conversation
+              </p>
+              <p className="mt-1 font-heading text-lg font-semibold text-primary">
+                {performance.costPerConversation != null
+                  ? decimalFormat.format(performance.costPerConversation)
+                  : "-"}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {numberFormat.format(performance.touches.subscriberCount)}{" "}
+                contacts from this campaign
+              </p>
             </div>
-
-            {performance.conversions.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-xs font-medium text-muted-foreground">
-                  Conversions by event
-                </p>
-                {performance.conversions.map((row) => (
-                  <div
-                    key={row.eventName}
-                    className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"
-                  >
-                    <span>{row.eventName}</span>
-                    <span className="text-muted-foreground">
-                      {numberFormat.format(row.subscriberCount)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         )}
 

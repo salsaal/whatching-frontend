@@ -54,12 +54,6 @@ export interface CampaignSpend {
   reach: number;
 }
 
-export interface CampaignConversionRow {
-  eventName: string;
-  count: number;
-  subscriberCount: number;
-}
-
 export interface CampaignPerformanceResponse {
   status: string;
   data: {
@@ -69,9 +63,7 @@ export interface CampaignPerformanceResponse {
     range: { start: string; end: string };
     spend: CampaignSpend | null;
     touches: { subscriberCount: number; touchCount: number };
-    conversions: CampaignConversionRow[];
     costPerConversation?: number | null;
-    costPerConversion?: number | null;
   };
 }
 
