@@ -198,7 +198,14 @@ export default function BroadcastsPage() {
     queryKey: ["whatsapp-outbound-readiness", senderRecordId],
     queryFn: () => getWhatsAppOutboundReadiness(senderRecordId),
     enabled: Boolean(senderRecordId),
-    refetchInterval: 4000,
+    // Only poll while a test is actually in flight waiting on Meta's
+    // delivery webhook -- see pages/overview.tsx for the same fix and why.
+    refetchInterval: (query) => {
+      const status = query.state.data?.data.readiness?.status;
+      return status === "testing" || status === "template_pending"
+        ? 4000
+        : false;
+    },
     refetchOnWindowFocus: true
   });
   const canCreateBroadcast =

@@ -246,7 +246,16 @@ export default function OverviewPage() {
     queryKey: ["whatsapp-outbound-readiness", readinessRecordId],
     queryFn: () => getWhatsAppOutboundReadiness(readinessRecordId),
     enabled: Boolean(readinessRecordId),
-    refetchInterval: 4000,
+    // Only poll while a test is actually in flight waiting on Meta's
+    // delivery webhook -- this was unconditional before, so every open
+    // overview tab hit the backend every 4s forever, even for the steady
+    // "ready"/"not_tested" states almost every visit is actually in.
+    refetchInterval: (query) => {
+      const status = query.state.data?.data.readiness?.status;
+      return status === "testing" || status === "template_pending"
+        ? 4000
+        : false;
+    },
     refetchOnWindowFocus: true
   });
   const readiness = readinessData?.data.readiness;
