@@ -25,6 +25,7 @@ export const ORGANIZATION_ENDPOINTS = {
   SYNC_INTEGRATION: `${ORGANIZATIONS_BASE}/integration/sync`,
   AD_ACCOUNTS: `${ORGANIZATIONS_BASE}/integration/ad-accounts`,
   SELECT_AD_ACCOUNT: `${ORGANIZATIONS_BASE}/integration/ad-account`,
+  AD_ACCOUNT_COMPLETE_SIGNUP: `${ORGANIZATIONS_BASE}/integration/ad-accounts/complete-signup`,
   COEXISTENCE_CONTACT_SYNC: `${ORGANIZATIONS_BASE}/integration/contact-sync`,
   TEMPLATE_INSIGHTS_STATUS: `${ORGANIZATIONS_BASE}/whatsapp/template-insights/status`,
   TEMPLATE_INSIGHTS_ENABLE: `${ORGANIZATIONS_BASE}/whatsapp/template-insights/enable`,

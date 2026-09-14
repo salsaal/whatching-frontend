@@ -2,6 +2,8 @@ import api from "../axiosInstance";
 import { ORGANIZATION_ENDPOINTS } from "../endpoints";
 import {
   AdAccountsResponse,
+  AdAccountSignupCompletePayload,
+  AdAccountSignupCompleteResponse,
   ConnectMetaPayload,
   CoexistenceContactSyncResponse,
   DeleteOrganizationResponse,
@@ -142,6 +144,16 @@ export const selectAdAccount = async (payload: {
 }): Promise<SelectAdAccountResponse> => {
   const res = await api.post<SelectAdAccountResponse>(
     ORGANIZATION_ENDPOINTS.SELECT_AD_ACCOUNT,
+    payload
+  );
+  return res.data;
+};
+
+export const completeAdAccountSignup = async (
+  payload: AdAccountSignupCompletePayload
+): Promise<AdAccountSignupCompleteResponse> => {
+  const res = await api.post<AdAccountSignupCompleteResponse>(
+    ORGANIZATION_ENDPOINTS.AD_ACCOUNT_COMPLETE_SIGNUP,
     payload
   );
   return res.data;

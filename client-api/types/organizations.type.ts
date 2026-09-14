@@ -223,6 +223,19 @@ export interface EmbeddedSignupConnectPayload {
   coexistenceEnabled?: boolean;
 }
 
+// Deliberately separate from EmbeddedSignupConnectPayload, which requires
+// wabaId/phoneNumberId that don't exist in this flow -- this is a standalone
+// ad-account login config, not the WhatsApp embedded signup.
+export interface AdAccountSignupCompletePayload {
+  code: string;
+  data?: { ad_account_ids?: string[]; [key: string]: unknown };
+}
+
+export interface AdAccountSignupCompleteResponse {
+  status: string;
+  data: { adAccountId: string | null; adAccountName: string | null };
+}
+
 export interface SubscribeResponse {
   status: string;
   message?: string;
