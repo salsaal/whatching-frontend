@@ -40,18 +40,13 @@ import {
   Broadcast,
   BroadcastAudience
 } from "@/client-api/types/broadcasts.type";
-import { MessageTemplate } from "@/client-api/types/templates.type";
 import { Subscriber } from "@/client-api/types/subscribers.type";
 import {
   ALL_WHATSAPP_NUMBERS,
   WhatsAppNumberSwitcher,
   useWhatsAppNumberContext
 } from "@/components/whatsapp/WhatsAppNumberSwitcher";
-import {
-  extractVariables,
-  getBodyComponent,
-  getButtonsComponent
-} from "@/components/templates/templateUtils";
+import { getButtonsComponent } from "@/components/templates/templateUtils";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -96,6 +91,16 @@ import {
   hasBroadcastRetryPreference,
   setBroadcastRetryPreference
 } from "@/lib/broadcastRetryPreference";
+import {
+  BroadcastVariableMapping,
+  BroadcastVariableSource,
+  buildBroadcastComponents,
+  defaultVariableMapping,
+  getTemplateBodyExample,
+  getTemplateBodyText,
+  getTemplateBodyVariables,
+  subscriberFieldOptions
+} from "@/lib/broadcastComponents";
 import { buildMetaPaymentMethodUrl } from "@/lib/metaBilling";
 import { cn } from "@/lib/utils";
 import { useOrganizationStore } from "@/stores/organizationStore";
@@ -144,113 +149,6 @@ const statusClasses: Record<string, string> = {
   completed: "bg-primary/10 text-primary",
   failed: "bg-destructive/10 text-destructive",
   canceled: "bg-muted text-muted-foreground"
-};
-
-type BroadcastVariableSource =
-  | "subscriber_field"
-  | "metadata_field"
-  | "literal";
-
-interface BroadcastVariableMapping {
-  source: BroadcastVariableSource;
-  path: string;
-  fallback: string;
-  literal: string;
-}
-
-const subscriberFieldOptions = [
-  { value: "firstName", label: "First name" },
-  { value: "lastName", label: "Last name" },
-  { value: "fullName", label: "Full name" },
-  { value: "phoneNumber", label: "Phone number" },
-  { value: "waId", label: "WhatsApp ID" }
-] as const;
-
-const getTemplateBodyText = (template?: MessageTemplate) =>
-  getBodyComponent(template?.components || [])?.text || "";
-
-const getTemplateBodyVariables = (template?: MessageTemplate) =>
-  extractVariables(getTemplateBodyText(template)).sort(
-    (a, b) => Number(a) - Number(b)
-  );
-
-const getTemplateBodyExample = (
-  template: MessageTemplate | undefined,
-  key: string
-) => {
-  const examples = getBodyComponent(template?.components || [])?.example
-    ?.body_text;
-  const sampleValues = Array.isArray(examples?.[0]) ? examples?.[0] : examples;
-  return Array.isArray(sampleValues)
-    ? String(sampleValues[Number(key) - 1] || "")
-    : "";
-};
-
-const defaultVariableMapping = (key: string): BroadcastVariableMapping => ({
-  source: key === "1" ? "subscriber_field" : "literal",
-  path: key === "1" ? "firstName" : "",
-  fallback: key === "1" ? "Valued Customer" : "",
-  literal: ""
-});
-
-const buildBroadcastComponents = (
-  variables: string[],
-  mappings: Record<string, BroadcastVariableMapping>
-) => {
-  if (!variables.length) return [];
-
-  const parameters = variables.map((key) => {
-    const mapping = mappings[key] || defaultVariableMapping(key);
-
-    if (mapping.source === "literal") {
-      if (!mapping.literal.trim()) {
-        toast.error(`Add a value for {{${key}}}`);
-        return null;
-      }
-
-      return {
-        type: "text",
-        value: {
-          source: "literal",
-          text: mapping.literal.trim()
-        }
-      };
-    }
-
-    if (mapping.source === "metadata_field") {
-      if (!mapping.path.trim()) {
-        toast.error(`Add a metadata path for {{${key}}}`);
-        return null;
-      }
-
-      return {
-        type: "text",
-        value: {
-          source: "metadata_field",
-          path: mapping.path.trim(),
-          fallback: mapping.fallback.trim() || undefined
-        }
-      };
-    }
-
-    return {
-      type: "text",
-      value: {
-        source: "subscriber_field",
-        path: mapping.path || "firstName",
-        fallback: mapping.fallback.trim() || undefined
-      }
-    };
-  });
-
-  if (parameters.some((parameter) => !parameter)) return null;
-
-  return [
-    {
-      type: "body",
-      parameters
-    }
-  ];
 };
 
 export default function BroadcastsPage() {
@@ -719,17 +617,20 @@ export default function BroadcastsPage() {
 
     const audience = currentAudience;
 
-    const components = buildBroadcastComponents(
+    const componentsResult = buildBroadcastComponents(
       bodyVariables,
       variableMappings
     );
-    if (!components) return;
+    if (!componentsResult.ok) {
+      toast.error(componentsResult.error);
+      return;
+    }
 
     createDraft({
       name: broadcastName.trim(),
       templateId,
       audience,
-      components,
+      components: componentsResult.components,
       phoneNumberId: senderPhoneNumberId,
       ...(selectedQuickReplyRoutes.length
         ? { quickReplyRoutes: selectedQuickReplyRoutes }
