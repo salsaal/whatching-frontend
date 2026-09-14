@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 
 import {
   CreateTagPayload,
-  MetaConversionEventName,
   Tag,
   TagAutomationTrigger,
   TagChannelScope,
@@ -43,28 +42,6 @@ const parseKeywords = (value: string) =>
     .map((item) => item.trim())
     .filter(Boolean);
 
-const NO_CONVERSION_EVENT = "none";
-
-const conversionEventOptions: Array<{
-  value: MetaConversionEventName;
-  label: string;
-}> = [
-  { value: "Purchase", label: "Purchase" },
-  { value: "LeadSubmitted", label: "Lead submitted" },
-  { value: "InitiateCheckout", label: "Initiate checkout" },
-  { value: "AddToCart", label: "Add to cart" },
-  { value: "ViewContent", label: "View content" },
-  { value: "OrderCreated", label: "Order created" },
-  { value: "OrderShipped", label: "Order shipped" },
-  { value: "OrderDelivered", label: "Order delivered" },
-  { value: "OrderCanceled", label: "Order canceled" },
-  { value: "OrderReturned", label: "Order returned" },
-  { value: "CartAbandoned", label: "Cart abandoned" },
-  { value: "QualifiedLead", label: "Qualified lead" },
-  { value: "RatingProvided", label: "Rating provided" },
-  { value: "ReviewProvided", label: "Review provided" }
-];
-
 export default function TagFormDialog({
   open,
   tag,
@@ -83,9 +60,6 @@ export default function TagFormDialog({
   const [confidenceThreshold, setConfidenceThreshold] = useState(0.7);
   const [inactiveAfterDays, setInactiveAfterDays] = useState(30);
   const [reactivateOnReply, setReactivateOnReply] = useState(true);
-  const [conversionEventName, setConversionEventName] = useState<
-    MetaConversionEventName | typeof NO_CONVERSION_EVENT
-  >(NO_CONVERSION_EVENT);
 
   useEffect(() => {
     if (!open) return;
@@ -100,14 +74,10 @@ export default function TagFormDialog({
     setConfidenceThreshold(tag?.automation?.confidenceThreshold ?? 0.7);
     setInactiveAfterDays(tag?.automation?.inactiveAfterDays ?? 30);
     setReactivateOnReply(tag?.automation?.reactivateOnReply ?? true);
-    setConversionEventName(tag?.conversionEventName || NO_CONVERSION_EVENT);
   }, [tag, open]);
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-
-    const selectedConversionEvent =
-      conversionEventName === NO_CONVERSION_EVENT ? null : conversionEventName;
 
     const payload: CreateTagPayload | UpdateTagPayload = {
       ...(tag ? {} : { name: name.trim() }),
@@ -130,15 +100,7 @@ export default function TagFormDialog({
                 ? { inactiveAfterDays, reactivateOnReply }
                 : {})
             }
-          : undefined,
-      // Create's schema rejects an explicit null (only update accepts it
-      // to clear a previously-set value), so a fresh tag with "None"
-      // picked must omit the field entirely rather than send null.
-      ...(tag
-        ? { conversionEventName: selectedConversionEvent }
-        : selectedConversionEvent
-          ? { conversionEventName: selectedConversionEvent }
-          : {})
+          : undefined
     };
 
     onSave(payload);
@@ -206,35 +168,6 @@ export default function TagFormDialog({
                 className="mt-2"
               />
             </div>
-          </div>
-
-          <div>
-            <Label>Report as conversion to Meta (optional)</Label>
-            <Select
-              value={conversionEventName}
-              onValueChange={(value) =>
-                setConversionEventName(
-                  value as MetaConversionEventName | typeof NO_CONVERSION_EVENT
-                )
-              }
-            >
-              <SelectTrigger className="mt-2 w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NO_CONVERSION_EVENT}>None</SelectItem>
-                {conversionEventOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="mt-2 text-xs text-muted-foreground">
-              When a subscriber who arrived via a Click-to-WhatsApp ad reaches
-              this tag, it&apos;s reported back to Meta under this event so ad
-              delivery can optimize for real outcomes.
-            </p>
           </div>
 
           <div className="flex items-center justify-between rounded-sm border p-3">
