@@ -144,6 +144,11 @@ export interface ConversationCostResponse {
     groupBy: ConversationCostGroupBy;
     currency: string | null;
     lastSyncedDate: string | null;
+    // Always false -- a permanent Meta policy constraint for accounts billed
+    // through a partner, not a sync-timing issue. conversationCount/volume
+    // fields stay real; every cost/amountSpent field is always 0 when this
+    // is false, never a genuine figure.
+    costDataAvailable: boolean;
     totals: {
       conversationCount: number;
       cost: number;
@@ -185,6 +190,9 @@ export interface TemplateAnalyticsResponse {
   data: {
     range: { start: string; end: string };
     templates: TemplateAnalyticsRow[];
+    // Same permanent constraint as ConversationCostResponse -- always false;
+    // template.amountSpent is always 0 when this is false.
+    costDataAvailable: boolean;
   };
 }
 

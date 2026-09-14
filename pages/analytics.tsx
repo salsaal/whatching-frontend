@@ -22,6 +22,7 @@ import {
   Contact,
   Download,
   Inbox,
+  Info,
   MessageCircle,
   Minus,
   Send,
@@ -135,35 +136,18 @@ export default function AnalyticsPage() {
   const templates = templatesData?.data.templates || [];
   const templateInsightsEnabled =
     insightsStatusData?.data.templateInsightsEnabled;
-  const currency = costs?.currency || "USD";
-
-  const formatCost = (value: number) =>
-    new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency,
-      maximumFractionDigits: value < 1 ? 4 : 2
-    }).format(value);
 
   const handleExportCsv = () => {
     if (!templates.length) return;
     downloadCsv(
       `template-performance-${range}.csv`,
-      [
-        "Template",
-        "Category",
-        "Sent",
-        "Delivered",
-        "Read",
-        "Amount spent",
-        "Quality"
-      ],
+      ["Template", "Category", "Sent", "Delivered", "Read", "Quality"],
       templates.map((template) => [
         template.name || template.templateId,
         template.category || "",
         template.sent,
         template.delivered,
         template.read,
-        template.amountSpent.toFixed(2),
         template.qualityScore || ""
       ])
     );
@@ -399,6 +383,15 @@ export default function AnalyticsPage() {
               </div>
             ) : (
               <>
+                <div className="flex gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
+                  <Info className="mt-0.5 size-4 shrink-0" />
+                  <p>
+                    Cost figures aren&apos;t available for this WhatsApp number
+                    -- Meta doesn&apos;t expose spend data for accounts billed
+                    through a partner. This is permanent, not a sync-timing
+                    issue. Volume and category breakdowns below are accurate.
+                  </p>
+                </div>
                 {!costs.lastSyncedDate && (
                   <div className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
                     <AlertCircle className="mt-0.5 size-4 shrink-0" />
@@ -412,7 +405,7 @@ export default function AnalyticsPage() {
                   </div>
                 )}
                 <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
-                  <SpendHeroCard costs={costs} formatCost={formatCost} />
+                  <SpendHeroCard costs={costs} />
                   <VolumeSummaryCard rows={volumeRows} />
                 </div>
               </>
@@ -427,21 +420,13 @@ export default function AnalyticsPage() {
                 </div>
                 <MessageActivityChart dashboard={dashboard} />
               </section>
-              {costs && (
-                <CategorySpendCard
-                  breakdown={costs.breakdown}
-                  formatCost={formatCost}
-                />
-              )}
+              {costs && <CategorySpendCard breakdown={costs.breakdown} />}
             </div>
 
             {isLoadingTemplates ? (
               <Skeleton className="h-72 rounded-lg" />
             ) : (
-              <TemplatePerformanceTable
-                templates={templates}
-                formatCost={formatCost}
-              />
+              <TemplatePerformanceTable templates={templates} />
             )}
 
             <SecondaryBreakdowns

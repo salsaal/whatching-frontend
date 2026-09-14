@@ -14,11 +14,9 @@ const qualityLabel: Record<
 };
 
 export function TemplatePerformanceTable({
-  templates,
-  formatCost
+  templates
 }: {
   templates: TemplateAnalyticsRow[];
-  formatCost: (value: number) => string;
 }) {
   const sorted = [...templates].sort((a, b) => b.sent - a.sent);
   const totalSent = sorted.reduce((sum, t) => sum + t.sent, 0);
@@ -61,7 +59,6 @@ export function TemplatePerformanceTable({
                 <th className="pb-3 pr-3 text-right">Delivered</th>
                 <th className="pb-3 pr-3">Read rate</th>
                 <th className="pb-3 pr-3 text-right">CTR</th>
-                <th className="pb-3 pr-3 text-right">Cost</th>
                 <th className="pb-3 text-right">Quality</th>
               </tr>
             </thead>
@@ -120,9 +117,6 @@ export function TemplatePerformanceTable({
                     </td>
                     <td className="py-3 pr-3 text-right tabular-nums">
                       {ctr === null ? "—" : `${ctr.toFixed(1)}%`}
-                    </td>
-                    <td className="py-3 pr-3 text-right tabular-nums">
-                      {formatCost(template.amountSpent)}
                     </td>
                     <td className="py-3 text-right">
                       {quality ? (

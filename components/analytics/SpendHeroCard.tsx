@@ -58,11 +58,9 @@ function DeltaBadge({
 }
 
 export function SpendHeroCard({
-  costs,
-  formatCost
+  costs
 }: {
   costs: ConversationCostResponse["data"];
-  formatCost: (value: number) => string;
 }) {
   const totals = costs.totals || {
     conversationCount: 0,
@@ -78,44 +76,34 @@ export function SpendHeroCard({
   const freeTier = costs.freeTier || { conversationCount: 0, cost: 0 };
   const daily = costs.daily || EMPTY_DAILY;
 
-  const spendChangePercent =
-    previousPeriod.cost > 0
+  const volumeChangePercent =
+    previousPeriod.conversationCount > 0
       ? Math.round(
-          ((totals.cost - previousPeriod.cost) / previousPeriod.cost) * 1000
-        ) / 10
-      : 0;
-  const costPerConvoChangePercent =
-    previousPeriod.costPerConversation > 0
-      ? Math.round(
-          ((totals.costPerConversation - previousPeriod.costPerConversation) /
-            previousPeriod.costPerConversation) *
+          ((totals.conversationCount - previousPeriod.conversationCount) /
+            previousPeriod.conversationCount) *
             1000
         ) / 10
       : 0;
-  const volumeChangePercent =
-    previousPeriod.conversationCount > 0
-      ? ((totals.conversationCount - previousPeriod.conversationCount) /
-          previousPeriod.conversationCount) *
-        100
-      : 0;
 
-  const insight =
-    previousPeriod.cost > 0 && previousPeriod.conversationCount > 0
-      ? volumeChangePercent > spendChangePercent
-        ? "volume grew faster than cost"
-        : volumeChangePercent < spendChangePercent
-          ? "cost grew faster than volume"
-          : "cost tracked volume evenly"
-      : null;
+  const billableShare =
+    totals.conversationCount > 0
+      ? Math.round(
+          (billable.conversationCount / totals.conversationCount) * 100
+        )
+      : 0;
 
   const { runRate, projected30Day, peakDay } = useMemo(() => {
     const last7 = daily.slice(-7);
     const runRateValue =
       last7.length > 0
-        ? last7.reduce((sum, row) => sum + row.cost, 0) / last7.length
+        ? last7.reduce((sum, row) => sum + row.conversationCount, 0) /
+          last7.length
         : 0;
     const peak = daily.reduce(
-      (best, row) => (row.cost > (best?.cost ?? -Infinity) ? row : best),
+      (best, row) =>
+        row.conversationCount > (best?.conversationCount ?? -Infinity)
+          ? row
+          : best,
       daily[0]
     );
     return {
@@ -135,32 +123,31 @@ export function SpendHeroCard({
       <div className="flex flex-wrap items-start justify-between gap-6">
         <div>
           <p className="text-sm text-muted-foreground">
-            Conversation spend · period total
+            Conversation volume · period total
           </p>
           <div className="mt-1 flex items-center gap-3">
             <p className="font-heading text-4xl font-semibold">
-              {formatCost(totals.cost)}
+              {numberFormat.format(totals.conversationCount)}
             </p>
-            {previousPeriod.cost > 0 && (
-              <DeltaBadge percent={spendChangePercent} />
+            {previousPeriod.conversationCount > 0 && (
+              <DeltaBadge percent={volumeChangePercent} />
             )}
           </div>
-          {insight && (
+          {previousPeriod.conversationCount > 0 && (
             <p className="mt-2 text-sm text-muted-foreground">
-              Prior period {formatCost(previousPeriod.cost)} · {insight}
+              Prior period{" "}
+              {numberFormat.format(previousPeriod.conversationCount)}{" "}
+              conversations
             </p>
           )}
         </div>
 
         <div>
-          <p className="text-sm text-muted-foreground">Cost per conversation</p>
+          <p className="text-sm text-muted-foreground">Billable share</p>
           <div className="mt-1 flex items-center gap-3">
             <p className="font-heading text-4xl font-semibold">
-              {formatCost(totals.costPerConversation)}
+              {billableShare}% billable
             </p>
-            {previousPeriod.costPerConversation > 0 && (
-              <DeltaBadge percent={costPerConvoChangePercent} invertColor />
-            )}
           </div>
           <p className="mt-2 text-sm text-muted-foreground">
             {numberFormat.format(billable.conversationCount)} billable ·{" "}
@@ -185,18 +172,20 @@ export function SpendHeroCard({
               tick={{ fontSize: 12, fill: chartInk.axis }}
               axisLine={false}
               tickLine={false}
-              tickFormatter={(value) => formatCost(value)}
+              tickFormatter={(value) => numberFormat.format(value)}
               width={64}
             />
             <Tooltip
               content={
-                <ChartTooltip formatValue={(value) => formatCost(value)} />
+                <ChartTooltip
+                  formatValue={(value) => numberFormat.format(value)}
+                />
               }
               cursor={{ fill: "rgba(0,0,0,0.03)" }}
             />
             <Bar
-              dataKey="cost"
-              name="Daily conversation spend"
+              dataKey="conversationCount"
+              name="Daily conversation volume"
               fill={categorical.brand}
               fillOpacity={0.55}
               radius={[2, 2, 0, 0]}
@@ -208,7 +197,7 @@ export function SpendHeroCard({
 
       <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
         <span>{chartData[0] ? formatDateShort(chartData[0].date) : ""}</span>
-        <span>Daily conversation spend</span>
+        <span>Daily conversation volume</span>
         <span>
           {chartData.length
             ? formatDateShort(chartData[chartData.length - 1].date)
@@ -220,20 +209,21 @@ export function SpendHeroCard({
         <span className="text-muted-foreground">
           7-day run rate{" "}
           <span className="font-semibold text-foreground">
-            {formatCost(runRate)} / day
+            {numberFormat.format(Math.round(runRate))} / day
           </span>
         </span>
         <span className="text-muted-foreground">
           Projected 30-day{" "}
           <span className="font-semibold text-foreground">
-            {formatCost(projected30Day)}
+            {numberFormat.format(Math.round(projected30Day))}
           </span>
         </span>
         {peakDay && (
           <span className="text-muted-foreground">
             Peak day{" "}
             <span className="font-semibold text-foreground">
-              {formatDateShort(peakDay.date)} · {formatCost(peakDay.cost)}
+              {formatDateShort(peakDay.date)} ·{" "}
+              {numberFormat.format(peakDay.conversationCount)}
             </span>
           </span>
         )}
