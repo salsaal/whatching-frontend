@@ -138,12 +138,22 @@ export default function WhatsAppNumbersPanel({
             )}
             Sync numbers
           </Button>
-          <Button onClick={onAddNumber} disabled={addingNumber}>
+          <Button
+            onClick={onAddNumber}
+            disabled={addingNumber || summary?.remainingActiveSlots === 0}
+          >
             {addingNumber && <Loader2 className="size-4 animate-spin" />}
-            Add WhatsApp number
+            {summary?.remainingActiveSlots === 0
+              ? "Plan limit reached"
+              : "Add WhatsApp number"}
           </Button>
         </div>
       </div>
+      {summary?.remainingActiveSlots === 0 && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Upgrade your plan or replace an existing number to add another.
+        </p>
+      )}
 
       {isLoading ? (
         <ListLoadingSkeleton className="mt-5" rows={2} />
