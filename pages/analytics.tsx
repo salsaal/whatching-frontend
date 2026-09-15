@@ -22,7 +22,6 @@ import {
   Contact,
   Download,
   Inbox,
-  Info,
   MessageCircle,
   Minus,
   Send,
@@ -39,6 +38,7 @@ import {
   getTemplateAnalytics,
   getTemplateInsightsStatus
 } from "@/client-api/functions/analytics";
+import { getWhatsAppPhoneNumbers } from "@/client-api/functions/organizations";
 import {
   AnalyticsRange,
   AnalyticsTrend
@@ -122,6 +122,12 @@ export default function AnalyticsPage() {
     enabled: isOwnerOrAdmin
   });
 
+  const { data: phoneNumbersData } = useQuery({
+    queryKey: ["whatsapp-phone-numbers", activeOrganization?._id],
+    queryFn: getWhatsAppPhoneNumbers,
+    enabled: Boolean(activeOrganization?._id) && isOwnerOrAdmin
+  });
+
   const { mutate: enableInsights, isPending: isEnabling } = useMutation({
     mutationFn: () => enableTemplateInsights(),
     meta: { showToast: false },
@@ -136,6 +142,13 @@ export default function AnalyticsPage() {
   const templates = templatesData?.data.templates || [];
   const templateInsightsEnabled =
     insightsStatusData?.data.templateInsightsEnabled;
+  // Meta only offers template insights to fully Business-verified accounts.
+  // A coexistence-enabled number was connected via the WhatsApp Business
+  // consumer app, which puts the WABA on the SMB tier -- Meta permanently
+  // rejects the opt-in for those, so there's no point prompting for it.
+  const hasCoexistenceNumber = (phoneNumbersData?.data.phoneNumbers || []).some(
+    (number) => number.coexistenceEnabled
+  );
 
   const handleExportCsv = () => {
     if (!templates.length) return;
@@ -326,7 +339,7 @@ export default function AnalyticsPage() {
           <>
             <HealthStrip dashboard={dashboard} />
 
-            {templateInsightsEnabled === false && (
+            {templateInsightsEnabled === false && !hasCoexistenceNumber && (
               <section className="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950 sm:flex-row sm:items-center sm:justify-between">
                 <p>
                   Enable template insights to see per-template click and spend
@@ -383,15 +396,6 @@ export default function AnalyticsPage() {
               </div>
             ) : (
               <>
-                <div className="flex gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
-                  <Info className="mt-0.5 size-4 shrink-0" />
-                  <p>
-                    Cost figures aren&apos;t available for this WhatsApp number
-                    -- Meta doesn&apos;t expose spend data for accounts billed
-                    through a partner. This is permanent, not a sync-timing
-                    issue. Volume and category breakdowns below are accurate.
-                  </p>
-                </div>
                 {!costs.lastSyncedDate && (
                   <div className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
                     <AlertCircle className="mt-0.5 size-4 shrink-0" />
