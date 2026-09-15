@@ -119,6 +119,7 @@ export interface WhatsAppPhoneNumberSummary {
   planLimit: number | null;
   activeCount: number;
   remainingActiveSlots: number | null;
+  nextReplacementAllowedAt: string | null;
   phoneNumbers: WhatsAppPhoneNumber[];
 }
 

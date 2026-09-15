@@ -44,6 +44,8 @@ export const ORGANIZATION_ENDPOINTS = {
     `${ORGANIZATIONS_BASE}/whatsapp/phone-numbers/${phoneNumberRecordId}/activate`,
   WHATSAPP_PHONE_NUMBER_DEACTIVATE: (phoneNumberRecordId: string) =>
     `${ORGANIZATIONS_BASE}/whatsapp/phone-numbers/${phoneNumberRecordId}/deactivate`,
+  WHATSAPP_PHONE_NUMBER_REPLACE: (phoneNumberRecordId: string) =>
+    `${ORGANIZATIONS_BASE}/whatsapp/phone-numbers/${phoneNumberRecordId}/replace`,
   TEAM: `${ORGANIZATIONS_BASE}/team`,
   ADD_AGENT: `${ORGANIZATIONS_BASE}/add-agent`,
   TEAM_MEMBER: (membershipId: string) =>

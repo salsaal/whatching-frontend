@@ -251,6 +251,15 @@ export const deactivateWhatsAppPhoneNumber = async (
   return res.data;
 };
 
+export const replaceWhatsAppPhoneNumber = async (
+  phoneNumberRecordId: string
+): Promise<WhatsAppPhoneNumberResponse> => {
+  const res = await api.post<WhatsAppPhoneNumberResponse>(
+    ORGANIZATION_ENDPOINTS.WHATSAPP_PHONE_NUMBER_REPLACE(phoneNumberRecordId)
+  );
+  return res.data;
+};
+
 export const getTeam = async (): Promise<TeamResponse> => {
   const res = await api.get<TeamResponse>(ORGANIZATION_ENDPOINTS.TEAM);
   return res.data;

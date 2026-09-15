@@ -13,6 +13,7 @@ import {
   activateWhatsAppPhoneNumber,
   deactivateWhatsAppPhoneNumber,
   getWhatsAppPhoneNumbers,
+  replaceWhatsAppPhoneNumber,
   setDefaultWhatsAppPhoneNumber,
   syncWhatsAppPhoneNumbers
 } from "@/client-api/functions/organizations";
@@ -94,10 +95,26 @@ export default function WhatsAppNumbersPanel({
     },
     onError: mutationOptions.onError
   });
+  // Replace only archives the old number -- it doesn't connect a
+  // replacement. Deliberately not auto-launching the "Add WhatsApp number"
+  // popup here: this resolves in an async onSuccess, outside the original
+  // click's call stack, so a same-turn FB.login() popup would very likely
+  // get blocked by the browser's popup blocker. Refreshing just re-enables
+  // "Add WhatsApp number" with the freed-up slot for the customer to click.
+  const replaceMutation = useMutation({
+    mutationFn: replaceWhatsAppPhoneNumber,
+    meta: { showToast: false },
+    onSuccess: async () => {
+      toast.success("Number archived -- connect its replacement now.");
+      await refresh();
+    },
+    onError: mutationOptions.onError
+  });
   const isMutating =
     defaultMutation.isPending ||
     activateMutation.isPending ||
-    deactivateMutation.isPending;
+    deactivateMutation.isPending ||
+    replaceMutation.isPending;
 
   return (
     <section
@@ -247,10 +264,22 @@ export default function WhatsAppNumbersPanel({
                   >
                     Deactivate
                   </Button>
-                ) : (
+                ) : summary.nextReplacementAllowedAt ? (
                   <span className="self-center text-xs text-muted-foreground">
-                    Contact support to replace this number
+                    Replace available{" "}
+                    {new Date(
+                      summary.nextReplacementAllowedAt
+                    ).toLocaleDateString()}
                   </span>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={isMutating}
+                    onClick={() => replaceMutation.mutate(number.id)}
+                  >
+                    Replace number
+                  </Button>
                 )}
               </div>
             </article>
