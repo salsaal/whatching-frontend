@@ -266,7 +266,7 @@ export default function WhatsAppNumbersPanel({
                   </Button>
                 ) : summary.nextReplacementAllowedAt ? (
                   <span className="self-center text-xs text-muted-foreground">
-                    Replace available{" "}
+                    Number replacement available{" "}
                     {new Date(
                       summary.nextReplacementAllowedAt
                     ).toLocaleDateString()}

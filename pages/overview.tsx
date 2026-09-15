@@ -473,7 +473,8 @@ export default function OverviewPage() {
     [connectMetaMutate]
   );
 
-  const aiTokensRemaining = aiTokenUsageData?.data.usage?.remaining;
+  const aiTokenUsage = aiTokenUsageData?.data.usage;
+  const aiTokenIncludedLimit = aiTokenUsageData?.data.includedLimit;
   const stats = [
     {
       label: "Subscribers",
@@ -483,23 +484,18 @@ export default function OverviewPage() {
       icon: Users,
       href: "/contacts"
     },
-    isOwner && typeof aiTokensRemaining === "number"
-      ? {
-          label: "AI tokens remaining",
-          value: formatCompactNumber(Math.max(0, aiTokensRemaining)),
-          icon: Bot,
-          href: "/settings/ai#usage",
-          tooltip:
-            "Included plan tokens plus any top-ups, minus usage this cycle."
-        }
-      : {
-          label: "AI tokens used",
-          value: formatCompactNumber(
-            activeOrganization?.usage?.aiTokensUsed || 0
-          ),
-          icon: Bot,
-          href: isOwner ? "/settings/ai#usage" : undefined
-        },
+    {
+      label: "AI tokens used",
+      value:
+        isOwner && aiTokenUsage && typeof aiTokenIncludedLimit === "number"
+          ? `${formatCompactNumber(aiTokenUsage.used)} / ${formatCompactNumber(aiTokenIncludedLimit)}`
+          : formatCompactNumber(activeOrganization?.usage?.aiTokensUsed || 0),
+      icon: Bot,
+      href: isOwner ? "/settings/ai#usage" : undefined,
+      tooltip: isOwner
+        ? "Tokens used this cycle out of your plan's included allowance."
+        : undefined
+    },
     {
       label: "Daily message limit",
       value:
@@ -908,26 +904,20 @@ export default function OverviewPage() {
             </div>
           </section>
         )}
-        {isMetaReady && verificationNumber && (
+        {isMetaReady && verificationNumber && !canStartBroadcast && (
           <section className="rounded-lg border bg-white p-5 shadow-xs">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  {canStartBroadcast ? (
-                    <CheckCircle2 className="size-5 text-primary" />
-                  ) : (
-                    <Send className="size-5 text-amber-600" />
-                  )}
+                  <Send className="size-5 text-amber-600" />
                   <h2 className="font-heading text-lg font-semibold">
                     Broadcast setup
                   </h2>
                 </div>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  {canStartBroadcast
-                    ? "This WhatsApp number is verified and ready to create broadcasts."
-                    : readinessData?.data.blocker?.message ||
-                      readiness?.failureMessage ||
-                      "Verify one paid business message before broadcasts are enabled. The test costs approximately Rs. 0.115."}
+                  {readinessData?.data.blocker?.message ||
+                    readiness?.failureMessage ||
+                    "Verify one paid business message before broadcasts are enabled. The test costs approximately Rs. 0.115."}
                 </p>
                 <p className="mt-2 text-xs text-muted-foreground">
                   Status:{" "}
@@ -939,38 +929,36 @@ export default function OverviewPage() {
                       )}
                 </p>
               </div>
-              {!canStartBroadcast && (
-                <div className="flex shrink-0 flex-wrap gap-2">
-                  {effectivePaymentMethodUrl && (
-                    <Button variant="outline" asChild>
-                      <a
-                        href={effectivePaymentMethodUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex gap-2 items-center"
-                      >
-                        <CreditCard className="size-4" />
-                        Add payment method
-                      </a>
-                    </Button>
-                  )}
-                  {readiness?.status !== "testing" && (
-                    <Button
-                      disabled={isTestingReadiness}
-                      onClick={() => runReadinessTest()}
+              <div className="flex shrink-0 flex-wrap gap-2">
+                {effectivePaymentMethodUrl && (
+                  <Button variant="outline" asChild>
+                    <a
+                      href={effectivePaymentMethodUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex gap-2 items-center"
                     >
-                      {isTestingReadiness ? (
-                        <Loader2 className="size-4 animate-spin" />
-                      ) : (
-                        <RefreshCw className="size-4" />
-                      )}
-                      {readiness?.status === "template_pending"
-                        ? "Check approval and continue"
-                        : "Verify broadcasts"}
-                    </Button>
-                  )}
-                </div>
-              )}
+                      <CreditCard className="size-4" />
+                      Add payment method
+                    </a>
+                  </Button>
+                )}
+                {readiness?.status !== "testing" && (
+                  <Button
+                    disabled={isTestingReadiness}
+                    onClick={() => runReadinessTest()}
+                  >
+                    {isTestingReadiness ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="size-4" />
+                    )}
+                    {readiness?.status === "template_pending"
+                      ? "Check approval and continue"
+                      : "Verify broadcasts"}
+                  </Button>
+                )}
+              </div>
             </div>
           </section>
         )}
