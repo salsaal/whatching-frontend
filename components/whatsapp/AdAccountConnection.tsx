@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BadgeCheck, Megaphone } from "lucide-react";
+import { BadgeCheck, ChevronDown, Megaphone } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -9,6 +9,11 @@ import {
   selectAdAccount
 } from "@/client-api/functions/organizations";
 import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverAnchor,
+  PopoverContent
+} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -69,6 +74,7 @@ export default function AdAccountConnection() {
       }
       toast.success(res.message || "Ad account connected.");
       setIsPickerOpen(false);
+      setSelectedAdAccountId("");
     },
     onError: () => {
       toast.error("Couldn't connect that ad account. Try again.");
@@ -87,8 +93,8 @@ export default function AdAccountConnection() {
         queryClient.invalidateQueries({ queryKey: ["organization"] });
       } else {
         // Meta didn't deliver a clean selection this time -- fall back to
-        // the existing manual picker, which will now actually list
-        // accounts since real access was just granted.
+        // the manual picker, which will now actually list accounts since
+        // real access was just granted.
         setIsPickerOpen(true);
       }
     },
@@ -102,7 +108,7 @@ export default function AdAccountConnection() {
   const startAdAccountSignup = useCallback(() => {
     if (!AD_ACCOUNT_SIGNUP_CONFIG_ID) {
       toast.error(
-        "Ad account sign-up isn't configured. Use the manual picker below instead."
+        "Ad account sign-up isn't configured. Use the manual picker instead."
       );
       setIsPickerOpen(true);
       return;
@@ -140,108 +146,107 @@ export default function AdAccountConnection() {
   };
 
   return (
-    <section className="rounded-lg border bg-white p-5 shadow-xs">
-      <div className="flex items-center gap-3">
-        <div className="flex size-11 shrink-0 items-center justify-center rounded-sm bg-primary/10 text-primary">
-          <Megaphone className="size-5" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <h2 className="font-heading text-lg font-semibold">
-            Connected ad account
-          </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Links your Meta ad account so campaign spend and cost-per-outcome
-            can show up alongside your WhatsApp funnel numbers.
-          </p>
-        </div>
-      </div>
-
-      {connectedAdAccountId ? (
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-md bg-muted/50 p-3">
-          <div className="flex items-center gap-2 text-sm">
-            <BadgeCheck className="size-4 shrink-0 text-primary" />
-            <span className="font-medium">
-              {connectedAdAccountName || connectedAdAccountId}
-            </span>
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setIsPickerOpen(true)}
-          >
-            Change account
-          </Button>
-        </div>
-      ) : (
-        <div className="mt-4">
-          {!isPickerOpen ? (
-            <Button
-              type="button"
-              disabled={isCompletingAdAccountSignup}
-              isLoading={isCompletingAdAccountSignup}
-              onClick={startAdAccountSignup}
-            >
-              Connect ad account
-            </Button>
+    <Popover
+      open={isPickerOpen}
+      onOpenChange={(open) => {
+        setIsPickerOpen(open);
+        if (!open) setSelectedAdAccountId("");
+      }}
+    >
+      {/* PopoverAnchor only positions the popover -- it doesn't intercept
+          clicks, so the button's own onClick stays in full control of
+          whether this opens the picker or kicks off Meta login directly.
+          (A PopoverTrigger would toggle `open` itself on click, which would
+          fight the connected-vs-not branching below.) */}
+      <PopoverAnchor asChild>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={isCompletingAdAccountSignup}
+          isLoading={isCompletingAdAccountSignup}
+          onClick={() =>
+            connectedAdAccountId
+              ? setIsPickerOpen(true)
+              : startAdAccountSignup()
+          }
+        >
+          {connectedAdAccountId ? (
+            <BadgeCheck className="size-4 text-primary" />
           ) : (
-            <div className="space-y-3 rounded-md border border-dashed p-3">
-              {isError ? (
-                <p className="text-sm text-destructive">
-                  Couldn&apos;t list ad accounts. This usually means the
-                  ads_read permission hasn&apos;t been granted yet, or the
-                  WhatsApp Business Account isn&apos;t connected.
-                </p>
-              ) : (
-                <>
-                  <Select
-                    value={selectedAdAccountId}
-                    onValueChange={setSelectedAdAccountId}
-                    disabled={isLoading || !adAccounts.length}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue
-                        placeholder={
-                          isLoading
-                            ? "Loading ad accounts..."
-                            : adAccounts.length
-                              ? "Select an ad account"
-                              : "No ad accounts found"
-                        }
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {adAccounts.map((account) => (
-                        <SelectItem key={account.id} value={account.id}>
-                          {account.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      disabled={!selectedAdAccountId || isConnecting}
-                      onClick={handleConnect}
-                    >
-                      {isConnecting ? "Connecting..." : "Connect"}
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setIsPickerOpen(false)}
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                </>
-              )}
-            </div>
+            <Megaphone className="size-4" />
+          )}
+          {connectedAdAccountId
+            ? connectedAdAccountName || connectedAdAccountId
+            : "Connect ad account"}
+          {connectedAdAccountId && (
+            <ChevronDown className="size-3.5 opacity-60" />
+          )}
+        </Button>
+      </PopoverAnchor>
+      <PopoverContent align="end" className="w-80">
+        <p className="text-sm font-medium">
+          {connectedAdAccountId ? "Change ad account" : "Select an ad account"}
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Links your Meta ad account so campaign spend and cost-per-outcome can
+          show up alongside your WhatsApp funnel numbers.
+        </p>
+        <div className="mt-3 space-y-3">
+          {isError ? (
+            <p className="text-sm text-destructive">
+              Couldn&apos;t list ad accounts. This usually means the ads_read
+              permission hasn&apos;t been granted yet, or the WhatsApp Business
+              Account isn&apos;t connected.
+            </p>
+          ) : (
+            <>
+              <Select
+                value={selectedAdAccountId}
+                onValueChange={setSelectedAdAccountId}
+                disabled={isLoading || !adAccounts.length}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue
+                    placeholder={
+                      isLoading
+                        ? "Loading ad accounts..."
+                        : adAccounts.length
+                          ? "Select an ad account"
+                          : "No ad accounts found"
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {adAccounts.map((account) => (
+                    <SelectItem key={account.id} value={account.id}>
+                      {account.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setIsPickerOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={!selectedAdAccountId || isConnecting}
+                  onClick={handleConnect}
+                >
+                  {isConnecting ? "Connecting..." : "Connect"}
+                </Button>
+              </div>
+            </>
           )}
         </div>
-      )}
-    </section>
+      </PopoverContent>
+    </Popover>
   );
 }
