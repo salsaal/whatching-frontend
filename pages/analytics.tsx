@@ -20,7 +20,6 @@ import {
   AlertCircle,
   ChevronDown,
   Contact,
-  Download,
   Inbox,
   MessageCircle,
   Minus,
@@ -35,7 +34,6 @@ import {
   enableTemplateInsights,
   getConversationCostAnalytics,
   getDashboardAnalytics,
-  getTemplateAnalytics,
   getTemplateInsightsStatus
 } from "@/client-api/functions/analytics";
 import { getWhatsAppPhoneNumbers } from "@/client-api/functions/organizations";
@@ -48,7 +46,6 @@ import { ChartTooltip } from "@/components/analytics/ChartTooltip";
 import { HealthStrip } from "@/components/analytics/HealthStrip";
 import { PartToWholeCard } from "@/components/analytics/PartToWholeCard";
 import { SpendHeroCard } from "@/components/analytics/SpendHeroCard";
-import { TemplatePerformanceTable } from "@/components/analytics/TemplatePerformanceTable";
 import { VolumeSummaryCard } from "@/components/analytics/VolumeSummaryCard";
 import { QueryErrorState } from "@/components/shared/QueryErrorState";
 import {
@@ -73,7 +70,6 @@ import {
   sequentialGreen,
   status
 } from "@/lib/analyticsColors";
-import { downloadCsv } from "@/lib/exportCsv";
 import { cn } from "@/lib/utils";
 import { useOrganizationStore } from "@/stores/organizationStore";
 
@@ -110,12 +106,6 @@ export default function AnalyticsPage() {
     enabled: Boolean(activeOrganization?._id) && isOwnerOrAdmin
   });
 
-  const { data: templatesData, isLoading: isLoadingTemplates } = useQuery({
-    queryKey: ["analytics-template-costs", activeOrganization?._id, range],
-    queryFn: () => getTemplateAnalytics({ range }),
-    enabled: Boolean(activeOrganization?._id) && isOwnerOrAdmin
-  });
-
   const { data: insightsStatusData } = useQuery({
     queryKey: ["template-insights-status"],
     queryFn: () => getTemplateInsightsStatus(),
@@ -139,7 +129,6 @@ export default function AnalyticsPage() {
 
   const dashboard = data?.data.dashboard;
   const costs = costsData?.data;
-  const templates = templatesData?.data.templates || [];
   const templateInsightsEnabled =
     insightsStatusData?.data.templateInsightsEnabled;
   // Meta only offers template insights to fully Business-verified accounts.
@@ -149,22 +138,6 @@ export default function AnalyticsPage() {
   const hasCoexistenceNumber = (phoneNumbersData?.data.phoneNumbers || []).some(
     (number) => number.coexistenceEnabled
   );
-
-  const handleExportCsv = () => {
-    if (!templates.length) return;
-    downloadCsv(
-      `template-performance-${range}.csv`,
-      ["Template", "Category", "Sent", "Delivered", "Read", "Quality"],
-      templates.map((template) => [
-        template.name || template.templateId,
-        template.category || "",
-        template.sent,
-        template.delivered,
-        template.read,
-        template.qualityScore || ""
-      ])
-    );
-  };
 
   const conversationStatus = dashboard
     ? [
@@ -298,7 +271,7 @@ export default function AnalyticsPage() {
             </h1>
             <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
               {isOwnerOrAdmin
-                ? "What messaging costs, what it buys in reach, and which templates carry the load. Secondary breakdowns are folded away below."
+                ? "What messaging costs and what it buys in reach. Secondary breakdowns are folded away below."
                 : "Messages, contacts, broadcasts, and integration health in one view."}
             </p>
           </div>
@@ -316,12 +289,6 @@ export default function AnalyticsPage() {
                 </Button>
               ))}
             </div>
-            {isOwnerOrAdmin && templates.length > 0 && (
-              <Button type="button" onClick={handleExportCsv}>
-                <Download className="size-4" />
-                Export CSV
-              </Button>
-            )}
           </div>
         </section>
 
@@ -426,12 +393,6 @@ export default function AnalyticsPage() {
               </section>
               {costs && <CategorySpendCard breakdown={costs.breakdown} />}
             </div>
-
-            {isLoadingTemplates ? (
-              <Skeleton className="h-72 rounded-lg" />
-            ) : (
-              <TemplatePerformanceTable templates={templates} />
-            )}
 
             <SecondaryBreakdowns
               dashboard={dashboard}
