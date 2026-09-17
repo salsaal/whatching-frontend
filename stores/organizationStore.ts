@@ -22,6 +22,11 @@ export interface OrganizationUsage {
   subscribersCount: number;
 }
 
+export interface OrganizationMessagingBilling {
+  paymentSetupUrl?: string | null;
+  [key: string]: unknown;
+}
+
 export interface OrganizationBillingProfile {
   country?: "IN";
   legalName: string;
@@ -60,6 +65,7 @@ export interface Organization {
   trialStartedBy?: string | null;
   billingProfile?: OrganizationBillingProfile | null;
   metaConfig: OrganizationMetaConfig;
+  messagingBilling?: OrganizationMessagingBilling | null;
   usage: OrganizationUsage;
   createdAt: string;
   updatedAt: string;

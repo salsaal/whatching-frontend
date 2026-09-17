@@ -42,7 +42,6 @@ import {
 import { useCurrentMembership } from "@/hooks/useCurrentMembership";
 import AppLayout from "@/layouts/AppLayout";
 import WhatsAppNumbersPanel from "@/components/whatsapp/WhatsAppNumbersPanel";
-import { buildMetaPaymentMethodUrl } from "@/lib/metaBilling";
 import { cn, formatCompactNumber } from "@/lib/utils";
 import { useOrganizationStore } from "@/stores/organizationStore";
 
@@ -266,11 +265,7 @@ export default function OverviewPage() {
       | string
       | undefined) ||
     paymentMethodUrl ||
-    buildMetaPaymentMethodUrl({
-      businessId: activeOrganization?.metaConfig?.clientBusinessId,
-      wabaId:
-        verificationNumber?.wabaId || activeOrganization?.metaConfig?.wabaId
-    });
+    activeOrganization?.messagingBilling?.paymentSetupUrl;
 
   const { mutate: runReadinessTest, isPending: isTestingReadiness } =
     useMutation({
@@ -319,13 +314,8 @@ export default function OverviewPage() {
       onSuccess: async (data) => {
         const organization = data.data.organization;
         const connectedPhoneNumberId = signupSessionRef.current?.phoneNumberId;
-        const connectedPaymentUrl = buildMetaPaymentMethodUrl({
-          businessId:
-            organization.metaConfig?.clientBusinessId ||
-            signupSessionRef.current?.businessId,
-          wabaId:
-            organization.metaConfig?.wabaId || signupSessionRef.current?.wabaId
-        });
+        const connectedPaymentUrl =
+          organization.messagingBilling?.paymentSetupUrl || null;
 
         upsertOrganization(organization);
         updateIntegrationFromOrganization(organization);

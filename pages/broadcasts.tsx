@@ -101,7 +101,6 @@ import {
   getTemplateBodyVariables,
   subscriberFieldOptions
 } from "@/lib/broadcastComponents";
-import { buildMetaPaymentMethodUrl } from "@/lib/metaBilling";
 import { cn } from "@/lib/utils";
 import { useOrganizationStore } from "@/stores/organizationStore";
 
@@ -185,10 +184,8 @@ export default function BroadcastsPage() {
   >([]);
   const [subscriberSearch, setSubscriberSearch] = useState("");
   const [retryOnMessagingLimit, setRetryOnMessagingLimit] = useState(true);
-  const paymentMethodUrl = buildMetaPaymentMethodUrl({
-    businessId: activeOrganization?.metaConfig?.clientBusinessId,
-    wabaId: effectiveNumber?.wabaId || activeOrganization?.metaConfig?.wabaId
-  });
+  const paymentMethodUrl =
+    activeOrganization?.messagingBilling?.paymentSetupUrl || null;
   const senderRecordId = effectiveNumber?._id || effectiveNumber?.id || "";
   const {
     data: readinessData,
