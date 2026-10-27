@@ -5,6 +5,7 @@ import {
   CalendarIcon,
   Clock,
   CreditCard,
+  ExternalLink,
   Eye,
   Megaphone,
   Plus,
@@ -184,6 +185,8 @@ export default function BroadcastsPage() {
   >([]);
   const [subscriberSearch, setSubscriberSearch] = useState("");
   const [retryOnMessagingLimit, setRetryOnMessagingLimit] = useState(true);
+  const [retryOnRecipientEngagementLimit, setRetryOnRecipientEngagementLimit] =
+    useState(true);
   const paymentMethodUrl =
     activeOrganization?.messagingBilling?.paymentSetupUrl || null;
   const senderRecordId = effectiveNumber?._id || effectiveNumber?.id || "";
@@ -636,6 +639,7 @@ export default function BroadcastsPage() {
       audience,
       components: componentsResult.components,
       phoneNumberId: senderPhoneNumberId,
+      retryOnRecipientEngagementLimit,
       ...(selectedQuickReplyRoutes.length
         ? { quickReplyRoutes: selectedQuickReplyRoutes }
         : {})
@@ -693,8 +697,17 @@ export default function BroadcastsPage() {
                   rel="noreferrer"
                   className="flex gap-2 items-center"
                 >
-                  <CreditCard className="size-4" />
-                  Add payment method
+                  {readiness?.status === "ready" ? (
+                    <>
+                      <ExternalLink className="size-4" />
+                      View Meta billing
+                    </>
+                  ) : (
+                    <>
+                      <CreditCard className="size-4" />
+                      Add payment method
+                    </>
+                  )}
                 </a>
               </Button>
             ) : (
@@ -1425,6 +1438,26 @@ export default function BroadcastsPage() {
                   id="broadcast-limit-retry"
                   checked={retryOnMessagingLimit}
                   onCheckedChange={setRetryOnMessagingLimit}
+                />
+              </div>
+
+              <div className="flex items-start justify-between gap-4 rounded-lg border bg-muted/20 p-4">
+                <div>
+                  <Label htmlFor="broadcast-engagement-retry">
+                    Retry recipients throttled by Meta&apos;s engagement limit
+                  </Label>
+                  <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">
+                    If Meta declines to deliver to a specific recipient to
+                    protect them from marketing fatigue (error 131049),
+                    automatically retry just that recipient once, about 24 hours
+                    later. This never pauses the rest of the campaign -- it only
+                    affects the throttled recipient.
+                  </p>
+                </div>
+                <Switch
+                  id="broadcast-engagement-retry"
+                  checked={retryOnRecipientEngagementLimit}
+                  onCheckedChange={setRetryOnRecipientEngagementLimit}
                 />
               </div>
             </div>

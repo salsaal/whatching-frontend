@@ -64,6 +64,7 @@ export interface Broadcast {
     lastFailureCode?: string;
     lastFailureMessage?: string;
   };
+  retryOnRecipientEngagementLimit?: boolean;
   createdBy?: {
     _id: string;
     name: string;
@@ -160,6 +161,7 @@ export interface CreateBroadcastPayload {
     label: string;
     triggerKey: string;
   }>;
+  retryOnRecipientEngagementLimit?: boolean;
 }
 
 export interface BroadcastListParams {
