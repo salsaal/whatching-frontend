@@ -5,6 +5,8 @@ export const AUTH_ENDPOINTS = {
   LOGIN: `${BASE}/login`,
   ME: `${BASE}/me`,
   REFRESH_TOKEN: `${BASE}/refresh-token`,
+  LOGOUT: `${BASE}/logout`,
+  UPDATE_PASSWORD: `${BASE}/update-password`,
   FORGOT_PASSWORD: `${BASE}/forgot-password`,
   RESEND_VERIFICATION: `${BASE}/resend-verification`,
   RESET_PASSWORD: `${BASE}/reset-password`,
@@ -20,7 +22,6 @@ export const ORGANIZATION_ENDPOINTS = {
   SETUP: `${ORGANIZATIONS_BASE}/setup`,
   UPDATE_SETTINGS: `${ORGANIZATIONS_BASE}/settings`,
   INTEGRATION_STATUS: `${ORGANIZATIONS_BASE}/integration-status`,
-  CONNECT_META: `${ORGANIZATIONS_BASE}/connect-meta`,
   CONNECT_META_EMBEDDED_SIGNUP: `${ORGANIZATIONS_BASE}/connect-meta/embedded-signup`,
   SYNC_INTEGRATION: `${ORGANIZATIONS_BASE}/integration/sync`,
   AD_ACCOUNTS: `${ORGANIZATIONS_BASE}/integration/ad-accounts`,
@@ -166,8 +167,6 @@ export const BOT_ENDPOINTS = {
     `${BOT_BASE}/canvases/${canvasId}/validate`,
   CANVAS_PUBLISH_BY_ID: (canvasId: string) =>
     `${BOT_BASE}/canvases/${canvasId}/publish`,
-  CANVAS_ACTIVATE_BY_ID: (canvasId: string) =>
-    `${BOT_BASE}/canvases/${canvasId}/activate`,
   CANVAS_STATUS_BY_ID: (canvasId: string) =>
     `${BOT_BASE}/canvases/${canvasId}/status`,
   KNOWLEDGE_SOURCES: `${BOT_BASE}/knowledge-sources`,
@@ -240,8 +239,6 @@ export const INSTAGRAM_ENDPOINTS = {
     `${INSTAGRAM_BASE}/canvases/${canvasId}/validate`,
   CANVAS_PUBLISH_BY_ID: (canvasId: string) =>
     `${INSTAGRAM_BASE}/canvases/${canvasId}/publish`,
-  CANVAS_ACTIVATE_BY_ID: (canvasId: string) =>
-    `${INSTAGRAM_BASE}/canvases/${canvasId}/activate`,
   CANVAS_STATUS_BY_ID: (canvasId: string) =>
     `${INSTAGRAM_BASE}/canvases/${canvasId}/status`,
   FLOWS: `${INSTAGRAM_BASE}/flows`,

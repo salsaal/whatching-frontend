@@ -159,15 +159,6 @@ export const publishBotCanvasDraftById = async ({
   return res.data;
 };
 
-export const activateBotCanvas = async (
-  canvasId: string
-): Promise<BotCanvasResponse> => {
-  const res = await api.post<BotCanvasResponse>(
-    BOT_ENDPOINTS.CANVAS_ACTIVATE_BY_ID(canvasId)
-  );
-  return res.data;
-};
-
 export const updateBotCanvasStatus = async ({
   canvasId,
   status

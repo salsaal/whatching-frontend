@@ -242,16 +242,6 @@ export const publishInstagramCanvasById = async ({
   return res.data;
 };
 
-export const activateInstagramCanvas = async (
-  canvasId: string
-): Promise<{ status: string; data: { canvas: InstagramCanvasRecord } }> => {
-  const res = await api.post<{
-    status: string;
-    data: { canvas: InstagramCanvasRecord };
-  }>(INSTAGRAM_ENDPOINTS.CANVAS_ACTIVATE_BY_ID(canvasId));
-  return res.data;
-};
-
 export const updateInstagramCanvasStatus = async ({
   canvasId,
   status

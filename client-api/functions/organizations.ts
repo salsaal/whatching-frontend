@@ -95,16 +95,6 @@ export const getIntegrationStatus =
     return res.data;
   };
 
-export const connectMeta = async (
-  payload: ConnectMetaPayload
-): Promise<OrganizationResponse> => {
-  const res = await api.patch<OrganizationResponse>(
-    ORGANIZATION_ENDPOINTS.CONNECT_META,
-    payload
-  );
-  return res.data;
-};
-
 export const manualConnectWhatsAppNumber = async (
   payload: ConnectMetaPayload
 ): Promise<OrganizationResponse> => {
