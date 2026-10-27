@@ -117,6 +117,12 @@ export default function SubscriberModal({
                   placeholder="9876543210"
                 />
               </div>
+              {subscriber && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  This is the contact&apos;s WhatsApp identity, so it can&apos;t
+                  be changed.
+                </p>
+              )}
             </div>
             <div>
               <Label>First name</Label>

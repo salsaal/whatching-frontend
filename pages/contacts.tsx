@@ -311,10 +311,16 @@ export default function ContactsPage() {
         // deliberately only settable through the dedicated attach/detach
         // routes below, so a full desired-state array has to be diffed
         // against what the subscriber already has.
-        const { tags: nextTags, ...corePayload } = payload;
+        // phoneNumber is the contact's WhatsApp identity and can't change
+        // after creation (the backend ignores it anyway), so it never goes
+        // out on an update.
+        const nextTags = payload.tags;
         const result = await updateSubscriber({
           subscriberId: selectedSubscriber._id,
-          payload: corePayload
+          payload: {
+            firstName: payload.firstName,
+            lastName: payload.lastName
+          }
         });
 
         if (nextTags) {

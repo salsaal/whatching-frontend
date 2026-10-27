@@ -566,7 +566,7 @@ export default function BillingSettingsPage() {
                     <TableCell className="capitalize">
                       {transaction.type.replaceAll("_", " ")}
                     </TableCell>
-                    <TableCell className="max-w-md">
+                    <TableCell className="max-w-md whitespace-normal">
                       {transaction.description}
                     </TableCell>
                     <TableCell className="capitalize">
