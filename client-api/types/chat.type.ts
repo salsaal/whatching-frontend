@@ -37,6 +37,11 @@ export interface ChatUser {
   phoneNumber?: string;
 }
 
+export interface ChatCurrentUser extends ChatUser {
+  role?: "owner" | "admin" | "agent" | string | null;
+  effectivePermissionGrants?: string[];
+}
+
 export interface ConversationSubscriber {
   _id: string;
   phoneNumber?: string;
@@ -177,7 +182,7 @@ export interface ChatBootstrapResponse {
       resolved: number;
       unread: number;
     };
-    currentUser: ChatUser;
+    currentUser: ChatCurrentUser;
     messaging: {
       metaStatus: string;
       phoneNumberId: string | null;

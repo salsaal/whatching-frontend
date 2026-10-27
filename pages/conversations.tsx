@@ -68,6 +68,7 @@ import {
   ChatMessage,
   Conversation,
   ConversationChannel,
+  ConversationListResponse,
   ConversationMessagesResponse,
   ConversationMode,
   ConversationStatus,
@@ -1214,6 +1215,18 @@ export default function ConversationsPage() {
     enabled: Boolean(activeOrganization?._id),
     refetchOnMount: "always"
   });
+  // Mirrors the backend's hasMembershipPermission: owner/admin always pass,
+  // agents only with an explicit grant. Read from bootstrap rather than
+  // /team, which itself needs team:view that many agents don't have.
+  const currentChatUser = bootstrap?.data.currentUser;
+  const canDeleteConversation =
+    currentChatUser?.role === "owner" ||
+    currentChatUser?.role === "admin" ||
+    Boolean(
+      currentChatUser?.effectivePermissionGrants?.includes(
+        "conversations:manage_status"
+      )
+    );
 
   const { data: teamData } = useQuery({
     queryKey: ["team", activeOrganization?._id],
@@ -1679,6 +1692,24 @@ export default function ConversationsPage() {
     onSuccess: async (_data, conversationId) => {
       toast.success("Conversation deleted.");
       setIsDeleteConversationOpen(false);
+      // Drop it from every cached list first. Clearing the selection while
+      // it's still in the list lets the auto-select effect pick the deleted
+      // chat right back up and fetch it -- straight into a 404.
+      queryClient.setQueriesData<ConversationListResponse>(
+        { queryKey: ["conversations"] },
+        (current) =>
+          current?.data?.conversations
+            ? {
+                ...current,
+                data: {
+                  ...current.data,
+                  conversations: current.data.conversations.filter(
+                    (conversation) => conversation._id !== conversationId
+                  )
+                }
+              }
+            : current
+      );
       if (selectedIdRef.current === conversationId) {
         setSelectedId("");
       }
@@ -2585,16 +2616,18 @@ export default function ConversationsPage() {
                     >
                       <ContactRound className="size-4" />
                     </Button>
-                    <Button
-                      type="button"
-                      size="icon"
-                      variant="outline"
-                      className="text-destructive hover:text-destructive"
-                      tooltip="Delete conversation"
-                      onClick={() => setIsDeleteConversationOpen(true)}
-                    >
-                      <Trash2 className="size-4" />
-                    </Button>
+                    {canDeleteConversation && (
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="outline"
+                        className="text-destructive hover:text-destructive"
+                        tooltip="Delete conversation"
+                        onClick={() => setIsDeleteConversationOpen(true)}
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    )}
                   </div>
                 </div>
 
