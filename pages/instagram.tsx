@@ -1366,7 +1366,7 @@ export function InstagramPage({
     mutationFn: deleteInstagramCanvas,
     meta: { showToast: false },
     onSuccess: () => {
-      toast.success("Instagram canvas archived");
+      toast.success("Instagram flow deleted");
       setSelectedCanvasId("");
       setCanvasToArchive(null);
       queryClient.invalidateQueries({ queryKey: ["instagram-canvases"] });
@@ -2642,13 +2642,13 @@ export function InstagramPage({
                       disabled={deleteCanvasMutation.isPending || isActive}
                       tooltip={
                         isActive
-                          ? "Activate another flow before archiving this one"
-                          : "Archive this Instagram message flow"
+                          ? "Activate another flow before deleting this one"
+                          : "Delete this Instagram message flow"
                       }
                       onClick={() => setCanvasToArchive(canvas)}
                     >
                       <Trash2 className="size-4" />
-                      Archive
+                      Delete
                     </Button>
                   </div>
                 </div>
@@ -3586,10 +3586,10 @@ export function InstagramPage({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Archive this Instagram flow?</AlertDialogTitle>
+            <AlertDialogTitle>Delete this Instagram flow?</AlertDialogTitle>
             <AlertDialogDescription>
               {canvasToArchive ? `“${canvasToArchive.name}”` : "This canvas"}{" "}
-              will be archived and removed from the active flow list.
+              will be deleted -- permanently removed in 30 days.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -3608,7 +3608,7 @@ export function InstagramPage({
               {deleteCanvasMutation.isPending && (
                 <Loader2 className="size-4 animate-spin" />
               )}
-              Archive flow
+              Delete flow
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -378,7 +378,7 @@ export function KnowledgeBaseSection() {
                     size="icon"
                     variant="outline"
                     className="cursor-pointer text-destructive hover:text-destructive"
-                    tooltip="Archive this knowledge source"
+                    tooltip="Delete this knowledge source"
                     onClick={() => setSourceToArchive(source)}
                   >
                     <Trash2 className="size-4" />
@@ -750,13 +750,13 @@ export function KnowledgeBaseSection() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Archive this knowledge source?</AlertDialogTitle>
+            <AlertDialogTitle>Delete this knowledge source?</AlertDialogTitle>
             <AlertDialogDescription>
               {sourceToArchive?.title
                 ? `"${sourceToArchive.title}"`
                 : "This source"}{" "}
-              and all of its chunks will stop being used by the AI immediately.
-              This can&apos;t be undone from here.
+              and all of its chunks will stop being used by the AI immediately,
+              and will be permanently removed in 30 days.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -767,7 +767,7 @@ export function KnowledgeBaseSection() {
                 sourceToArchive && deleteSource(sourceToArchive._id)
               }
             >
-              Archive
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
