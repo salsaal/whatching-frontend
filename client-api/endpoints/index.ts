@@ -26,6 +26,7 @@ export const ORGANIZATION_ENDPOINTS = {
   AD_ACCOUNTS: `${ORGANIZATIONS_BASE}/integration/ad-accounts`,
   SELECT_AD_ACCOUNT: `${ORGANIZATIONS_BASE}/integration/ad-account`,
   AD_ACCOUNT_COMPLETE_SIGNUP: `${ORGANIZATIONS_BASE}/integration/ad-accounts/complete-signup`,
+  AD_ACCOUNT_DISCONNECT: `${ORGANIZATIONS_BASE}/integration/ad-account/disconnect`,
   COEXISTENCE_CONTACT_SYNC: `${ORGANIZATIONS_BASE}/integration/contact-sync`,
   TEMPLATE_INSIGHTS_STATUS: `${ORGANIZATIONS_BASE}/whatsapp/template-insights/status`,
   TEMPLATE_INSIGHTS_ENABLE: `${ORGANIZATIONS_BASE}/whatsapp/template-insights/enable`,
@@ -47,6 +48,7 @@ export const ORGANIZATION_ENDPOINTS = {
   WHATSAPP_PHONE_NUMBER_REPLACE: (phoneNumberRecordId: string) =>
     `${ORGANIZATIONS_BASE}/whatsapp/phone-numbers/${phoneNumberRecordId}/replace`,
   TEAM: `${ORGANIZATIONS_BASE}/team`,
+  CHECK_AGENT_EMAIL: `${ORGANIZATIONS_BASE}/check-agent-email`,
   ADD_AGENT: `${ORGANIZATIONS_BASE}/add-agent`,
   TEAM_MEMBER: (membershipId: string) =>
     `${ORGANIZATIONS_BASE}/team/${membershipId}`,
@@ -218,6 +220,7 @@ const INSTAGRAM_BASE = `${ORGANIZATIONS_BASE}/instagram`;
 
 export const INSTAGRAM_ENDPOINTS = {
   STATUS: `${INSTAGRAM_BASE}/status`,
+  SETTINGS: `${INSTAGRAM_BASE}/settings`,
   CONNECT_MANUAL: `${INSTAGRAM_BASE}/connect-manual`,
   CONNECT_LOGIN: `${INSTAGRAM_BASE}/connect-login`,
   SYNC: `${INSTAGRAM_BASE}/sync`,

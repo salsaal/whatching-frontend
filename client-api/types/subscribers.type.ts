@@ -17,6 +17,8 @@ export interface Subscriber {
   instagramUserId?: string;
   instagramUsername?: string;
   instagramProfilePictureUrl?: string;
+  spamMutedUntil?: string;
+  spamMutedReason?: string;
   createdAt: string;
   updatedAt: string;
   __v?: number;

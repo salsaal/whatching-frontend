@@ -4,6 +4,8 @@ import {
   ConnectInstagramLoginPayload,
   ConnectInstagramManualPayload,
   InstagramAutomationLogsResponse,
+  InstagramAutomationSettingsPatch,
+  InstagramAutomationSettingsResponse,
   InstagramCanvasDetailResponse,
   InstagramCanvasPublishResponse,
   InstagramCanvasResponse,
@@ -36,6 +38,24 @@ export const getInstagramStatus =
     );
     return res.data;
   };
+
+export const getInstagramAutomationSettings =
+  async (): Promise<InstagramAutomationSettingsResponse> => {
+    const res = await api.get<InstagramAutomationSettingsResponse>(
+      INSTAGRAM_ENDPOINTS.SETTINGS
+    );
+    return res.data;
+  };
+
+export const updateInstagramAutomationSettings = async (
+  payload: InstagramAutomationSettingsPatch
+): Promise<InstagramAutomationSettingsResponse> => {
+  const res = await api.patch<InstagramAutomationSettingsResponse>(
+    INSTAGRAM_ENDPOINTS.SETTINGS,
+    payload
+  );
+  return res.data;
+};
 
 export const connectInstagramManual = async (
   payload: ConnectInstagramManualPayload
@@ -239,10 +259,12 @@ export const updateInstagramCanvasStatus = async ({
   canvasId: string;
   status: "active" | "inactive";
 }): Promise<{ status: string; data: { canvas: InstagramCanvasRecord } }> => {
-  const res = await api.patch<{
+  const res = await api.post<{
     status: string;
     data: { canvas: InstagramCanvasRecord };
-  }>(INSTAGRAM_ENDPOINTS.CANVAS_STATUS_BY_ID(canvasId), { status });
+  }>(INSTAGRAM_ENDPOINTS.CANVAS_STATUS_BY_ID(canvasId), {
+    action: status === "active" ? "activate" : "deactivate"
+  });
   return res.data;
 };
 

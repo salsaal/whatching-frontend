@@ -120,6 +120,7 @@ import { MediaAsset } from "@/client-api/types/media.type";
 import MediaPickerDialog from "@/components/media/MediaPickerDialog";
 import { InstagramFlowBlockPreview } from "@/components/flows/FlowBlockPreview";
 import FlowDiagramPreviewDialog from "@/components/flows/FlowDiagramPreviewDialog";
+import { InstagramAutomationToggle } from "@/components/instagram/InstagramAutomationToggle";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -2523,6 +2524,13 @@ export function InstagramPage({
               </Button>
             </div>
           </div>
+        </section>
+
+        <section className="rounded-lg bg-white p-5 shadow-xs">
+          <h3 className="mb-3 font-heading text-base font-semibold">
+            Automation settings
+          </h3>
+          <InstagramAutomationToggle />
         </section>
 
         <section className="grid gap-4 lg:grid-cols-3">

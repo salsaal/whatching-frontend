@@ -53,6 +53,8 @@ export interface ConversationSubscriber {
   lastInteraction?: string;
   lastInboundAt?: string;
   lastOutboundAt?: string;
+  spamMutedUntil?: string;
+  spamMutedReason?: string;
 }
 
 export interface ReplyWindow {
@@ -157,6 +159,8 @@ export interface ChatMessage {
     source?: string | null;
   } | null;
   errorMessage?: string;
+  errorCategory?: string;
+  paymentSetupUrl?: string;
   whatsappSender?: WhatsAppSenderSummary | null;
   sentAt?: string;
   createdAt: string;

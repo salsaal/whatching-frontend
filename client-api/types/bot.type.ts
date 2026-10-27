@@ -139,6 +139,9 @@ export interface BotSettings {
   escalationTriggerIds?: string[];
   autoTimeoutMinutes?: number;
   geminiModel?: string;
+  spamProtectionEnabled: boolean;
+  spamFloodThreshold: number;
+  spamFloodWindowSeconds: number;
 }
 
 export type BotSettingsPatch = Partial<
@@ -149,6 +152,9 @@ export type BotSettingsPatch = Partial<
     | "greetingKeywords"
     | "optOutKeywords"
     | "escalationTriggerIds"
+    | "spamProtectionEnabled"
+    | "spamFloodThreshold"
+    | "spamFloodWindowSeconds"
   >
 >;
 

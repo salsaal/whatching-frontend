@@ -406,6 +406,36 @@ export interface InstagramAutomationLog {
   updatedAt?: string;
 }
 
+export interface InstagramAutomationSettings {
+  isAutomationEnabled: boolean;
+  isAiEnabled: boolean;
+  systemPrompt?: string;
+  defaultTriggerKey?: string;
+  greetingKeywords?: string[];
+  optOutKeywords?: string[];
+  escalationReplyIds?: string[];
+  autoTimeoutMinutes?: number;
+  spamProtectionEnabled: boolean;
+  spamFloodThreshold: number;
+  spamFloodWindowSeconds: number;
+}
+
+export type InstagramAutomationSettingsPatch = Partial<
+  Pick<
+    InstagramAutomationSettings,
+    | "isAutomationEnabled"
+    | "isAiEnabled"
+    | "spamProtectionEnabled"
+    | "spamFloodThreshold"
+    | "spamFloodWindowSeconds"
+  >
+>;
+
+export interface InstagramAutomationSettingsResponse {
+  status: string;
+  data: { settings: InstagramAutomationSettings };
+}
+
 export interface InstagramAutomationLogsResponse {
   status: string;
   results: number;
