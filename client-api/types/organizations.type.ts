@@ -476,9 +476,11 @@ export interface TeamResponse {
 }
 
 export interface AddAgentPayload {
-  name: string;
+  // Required only when creating a brand-new account; ignored when linking or
+  // restoring an existing user.
+  name?: string;
   email: string;
-  phoneNumber: string;
+  phoneNumber?: string;
   password?: string;
   countryIso?: string;
   permissionAccess?: PermissionAccessState;

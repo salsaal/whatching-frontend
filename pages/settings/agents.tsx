@@ -77,7 +77,8 @@ const initials = (name?: string) =>
     .slice(0, 2)
     .toUpperCase();
 
-type AgentFormStep = "email" | "new" | "existing";
+// "member" = already an active member: nothing to submit, so it's blocked.
+type AgentFormStep = "email" | "new" | "existing" | "member";
 
 function AgentForm({
   onSubmit,
@@ -86,10 +87,10 @@ function AgentForm({
   defaultPermissionAccess
 }: {
   onSubmit: (payload: {
-    name: string;
+    name?: string;
     email: string;
-    phoneNumber: string;
-    countryIso: string;
+    phoneNumber?: string;
+    countryIso?: string;
     password?: string;
     permissionAccess?: PermissionAccessState;
   }) => void;
@@ -116,13 +117,21 @@ function AgentForm({
 
   const { mutate: checkEmailMutate, isPending: isCheckingEmail } = useMutation({
     mutationFn: checkAgentEmail,
+    meta: { showToast: false },
     onSuccess: (response) => {
       setEmailCheck(response.data);
-      setName(response.data.name || "");
-      setStep(response.data.exists ? "existing" : "new");
+      setStep(
+        response.data.alreadyMember
+          ? "member"
+          : response.data.exists
+            ? "existing"
+            : "new"
+      );
     },
-    onError: () => {
-      toast.error("Couldn't check that email. Try again.");
+    onError: (error: AxiosError<{ message?: string }>) => {
+      toast.error(
+        error.response?.data?.message || "Couldn't check that email. Try again."
+      );
     }
   });
 
@@ -137,12 +146,20 @@ function AgentForm({
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
-    if (!name.trim() || !phoneNumber.trim()) {
-      toast.error("Add a name and phone number.");
+    if (step === "member") return;
+    const permissionPayload = permissionSchema.length
+      ? { permissionAccess }
+      : {};
+
+    // Existing accounts only need the email + permissions -- the backend
+    // never reads name/phone/password when linking or restoring access.
+    if (step === "existing") {
+      onSubmit({ email: email.trim(), ...permissionPayload });
       return;
     }
-    if (step === "new" && !password) {
-      toast.error("Add a temporary password.");
+
+    if (!name.trim() || !phoneNumber.trim() || !password) {
+      toast.error("Add a name, phone number, and temporary password.");
       return;
     }
     onSubmit({
@@ -150,8 +167,8 @@ function AgentForm({
       email: email.trim(),
       phoneNumber: buildInternationalPhoneNumber(countryCode, phoneNumber),
       countryIso,
-      ...(step === "new" ? { password } : {}),
-      ...(permissionSchema.length ? { permissionAccess } : {})
+      password,
+      ...permissionPayload
     });
   };
 
@@ -203,43 +220,69 @@ function AgentForm({
     );
   }
 
+  const personLabel = emailCheck?.name || email;
+
+  if (step === "member") {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+          <p className="font-medium">{personLabel} is already on your team.</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Manage their access from the team list instead.
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full"
+          onClick={() => setStep("email")}
+        >
+          Use a different email
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <form className="space-y-4" onSubmit={handleSubmit}>
       {step === "existing" && (
         <div className="rounded-lg border bg-muted/30 p-3 text-sm">
           <p className="font-medium">
-            An account already exists for {email}
-            {emailCheck?.name ? ` (${emailCheck.name})` : ""}.
+            {emailCheck?.membershipStatus === "disabled"
+              ? `Restore ${personLabel}'s access`
+              : `Add ${personLabel} to your team`}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            {emailCheck?.alreadyMember
-              ? "This grants them agent access again -- no new password needed."
-              : "This links their existing account to your organization as an agent -- no new password needed."}
+            {emailCheck?.membershipStatus === "disabled"
+              ? "They were removed earlier. Restoring brings them back as an agent with the permissions below."
+              : "They already have a Whatching account, so no password is needed -- just choose their permissions."}
           </p>
         </div>
       )}
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="space-y-1.5">
-          <Label>Name</Label>
-          <Input
-            value={name}
-            placeholder="Staff Member"
-            onChange={(event) => setName(event.target.value)}
-          />
+      {step === "new" && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label>Name</Label>
+            <Input
+              value={name}
+              placeholder="Staff Member"
+              onChange={(event) => setName(event.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Phone number</Label>
+            <PhoneNumberInput
+              countryCode={countryCode}
+              countryIso={countryIso}
+              phoneNumber={phoneNumber}
+              placeholder="8777019926"
+              onCountryCodeChange={setCountryCode}
+              onCountryIsoChange={setCountryIso}
+              onPhoneNumberChange={setPhoneNumber}
+            />
+          </div>
         </div>
-        <div className="space-y-1.5">
-          <Label>Phone number</Label>
-          <PhoneNumberInput
-            countryCode={countryCode}
-            countryIso={countryIso}
-            phoneNumber={phoneNumber}
-            placeholder="8777019926"
-            onCountryCodeChange={setCountryCode}
-            onCountryIsoChange={setCountryIso}
-            onPhoneNumberChange={setPhoneNumber}
-          />
-        </div>
-      </div>
+      )}
       {step === "new" && (
         <div className="space-y-1.5">
           <Label>Temporary password</Label>
@@ -340,7 +383,11 @@ function AgentForm({
         </Button>
         <Button type="submit" className="flex-1" isLoading={isSaving}>
           <UserPlus className="size-4" />
-          {step === "existing" ? "Grant access" : "Add agent"}
+          {step === "existing"
+            ? emailCheck?.membershipStatus === "disabled"
+              ? "Restore access"
+              : "Add to team"
+            : "Add agent"}
         </Button>
       </div>
     </form>
