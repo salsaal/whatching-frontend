@@ -111,3 +111,14 @@ export const getTemplateEditId = (template: MessageTemplate) =>
 export const isPendingTemplate = (template: MessageTemplate) =>
   template.status.toUpperCase() === "PENDING" ||
   template.status.toLowerCase() === "pending_review";
+
+// Meta rejects templates whose quick-reply and call-to-action (URL/phone)
+// buttons are interleaved -- each kind must sit in one contiguous group.
+// Quick replies go first so their absolute positions, which quick-reply
+// routes are keyed by, never shift when a call-to-action is added.
+export const groupTemplateButtons = <T extends { type: string }>(
+  buttons: T[]
+): T[] => [
+  ...buttons.filter((button) => button.type === "QUICK_REPLY"),
+  ...buttons.filter((button) => button.type !== "QUICK_REPLY")
+];

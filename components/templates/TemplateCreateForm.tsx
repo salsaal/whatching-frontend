@@ -14,7 +14,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { parseAsString, useQueryState } from "nuqs";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import { toast } from "sonner";
@@ -68,6 +68,7 @@ import {
   getFooterComponent,
   getHeaderComponent,
   getTemplateType,
+  groupTemplateButtons,
   mapDraftToTemplate
 } from "./templateUtils";
 
@@ -82,6 +83,22 @@ interface CarouselCardState {
 const MAX_TOTAL_BUTTONS = 10;
 const MAX_URL_BUTTONS = 2;
 const MAX_PHONE_BUTTONS = 1;
+// Each carousel card carries at most 2 buttons; anything beyond that used to
+// be silently dropped at submit time.
+const MAX_CAROUSEL_CARD_BUTTONS = 2;
+
+const DEFAULT_FOOTER_TEXT = "Reply STOP to opt out";
+
+// Meta rejects free-text footers for authentication templates and
+// limited-time offers, and location/carousel templates have no footer slot.
+const templateSupportsFooter = (
+  templateType: TemplateCreationType,
+  category: string
+) =>
+  category !== "AUTHENTICATION" &&
+  templateType !== "LOCATION" &&
+  templateType !== "CAROUSEL" &&
+  templateType !== "LIMITED_TIME_OFFER";
 
 const categories: TemplateCategory[] = [
   "MARKETING",
@@ -267,7 +284,7 @@ export default function TemplateCreateForm({
   const [bodyExamples, setBodyExamples] = useState<Record<string, string>>({
     "1": "John"
   });
-  const [footerText, setFooterText] = useState("Reply STOP to opt out");
+  const [footerText, setFooterText] = useState(DEFAULT_FOOTER_TEXT);
   const [buttons, setButtons] = useState<TemplateButton[]>([]);
 
   const { data: selectedMediaData } = useQuery({
@@ -287,12 +304,13 @@ export default function TemplateCreateForm({
     [buttons]
   );
   const buttonCounts = useMemo(() => countButtons(buttons), [buttons]);
-  const totalButtonsLeft = MAX_TOTAL_BUTTONS - buttonCounts.total;
+  const maxTotalButtons =
+    templateType === "CAROUSEL" ? MAX_CAROUSEL_CARD_BUTTONS : MAX_TOTAL_BUTTONS;
+  const totalButtonsLeft = maxTotalButtons - buttonCounts.total;
   const urlButtonsLeft = MAX_URL_BUTTONS - buttonCounts.urls;
   const phoneButtonsLeft = MAX_PHONE_BUTTONS - buttonCounts.phones;
   const quickReplyButtonsLeft = totalButtonsLeft;
-  const supportsFooter =
-    templateType !== "LOCATION" && templateType !== "CAROUSEL";
+  const supportsFooter = templateSupportsFooter(templateType, category);
   const supportsHeaderSelector =
     templateType === "TEXT" || templateType === "LIMITED_TIME_OFFER";
   const isEditing = Boolean(initialTemplate);
@@ -360,15 +378,17 @@ export default function TemplateCreateForm({
     setBodyText(bodyTextValue);
     setFooterText(footer?.text || "");
     setButtons(
-      (buttonsComponent?.buttons || []).map((button) =>
-        button.type === "QUICK_REPLY"
-          ? {
-              ...button,
-              triggerKey: undefined,
-              flowTriggerKey: undefined,
-              payload: undefined
-            }
-          : button
+      groupTemplateButtons(
+        (buttonsComponent?.buttons || []).map((button) =>
+          button.type === "QUICK_REPLY"
+            ? {
+                ...button,
+                triggerKey: undefined,
+                flowTriggerKey: undefined,
+                payload: undefined
+              }
+            : button
+        )
       )
     );
 
@@ -505,8 +525,12 @@ export default function TemplateCreateForm({
 
     // Meta allows up to 10 total template buttons. If more than 3 are used,
     // WhatsApp collapses the extra buttons behind "See all options".
-    if (counts.total >= MAX_TOTAL_BUTTONS) {
-      toast.error("You can add up to 10 buttons in total");
+    if (counts.total >= maxTotalButtons) {
+      toast.error(
+        templateType === "CAROUSEL"
+          ? "Carousel cards support up to 2 buttons"
+          : "You can add up to 10 buttons in total"
+      );
       return;
     }
 
@@ -521,7 +545,9 @@ export default function TemplateCreateForm({
       return;
     }
 
-    setButtons((value) => [...value, createEmptyButton(type)]);
+    setButtons((value) =>
+      groupTemplateButtons([...value, createEmptyButton(type)])
+    );
   };
 
   const updateButton = (
@@ -542,8 +568,12 @@ export default function TemplateCreateForm({
     );
     const nextCounts = countButtons(nextButtons);
 
-    if (nextCounts.total > MAX_TOTAL_BUTTONS) {
-      toast.error("You can add up to 10 buttons in total");
+    if (nextCounts.total > maxTotalButtons) {
+      toast.error(
+        templateType === "CAROUSEL"
+          ? "Carousel cards support up to 2 buttons"
+          : "You can add up to 10 buttons in total"
+      );
       return;
     }
 
@@ -557,7 +587,7 @@ export default function TemplateCreateForm({
       return;
     }
 
-    setButtons(nextButtons);
+    setButtons(groupTemplateButtons(nextButtons));
   };
 
   const removeButton = (index: number) => {
@@ -920,12 +950,31 @@ export default function TemplateCreateForm({
 
                 const nextType = value as TemplateCreationType;
                 setTemplateType(nextType);
+                if (
+                  nextType === "CAROUSEL" &&
+                  buttons.length > MAX_CAROUSEL_CARD_BUTTONS
+                ) {
+                  setButtons((current) =>
+                    current.slice(0, MAX_CAROUSEL_CARD_BUTTONS)
+                  );
+                  toast.info(
+                    "Carousel cards support up to 2 buttons, so the extra buttons were removed."
+                  );
+                }
                 setHeaderFormat(
                   getHeaderFormatForTemplateType(nextType, headerFormat)
                 );
 
-                if (nextType === "LOCATION" || nextType === "CAROUSEL") {
-                  setFooterText("");
+                // The footer is simply hidden (and never sent) for types that
+                // don't allow one; switching back to a type that does
+                // restores the default for new templates rather than leaving
+                // a blank footer behind.
+                if (
+                  !isEditing &&
+                  templateSupportsFooter(nextType, category) &&
+                  !footerText.trim()
+                ) {
+                  setFooterText(DEFAULT_FOOTER_TEXT);
                 }
 
                 if (!["IMAGE", "VIDEO", "DOCUMENT"].includes(nextType)) {
@@ -1234,8 +1283,11 @@ export default function TemplateCreateForm({
             description="Footer is disabled for this template type."
           >
             <div className="rounded-sm bg-muted/60 p-3 text-sm text-muted-foreground">
-              {templateType} templates use a constrained Meta structure, so the
-              footer is not shown for this type.
+              {category === "AUTHENTICATION"
+                ? "Meta doesn't allow a custom footer on authentication templates."
+                : templateType === "LIMITED_TIME_OFFER"
+                  ? "Meta doesn't allow a custom footer on limited-time offer templates."
+                  : `${templateType} templates use a constrained Meta structure, so the footer is not shown for this type.`}
             </div>
           </FieldBlock>
         )}
@@ -1291,89 +1343,97 @@ export default function TemplateCreateForm({
 
           <div className="mt-4 space-y-3">
             {visibleButtonEntries.map(({ button, index }) => (
-              <div
-                key={`${button.type}-${index}`}
-                className="grid gap-3 rounded-sm bg-muted/40 p-3 lg:grid-cols-[180px_1fr_1fr_auto]"
-              >
-                <Select
-                  value={button.type}
-                  onValueChange={(value) =>
-                    updateButtonType(index, value as TemplateButtonType)
-                  }
-                  disabled={isMetaTemplateEdit || !canEditFields}
-                >
-                  <SelectTrigger className="h-10 w-full border-0 bg-white shadow-none">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {buttonTypeOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <Fragment key={`${button.type}-${index}`}>
+                {(index === 0 ||
+                  (buttons[index - 1].type === "QUICK_REPLY") !==
+                    (button.type === "QUICK_REPLY")) && (
+                  <p className="pt-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    {button.type === "QUICK_REPLY"
+                      ? "Quick replies"
+                      : "Call-to-action buttons"}
+                  </p>
+                )}
+                <div className="grid gap-3 rounded-sm bg-muted/40 p-3 lg:grid-cols-[180px_1fr_1fr_auto]">
+                  <Select
+                    value={button.type}
+                    onValueChange={(value) =>
+                      updateButtonType(index, value as TemplateButtonType)
+                    }
+                    disabled={isMetaTemplateEdit || !canEditFields}
+                  >
+                    <SelectTrigger className="h-10 w-full border-0 bg-white shadow-none">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {buttonTypeOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
 
-                <Input
-                  value={button.text}
-                  onChange={(event) =>
-                    updateButton(index, "text", event.target.value)
-                  }
-                  disabled={!canEditFields}
-                  maxLength={25}
-                  placeholder="Button title"
-                  className={cn(
-                    "h-10 border-0 bg-white shadow-none",
-                    button.text &&
-                      buttons.some(
-                        (item, itemIndex) =>
-                          itemIndex !== index &&
-                          item.text.trim().toLowerCase() ===
-                            button.text.trim().toLowerCase()
-                      ) &&
-                      "ring-2 ring-destructive/30"
+                  <Input
+                    value={button.text}
+                    onChange={(event) =>
+                      updateButton(index, "text", event.target.value)
+                    }
+                    disabled={!canEditFields}
+                    maxLength={25}
+                    placeholder="Button title"
+                    className={cn(
+                      "h-10 border-0 bg-white shadow-none",
+                      button.text &&
+                        buttons.some(
+                          (item, itemIndex) =>
+                            itemIndex !== index &&
+                            item.text.trim().toLowerCase() ===
+                              button.text.trim().toLowerCase()
+                        ) &&
+                        "ring-2 ring-destructive/30"
+                    )}
+                  />
+
+                  {button.type === "URL" && (
+                    <Input
+                      value={button.url || ""}
+                      onChange={(event) =>
+                        updateButton(index, "url", event.target.value)
+                      }
+                      disabled={!canEditFields}
+                      placeholder="https://whatching.com/sale"
+                      className="h-10 border-0 bg-white shadow-none"
+                    />
                   )}
-                />
+                  {button.type === "PHONE_NUMBER" && (
+                    <Input
+                      value={button.phone_number || ""}
+                      onChange={(event) =>
+                        updateButton(index, "phone_number", event.target.value)
+                      }
+                      disabled={!canEditFields}
+                      placeholder="+918777019999"
+                      className="h-10 border-0 bg-white shadow-none"
+                    />
+                  )}
+                  {button.type === "QUICK_REPLY" && (
+                    <div className="flex h-10 items-center rounded-sm bg-white px-3 text-xs text-muted-foreground">
+                      Trigger is selected when creating a broadcast.
+                    </div>
+                  )}
 
-                {button.type === "URL" && (
-                  <Input
-                    value={button.url || ""}
-                    onChange={(event) =>
-                      updateButton(index, "url", event.target.value)
-                    }
-                    disabled={!canEditFields}
-                    placeholder="https://whatching.com/sale"
-                    className="h-10 border-0 bg-white shadow-none"
-                  />
-                )}
-                {button.type === "PHONE_NUMBER" && (
-                  <Input
-                    value={button.phone_number || ""}
-                    onChange={(event) =>
-                      updateButton(index, "phone_number", event.target.value)
-                    }
-                    disabled={!canEditFields}
-                    placeholder="+918777019999"
-                    className="h-10 border-0 bg-white shadow-none"
-                  />
-                )}
-                {button.type === "QUICK_REPLY" && (
-                  <div className="flex h-10 items-center rounded-sm bg-white px-3 text-xs text-muted-foreground">
-                    Trigger is selected when creating a broadcast.
-                  </div>
-                )}
-
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="size-10 text-muted-foreground hover:text-destructive"
-                  onClick={() => removeButton(index)}
-                  disabled={isMetaTemplateEdit || !canEditFields}
-                >
-                  <Trash2 className="size-4" />
-                </Button>
-              </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-10 text-muted-foreground hover:text-destructive"
+                    onClick={() => removeButton(index)}
+                    disabled={isMetaTemplateEdit || !canEditFields}
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                </div>
+              </Fragment>
             ))}
           </div>
         </FieldBlock>

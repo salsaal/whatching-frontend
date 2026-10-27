@@ -15,6 +15,7 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import { parseAsString, useQueryState } from "nuqs";
 import { toast } from "sonner";
+import { AxiosError } from "axios";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -227,6 +228,11 @@ export default function TemplatesPage() {
             await Promise.all([refetchTemplates(), refetchDrafts()]);
           }
         });
+      },
+      onError: (error: AxiosError<{ message?: string }>) => {
+        toast.error(
+          error.response?.data?.message || "Couldn't delete this template."
+        );
       },
       onSettled: () => setDeletingId(null)
     });
