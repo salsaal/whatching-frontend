@@ -2,7 +2,6 @@
 
 import { CheckCircle2, LogOut, UserRound, XCircle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { useRouter } from "next/router";
 import { useEffect } from "react";
 
 import { getMe } from "@/client-api/functions/auth";
@@ -10,8 +9,8 @@ import { Button } from "@/components/ui/button";
 import { DetailLoadingSkeleton } from "@/components/ui/loading-skeletons";
 import { Skeleton } from "@/components/ui/skeleton";
 import AppLayout from "@/layouts/AppLayout";
+import { useLogout } from "@/hooks/useLogout";
 import { useAuthStore } from "@/stores/authStore";
-import { useOrganizationStore } from "@/stores/organizationStore";
 
 const formatDate = (date?: string) =>
   date
@@ -23,12 +22,8 @@ const formatDate = (date?: string) =>
     : "-";
 
 export default function ProfilePage() {
-  const router = useRouter();
-  const logout = useAuthStore((state) => state.logout);
   const setUser = useAuthStore((state) => state.setUser);
-  const clearOrganizations = useOrganizationStore(
-    (state) => state.clearOrganizations
-  );
+  const { logout: handleLogout, isLoggingOut } = useLogout();
 
   const { data, isLoading } = useQuery({
     queryKey: ["me"],
@@ -43,12 +38,6 @@ export default function ProfilePage() {
       setUser(user);
     }
   }, [setUser, user]);
-
-  const handleLogout = () => {
-    logout();
-    clearOrganizations();
-    router.push("/auth/login");
-  };
 
   return (
     <AppLayout>
@@ -70,7 +59,11 @@ export default function ProfilePage() {
                 )}
               </div>
             </div>
-            <Button variant="outline" onClick={handleLogout}>
+            <Button
+              variant="outline"
+              isLoading={isLoggingOut}
+              onClick={handleLogout}
+            >
               <LogOut className="size-4" />
               Logout
             </Button>

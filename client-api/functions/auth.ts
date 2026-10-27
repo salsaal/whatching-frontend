@@ -77,3 +77,25 @@ export const resetPassword = async ({
 
   return res.data;
 };
+
+// Revokes the refresh token server-side. The axios instance already sends
+// credentials, but this call only matters because of the httpOnly cookie,
+// so it's stated explicitly here.
+export const logoutUser = async (): Promise<ApiResponse> => {
+  const res = await api.post<ApiResponse>(AUTH_ENDPOINTS.LOGOUT, undefined, {
+    withCredentials: true
+  });
+  return res.data;
+};
+
+export const updatePassword = async (payload: {
+  currentPassword: string;
+  password: string;
+  passwordConfirm: string;
+}): Promise<LoginResponse> => {
+  const res = await api.patch<LoginResponse>(
+    AUTH_ENDPOINTS.UPDATE_PASSWORD,
+    payload
+  );
+  return res.data;
+};

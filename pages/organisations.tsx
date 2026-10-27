@@ -39,6 +39,7 @@ import { Input } from "@/components/ui/input";
 import { CardGridLoadingSkeleton } from "@/components/ui/loading-skeletons";
 import assets from "@/json/assets";
 import { cn } from "@/lib/utils";
+import { useLogout } from "@/hooks/useLogout";
 import { useAuthStore } from "@/stores/authStore";
 import { Organization, useOrganizationStore } from "@/stores/organizationStore";
 
@@ -57,13 +58,12 @@ function Organisations() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [name, setName] = useState("");
   const user = useAuthStore((state) => state.user);
-  const logout = useAuthStore((state) => state.logout);
+  const { logout: handleLogout, isLoggingOut } = useLogout();
   const {
     organizations,
     setOrganizations,
     addOrganization,
-    setActiveOrganization,
-    clearOrganizations
+    setActiveOrganization
   } = useOrganizationStore();
 
   const firstName = useMemo(
@@ -88,12 +88,6 @@ function Organisations() {
       toast.success("Organisation created");
     }
   });
-
-  const handleLogout = () => {
-    logout();
-    clearOrganizations();
-    router.push("/auth/login");
-  };
 
   const handleView = (organization: Organization) => {
     setActiveOrganization(organization);
@@ -132,7 +126,12 @@ function Organisations() {
             <div className="hidden size-10 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary sm:flex">
               {user?.name?.charAt(0)?.toUpperCase() || "W"}
             </div>
-            <Button variant="ghost" size="sm" onClick={handleLogout}>
+            <Button
+              variant="ghost"
+              size="sm"
+              isLoading={isLoggingOut}
+              onClick={handleLogout}
+            >
               <LogOut className="size-4" />
               Logout
             </Button>

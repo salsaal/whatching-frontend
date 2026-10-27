@@ -59,7 +59,7 @@ import {
   getDaysUntil
 } from "@/lib/billing";
 import { cn } from "@/lib/utils";
-import { useAuthStore } from "@/stores/authStore";
+import { useLogout } from "@/hooks/useLogout";
 import { Organization, useOrganizationStore } from "@/stores/organizationStore";
 
 interface AppLayoutProps {
@@ -67,6 +67,10 @@ interface AppLayoutProps {
   hideHeader?: boolean;
   fullBleed?: boolean;
 }
+
+// A dismissed "Choose a plan" banner comes back after this long, so an org
+// that's still on no plan gets a periodic nudge instead of silence forever.
+const PLAN_BANNER_DISMISS_MS = 7 * 24 * 60 * 60 * 1000;
 
 const navigation = [
   { label: "Overview", href: "/overview", icon: LayoutDashboard },
@@ -93,7 +97,7 @@ export default function AppLayout({
   const [isLogoutOpen, setIsLogoutOpen] = useState(false);
   const [planBannerDismissed, setPlanBannerDismissed] = useState(false);
   const [cancelBannerDismissed, setCancelBannerDismissed] = useState(false);
-  const logout = useAuthStore((state) => state.logout);
+  const { logout, isLoggingOut } = useLogout();
   const {
     activeOrganization,
     organizations,
@@ -101,8 +105,7 @@ export default function AppLayout({
     hasHydrated,
     setIntegration,
     setActiveOrganization,
-    upsertOrganization,
-    clearOrganizations
+    upsertOrganization
   } = useOrganizationStore();
 
   const activeOrgId = activeOrganization?._id;
@@ -162,8 +165,13 @@ export default function AppLayout({
   useEffect(() => {
     if (!planBannerKey || typeof window === "undefined") return;
     try {
+      // Stored value is the dismissal timestamp. Older "1" flags parse to
+      // epoch+1ms, i.e. already expired, so they get one fresh showing.
+      const dismissedAt = Number(window.localStorage.getItem(planBannerKey));
       setPlanBannerDismissed(
-        window.localStorage.getItem(planBannerKey) === "1"
+        Number.isFinite(dismissedAt) &&
+          dismissedAt > 0 &&
+          Date.now() - dismissedAt < PLAN_BANNER_DISMISS_MS
       );
     } catch {
       // Ignore storage access errors (private browsing, etc).
@@ -184,7 +192,7 @@ export default function AppLayout({
     setPlanBannerDismissed(true);
     if (!planBannerKey) return;
     try {
-      window.localStorage.setItem(planBannerKey, "1");
+      window.localStorage.setItem(planBannerKey, String(Date.now()));
     } catch {
       // Ignore storage access errors (private browsing, etc).
     }
@@ -261,11 +269,8 @@ export default function AppLayout({
   );
 
   const handleLogout = () => {
-    logout();
-    clearOrganizations();
-    setIsLogoutOpen(false);
     setIsMobileMenuOpen(false);
-    router.push("/auth/login");
+    void logout();
   };
   const renderAccountLinks = (mobile = false) => (
     <div className={cn("space-y-1", mobile ? "px-0" : "px-3 pb-4")}>
@@ -582,8 +587,15 @@ export default function AppLayout({
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-white hover:bg-destructive/90"
-              onClick={handleLogout}
+              disabled={isLoggingOut}
+              onClick={(event) => {
+                // Keep the dialog open (with the button disabled) until the
+                // server-side revoke finishes and we navigate away.
+                event.preventDefault();
+                handleLogout();
+              }}
             >
+              {isLoggingOut && <Loader2 className="size-4 animate-spin" />}
               Log out
             </AlertDialogAction>
           </AlertDialogFooter>

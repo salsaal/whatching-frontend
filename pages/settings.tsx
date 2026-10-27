@@ -6,6 +6,7 @@ import {
   LifeBuoy,
   Loader2,
   Settings,
+  ShieldCheck,
   SlidersHorizontal,
   Trash2,
   UsersRound
@@ -49,6 +50,13 @@ const settingsLinks = [
     title: "Agents & permissions",
     description: "Invite staff, manage roles, and assign inbox access.",
     icon: UsersRound,
+    ownerOnly: false
+  },
+  {
+    href: "/settings/security",
+    title: "Security",
+    description: "Change the password for your own login.",
+    icon: ShieldCheck,
     ownerOnly: false
   },
   {
