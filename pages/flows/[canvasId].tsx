@@ -1565,6 +1565,7 @@ function FlowsBuilder() {
       node.data.triggerKey = makeUniqueTrigger(node.data.triggerKey, nodes);
       setNodes((current) => [...current, node]);
       setSelectedNodeId(node.id);
+      setPreviewNodeId(node.id);
       setRightPanelOpen(true);
     },
     [isPublishedMode, nodes, setNodes]
@@ -2202,7 +2203,7 @@ function FlowsBuilder() {
                 onlyRenderVisibleElements
                 onNodeClick={(_, node) => {
                   setSelectedEdgeId(null);
-                  if (node.id !== selectedNodeId) setPreviewNodeId(null);
+                  if (node.id !== selectedNodeId) setPreviewNodeId(node.id);
                   setSelectedNodeId(node.id);
                   setRightPanelOpen(true);
                 }}
@@ -2847,6 +2848,23 @@ function PropertiesPanel({
             </div>
           )}
 
+        {node.data.blockType === "list" && (
+          <Field label="Optional header">
+            <Input
+              value={String(content.headerText || "")}
+              disabled={readOnly}
+              maxLength={60}
+              placeholder="Choose Shipping Option"
+              onChange={(event) =>
+                updateContent({ headerText: event.target.value })
+              }
+            />
+            <p className="text-[11px] text-muted-foreground">
+              {String(content.headerText || "").length}/60 characters
+            </p>
+          </Field>
+        )}
+
         {(node.data.blockType === "text" ||
           node.data.blockType === "buttons" ||
           node.data.blockType === "list") && (
@@ -2870,20 +2888,6 @@ function PropertiesPanel({
 
         {node.data.blockType === "list" && (
           <div className="space-y-3">
-            <Field label="Optional header">
-              <Input
-                value={String(content.headerText || "")}
-                disabled={readOnly}
-                maxLength={60}
-                placeholder="Choose Shipping Option"
-                onChange={(event) =>
-                  updateContent({ headerText: event.target.value })
-                }
-              />
-              <p className="text-[11px] text-muted-foreground">
-                {String(content.headerText || "").length}/60 characters
-              </p>
-            </Field>
             <Field label="List button text">
               <Input
                 value={String(content.buttonText || "")}
