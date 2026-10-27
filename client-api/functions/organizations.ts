@@ -1,5 +1,6 @@
 import api from "../axiosInstance";
 import { ORGANIZATION_ENDPOINTS } from "../endpoints";
+import { ApiResponse } from "../types/api";
 import {
   AdAccountsResponse,
   AdAccountSignupCompletePayload,
@@ -11,6 +12,7 @@ import {
   IntegrationStatusResponse,
   AddAgentPayload,
   AddAgentResponse,
+  CheckAgentEmailResponse,
   AiTokenPackagesResponse,
   AiTokenTopupResponse,
   AiTokenUsageResponse,
@@ -159,6 +161,13 @@ export const completeAdAccountSignup = async (
   return res.data;
 };
 
+export const disconnectAdAccount = async (): Promise<ApiResponse> => {
+  const res = await api.post<ApiResponse>(
+    ORGANIZATION_ENDPOINTS.AD_ACCOUNT_DISCONNECT
+  );
+  return res.data;
+};
+
 export const requestCoexistenceContactSync = async (
   payload: RequestCoexistenceContactSyncPayload = {}
 ): Promise<CoexistenceContactSyncResponse> => {
@@ -262,6 +271,16 @@ export const replaceWhatsAppPhoneNumber = async (
 
 export const getTeam = async (): Promise<TeamResponse> => {
   const res = await api.get<TeamResponse>(ORGANIZATION_ENDPOINTS.TEAM);
+  return res.data;
+};
+
+export const checkAgentEmail = async (
+  email: string
+): Promise<CheckAgentEmailResponse> => {
+  const res = await api.get<CheckAgentEmailResponse>(
+    ORGANIZATION_ENDPOINTS.CHECK_AGENT_EMAIL,
+    { params: { email } }
+  );
   return res.data;
 };
 

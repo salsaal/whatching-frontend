@@ -479,7 +479,7 @@ export interface AddAgentPayload {
   name: string;
   email: string;
   phoneNumber: string;
-  password: string;
+  password?: string;
   countryIso?: string;
   permissionAccess?: PermissionAccessState;
 }
@@ -494,6 +494,16 @@ export interface AddAgentResponse {
       email: string;
       phoneNumber: string;
     };
+  };
+}
+
+export interface CheckAgentEmailResponse {
+  status: string;
+  data: {
+    exists: boolean;
+    alreadyMember: boolean;
+    membershipStatus: string | null;
+    name: string | null;
   };
 }
 

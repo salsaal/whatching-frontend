@@ -18,11 +18,13 @@ import { toast } from "sonner";
 
 import {
   addAgent,
+  checkAgentEmail,
   getTeam,
   removeTeamMember,
   updateTeamMemberPermissions
 } from "@/client-api/functions/organizations";
 import {
+  CheckAgentEmailResponse,
   PermissionAccessLevel,
   PermissionAccessState,
   PermissionGroup,
@@ -55,6 +57,13 @@ import { Label } from "@/components/ui/label";
 import PhoneNumberInput, {
   buildInternationalPhoneNumber
 } from "@/components/ui/phone-number-input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SettingsBackLink } from "@/components/settings/SettingsBackLink";
 import AppLayout from "@/layouts/AppLayout";
@@ -68,6 +77,8 @@ const initials = (name?: string) =>
     .slice(0, 2)
     .toUpperCase();
 
+type AgentFormStep = "email" | "new" | "existing";
+
 function AgentForm({
   onSubmit,
   isSaving,
@@ -79,13 +90,17 @@ function AgentForm({
     email: string;
     phoneNumber: string;
     countryIso: string;
-    password: string;
+    password?: string;
     permissionAccess?: PermissionAccessState;
   }) => void;
   isSaving: boolean;
   permissionSchema: PermissionGroup[];
   defaultPermissionAccess: PermissionAccessState;
 }) {
+  const [step, setStep] = useState<AgentFormStep>("email");
+  const [emailCheck, setEmailCheck] = useState<
+    CheckAgentEmailResponse["data"] | null
+  >(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
@@ -99,10 +114,35 @@ function AgentForm({
     setPermissionAccess(defaultPermissionAccess || {});
   }, [defaultPermissionAccess]);
 
+  const { mutate: checkEmailMutate, isPending: isCheckingEmail } = useMutation({
+    mutationFn: checkAgentEmail,
+    onSuccess: (response) => {
+      setEmailCheck(response.data);
+      setName(response.data.name || "");
+      setStep(response.data.exists ? "existing" : "new");
+    },
+    onError: () => {
+      toast.error("Couldn't check that email. Try again.");
+    }
+  });
+
+  const handleEmailSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    if (!email.trim()) {
+      toast.error("Enter an email address.");
+      return;
+    }
+    checkEmailMutate(email.trim());
+  };
+
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
-    if (!name.trim() || !email.trim() || !phoneNumber.trim() || !password) {
-      toast.error("Add name, email, phone number, and temporary password.");
+    if (!name.trim() || !phoneNumber.trim()) {
+      toast.error("Add a name and phone number.");
+      return;
+    }
+    if (step === "new" && !password) {
+      toast.error("Add a temporary password.");
       return;
     }
     onSubmit({
@@ -110,7 +150,7 @@ function AgentForm({
       email: email.trim(),
       phoneNumber: buildInternationalPhoneNumber(countryCode, phoneNumber),
       countryIso,
-      password,
+      ...(step === "new" ? { password } : {}),
       ...(permissionSchema.length ? { permissionAccess } : {})
     });
   };
@@ -144,17 +184,9 @@ function AgentForm({
     });
   };
 
-  return (
-    <form className="space-y-4" onSubmit={handleSubmit}>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="space-y-1.5">
-          <Label>Name</Label>
-          <Input
-            value={name}
-            placeholder="Staff Member"
-            onChange={(event) => setName(event.target.value)}
-          />
-        </div>
+  if (step === "email") {
+    return (
+      <form className="space-y-4" onSubmit={handleEmailSubmit}>
         <div className="space-y-1.5">
           <Label>Email</Label>
           <Input
@@ -164,8 +196,37 @@ function AgentForm({
             onChange={(event) => setEmail(event.target.value)}
           />
         </div>
-      </div>
+        <Button type="submit" className="w-full" isLoading={isCheckingEmail}>
+          Continue
+        </Button>
+      </form>
+    );
+  }
+
+  return (
+    <form className="space-y-4" onSubmit={handleSubmit}>
+      {step === "existing" && (
+        <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+          <p className="font-medium">
+            An account already exists for {email}
+            {emailCheck?.name ? ` (${emailCheck.name})` : ""}.
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {emailCheck?.alreadyMember
+              ? "This grants them agent access again -- no new password needed."
+              : "This links their existing account to your organization as an agent -- no new password needed."}
+          </p>
+        </div>
+      )}
       <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label>Name</Label>
+          <Input
+            value={name}
+            placeholder="Staff Member"
+            onChange={(event) => setName(event.target.value)}
+          />
+        </div>
         <div className="space-y-1.5">
           <Label>Phone number</Label>
           <PhoneNumberInput
@@ -178,6 +239,8 @@ function AgentForm({
             onPhoneNumberChange={setPhoneNumber}
           />
         </div>
+      </div>
+      {step === "new" && (
         <div className="space-y-1.5">
           <Label>Temporary password</Label>
           <Input
@@ -187,7 +250,7 @@ function AgentForm({
             onChange={(event) => setPassword(event.target.value)}
           />
         </div>
-      </div>
+      )}
       {permissionSchema.length > 0 && (
         <div className="space-y-3 rounded-lg border bg-muted/20 p-4">
           <div>
@@ -218,22 +281,26 @@ function AgentForm({
                     )}
                   </div>
                   {levels.length > 0 && (
-                    <select
-                      className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                    <Select
                       value={selectedAccess}
-                      onChange={(event) =>
+                      onValueChange={(value) =>
                         setGroupAccess(
                           group.key,
-                          event.target.value as PermissionAccessLevel
+                          value as PermissionAccessLevel
                         )
                       }
                     >
-                      {levels.map((level) => (
-                        <option key={level.value} value={level.value}>
-                          {level.label}
-                        </option>
-                      ))}
-                    </select>
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {levels.map((level) => (
+                          <SelectItem key={level.value} value={level.value}>
+                            {level.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   )}
                   {capabilities.length > 0 && (
                     <div className="space-y-1">
@@ -263,10 +330,19 @@ function AgentForm({
           </div>
         </div>
       )}
-      <Button type="submit" className="w-full" isLoading={isSaving}>
-        <UserPlus className="size-4" />
-        Add agent
-      </Button>
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => setStep("email")}
+        >
+          Back
+        </Button>
+        <Button type="submit" className="flex-1" isLoading={isSaving}>
+          <UserPlus className="size-4" />
+          {step === "existing" ? "Grant access" : "Add agent"}
+        </Button>
+      </div>
     </form>
   );
 }
@@ -328,25 +404,29 @@ function PermissionEditor({
                 )}
               </div>
               {levels.length > 0 && (
-                <select
-                  className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                <Select
                   value={permissionAccess[group.key]?.access || "none"}
-                  onChange={(event) =>
+                  onValueChange={(value) =>
                     setPermissionAccess((current) => ({
                       ...current,
                       [group.key]: {
-                        access: event.target.value as PermissionAccessLevel,
+                        access: value as PermissionAccessLevel,
                         capabilities: current[group.key]?.capabilities || {}
                       }
                     }))
                   }
                 >
-                  {levels.map((level) => (
-                    <option key={level.value} value={level.value}>
-                      {level.label}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {levels.map((level) => (
+                      <SelectItem key={level.value} value={level.value}>
+                        {level.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               )}
               {capabilities.map((capability) => (
                 <label

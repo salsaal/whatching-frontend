@@ -1,13 +1,25 @@
 import { useCallback, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AxiosError } from "axios";
 import { BadgeCheck, ChevronDown, Megaphone } from "lucide-react";
 import { toast } from "sonner";
 
 import {
   completeAdAccountSignup,
+  disconnectAdAccount,
   listAdAccounts,
   selectAdAccount
 } from "@/client-api/functions/organizations";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -21,6 +33,7 @@ import {
   SelectTrigger,
   SelectValue
 } from "@/components/ui/select";
+import { useCurrentMembership } from "@/hooks/useCurrentMembership";
 import { useOrganizationStore } from "@/stores/organizationStore";
 
 // Config for the standalone "ad account access" Meta login flow -- fully
@@ -45,8 +58,10 @@ export default function AdAccountConnection() {
   const upsertOrganization = useOrganizationStore(
     (state) => state.upsertOrganization
   );
+  const { isOwnerOrAdmin } = useCurrentMembership();
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [selectedAdAccountId, setSelectedAdAccountId] = useState("");
+  const [isDisconnectConfirmOpen, setIsDisconnectConfirmOpen] = useState(false);
 
   const connectedAdAccountId = activeOrganization?.metaConfig?.adAccountId;
   const connectedAdAccountName = activeOrganization?.metaConfig?.adAccountName;
@@ -78,6 +93,33 @@ export default function AdAccountConnection() {
     },
     onError: () => {
       toast.error("Couldn't connect that ad account. Try again.");
+    }
+  });
+
+  const { mutate: disconnect, isPending: isDisconnecting } = useMutation({
+    mutationFn: disconnectAdAccount,
+    meta: { showToast: false },
+    onSuccess: (res) => {
+      if (activeOrganization) {
+        upsertOrganization({
+          ...activeOrganization,
+          metaConfig: {
+            ...activeOrganization.metaConfig,
+            adAccountId: undefined,
+            adAccountName: undefined
+          }
+        });
+      }
+      toast.success(res.message || "Ad account disconnected.");
+      setIsDisconnectConfirmOpen(false);
+      setIsPickerOpen(false);
+    },
+    onError: (error: AxiosError<{ message?: string }>) => {
+      toast.error(
+        error.response?.data?.message ||
+          "Couldn't disconnect the ad account. Try again."
+      );
+      setIsDisconnectConfirmOpen(false);
     }
   });
 
@@ -243,10 +285,47 @@ export default function AdAccountConnection() {
                   {isConnecting ? "Connecting..." : "Connect"}
                 </Button>
               </div>
+              {connectedAdAccountId && isOwnerOrAdmin && (
+                <div className="border-t pt-3">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="w-full text-destructive hover:text-destructive"
+                    onClick={() => setIsDisconnectConfirmOpen(true)}
+                  >
+                    Disconnect ad account
+                  </Button>
+                </div>
+              )}
             </>
           )}
         </div>
       </PopoverContent>
+      <AlertDialog
+        open={isDisconnectConfirmOpen}
+        onOpenChange={setIsDisconnectConfirmOpen}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Disconnect ad account?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Campaign spend and cost-per-outcome will stop showing alongside
+              your WhatsApp funnel numbers until you connect another ad account.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-white hover:bg-destructive/90"
+              disabled={isDisconnecting}
+              onClick={() => disconnect()}
+            >
+              {isDisconnecting ? "Disconnecting..." : "Disconnect"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Popover>
   );
 }
