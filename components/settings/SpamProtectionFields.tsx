@@ -37,13 +37,18 @@ function DebouncedNumberField({
     []
   );
 
-  const commit = (raw: string) => {
+  // `fromIdle` commits come from the typing debounce: an out-of-range or
+  // empty value there is probably mid-typing ("1" on the way to "15"), so it
+  // waits for blur instead of being clamped and saved early.
+  const commit = (raw: string, fromIdle = false) => {
     if (timerRef.current) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
     }
     const parsed = Number(raw);
-    if (raw.trim() === "" || !Number.isFinite(parsed)) {
+    const isValid = raw.trim() !== "" && Number.isFinite(parsed);
+    if (fromIdle && (!isValid || parsed < min || parsed > max)) return;
+    if (!isValid) {
       setDraft(String(value));
       return;
     }
@@ -69,7 +74,7 @@ function DebouncedNumberField({
           const raw = event.target.value;
           setDraft(raw);
           if (timerRef.current) clearTimeout(timerRef.current);
-          timerRef.current = setTimeout(() => commit(raw), SAVE_DELAY_MS);
+          timerRef.current = setTimeout(() => commit(raw, true), SAVE_DELAY_MS);
         }}
         onBlur={(event) => {
           isFocusedRef.current = false;
