@@ -42,6 +42,35 @@ const parseKeywords = (value: string) =>
     .map((item) => item.trim())
     .filter(Boolean);
 
+type CooldownUnit = "minutes" | "hours" | "days";
+
+const COOLDOWN_UNIT_SECONDS: Record<CooldownUnit, number> = {
+  minutes: 60,
+  hours: 3600,
+  days: 86400
+};
+
+const secondsToCooldownDuration = (
+  totalSeconds: number
+): { value: number; unit: CooldownUnit } => {
+  if (totalSeconds > 0 && totalSeconds % COOLDOWN_UNIT_SECONDS.days === 0) {
+    return { value: totalSeconds / COOLDOWN_UNIT_SECONDS.days, unit: "days" };
+  }
+  if (totalSeconds > 0 && totalSeconds % COOLDOWN_UNIT_SECONDS.hours === 0) {
+    return {
+      value: totalSeconds / COOLDOWN_UNIT_SECONDS.hours,
+      unit: "hours"
+    };
+  }
+  return {
+    value: Math.max(
+      1,
+      Math.round(totalSeconds / COOLDOWN_UNIT_SECONDS.minutes)
+    ),
+    unit: "minutes"
+  };
+};
+
 export default function TagFormDialog({
   open,
   tag,
@@ -53,7 +82,8 @@ export default function TagFormDialog({
   const [description, setDescription] = useState("");
   const [mode, setMode] = useState<TagMode>("manual");
   const [channelScope, setChannelScope] = useState<TagChannelScope>("all");
-  const [cooldownSeconds, setCooldownSeconds] = useState(3600);
+  const [cooldownValue, setCooldownValue] = useState(1);
+  const [cooldownUnit, setCooldownUnit] = useState<CooldownUnit>("hours");
   const [trigger, setTrigger] = useState<TagAutomationTrigger>("keyword");
   const [addKeywords, setAddKeywords] = useState("");
   const [removeKeywords, setRemoveKeywords] = useState("");
@@ -67,7 +97,9 @@ export default function TagFormDialog({
     setDescription(tag?.description || "");
     setMode(tag?.mode || "manual");
     setChannelScope(tag?.channelScope || "all");
-    setCooldownSeconds(tag?.cooldownSeconds ?? 3600);
+    const cooldown = secondsToCooldownDuration(tag?.cooldownSeconds ?? 3600);
+    setCooldownValue(cooldown.value);
+    setCooldownUnit(cooldown.unit);
     setTrigger(tag?.automation?.trigger || "keyword");
     setAddKeywords((tag?.automation?.addKeywords || []).join(", "));
     setRemoveKeywords((tag?.automation?.removeKeywords || []).join(", "));
@@ -84,7 +116,7 @@ export default function TagFormDialog({
       description: description.trim() || undefined,
       mode,
       channelScope,
-      cooldownSeconds,
+      cooldownSeconds: cooldownValue * COOLDOWN_UNIT_SECONDS[cooldownUnit],
       automation:
         mode === "bot_decides"
           ? {
@@ -136,38 +168,23 @@ export default function TagFormDialog({
             />
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <Label>Applies to</Label>
-              <Select
-                value={channelScope}
-                onValueChange={(value) =>
-                  setChannelScope(value as TagChannelScope)
-                }
-              >
-                <SelectTrigger className="mt-2 w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All channels</SelectItem>
-                  <SelectItem value="whatsapp">WhatsApp only</SelectItem>
-                  <SelectItem value="instagram">Instagram only</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Cooldown (seconds)</Label>
-              <Input
-                type="number"
-                min={0}
-                max={30 * 24 * 60 * 60}
-                value={cooldownSeconds}
-                onChange={(event) =>
-                  setCooldownSeconds(Number(event.target.value) || 0)
-                }
-                className="mt-2"
-              />
-            </div>
+          <div>
+            <Label>Applies to</Label>
+            <Select
+              value={channelScope}
+              onValueChange={(value) =>
+                setChannelScope(value as TagChannelScope)
+              }
+            >
+              <SelectTrigger className="mt-2 w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All channels</SelectItem>
+                <SelectItem value="whatsapp">WhatsApp only</SelectItem>
+                <SelectItem value="instagram">Instagram only</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="flex items-center justify-between rounded-sm border p-3">
@@ -204,6 +221,43 @@ export default function TagFormDialog({
                     <SelectItem value="inactivity">Inactivity</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div>
+                <Label>Wait before re-applying automatically</Label>
+                <div className="mt-2 flex gap-2">
+                  <Input
+                    type="number"
+                    min={1}
+                    value={cooldownValue}
+                    onChange={(event) =>
+                      setCooldownValue(
+                        Math.max(1, Number(event.target.value) || 1)
+                      )
+                    }
+                    className="w-24"
+                  />
+                  <Select
+                    value={cooldownUnit}
+                    onValueChange={(value) =>
+                      setCooldownUnit(value as CooldownUnit)
+                    }
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="minutes">Minutes</SelectItem>
+                      <SelectItem value="hours">Hours</SelectItem>
+                      <SelectItem value="days">Days</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  After the bot adds or removes this tag, it won&apos;t
+                  re-evaluate the same subscriber for this trigger again until
+                  this much time has passed.
+                </p>
               </div>
 
               {trigger === "keyword" && (
