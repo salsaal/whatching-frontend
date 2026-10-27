@@ -6,7 +6,7 @@ import {
   getInstagramAutomationSettings,
   updateInstagramAutomationSettings
 } from "@/client-api/functions/instagram";
-import { Input } from "@/components/ui/input";
+import { SpamProtectionFields } from "@/components/settings/SpamProtectionFields";
 import { Switch } from "@/components/ui/switch";
 import { useOrganizationStore } from "@/stores/organizationStore";
 
@@ -83,48 +83,11 @@ export function InstagramAutomationToggle() {
           />
         </div>
         {settings?.spamProtectionEnabled && (
-          <div className="mt-3 grid grid-cols-2 gap-3 border-t pt-3">
-            <div>
-              <label className="text-xs text-muted-foreground">Messages</label>
-              <Input
-                type="number"
-                min={3}
-                max={100}
-                className="mt-1"
-                value={settings.spamFloodThreshold}
-                disabled={isUpdatingSettings}
-                onChange={(event) =>
-                  updateSettingsMutate({
-                    spamFloodThreshold: Math.max(
-                      3,
-                      Math.min(100, Number(event.target.value) || 3)
-                    )
-                  })
-                }
-              />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">
-                Within (seconds)
-              </label>
-              <Input
-                type="number"
-                min={10}
-                max={3600}
-                className="mt-1"
-                value={settings.spamFloodWindowSeconds}
-                disabled={isUpdatingSettings}
-                onChange={(event) =>
-                  updateSettingsMutate({
-                    spamFloodWindowSeconds: Math.max(
-                      10,
-                      Math.min(3600, Number(event.target.value) || 10)
-                    )
-                  })
-                }
-              />
-            </div>
-          </div>
+          <SpamProtectionFields
+            threshold={settings.spamFloodThreshold}
+            windowSeconds={settings.spamFloodWindowSeconds}
+            onSave={(patch) => updateSettingsMutate(patch)}
+          />
         )}
       </div>
     </div>
