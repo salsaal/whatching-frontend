@@ -6,6 +6,7 @@ import {
   Clock3,
   FilePlus2,
   Inbox,
+  Loader2,
   RefreshCw,
   Search,
   ShieldAlert
@@ -171,57 +172,64 @@ export default function TemplatesPage() {
     });
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
 
-  const { mutate: deleteTemplateMutate } = useMutation({
-    mutationFn: async (template: MessageTemplate) => {
-      const id =
-        template.source === "draft" ? template._id : template.templateId;
-      setDeletingId(id);
-      return template.source === "draft"
-        ? deleteDraftTemplate(template._id)
-        : deleteTemplate(template.templateId);
-    },
-    onSuccess: (_data, template) => {
-      const id =
-        template.source === "draft" ? template._id : template.templateId;
+  const { mutate: deleteTemplateMutate, isPending: isDeletingTemplate } =
+    useMutation({
+      mutationFn: async (template: MessageTemplate) => {
+        const id =
+          template.source === "draft" ? template._id : template.templateId;
+        setDeletingId(id);
+        return template.source === "draft"
+          ? deleteDraftTemplate(template._id)
+          : deleteTemplate(template.templateId);
+      },
+      meta: { showToast: false },
+      onSuccess: (_data, template) => {
+        toast.success(
+          template.source === "draft"
+            ? "Draft deleted."
+            : "Meta may take up to 30 days to fully remove templates with recent message history -- this one is hidden from your list in the meantime."
+        );
+        const id =
+          template.source === "draft" ? template._id : template.templateId;
 
-      removeTemplate(id);
-      queryClient.setQueryData<typeof data>(templatesQueryKey, (current) =>
-        current?.data.templates
-          ? {
-              ...current,
-              data: {
-                ...current.data,
-                templates: current.data.templates.filter(
-                  (item) => item.templateId !== id && item._id !== id
-                )
-              }
-            }
-          : current
-      );
-      queryClient.setQueryData<typeof draftsData>(
-        templateDraftsQueryKey,
-        (current) =>
-          current?.data.drafts
+        removeTemplate(id);
+        queryClient.setQueryData<typeof data>(templatesQueryKey, (current) =>
+          current?.data.templates
             ? {
                 ...current,
                 data: {
                   ...current.data,
-                  drafts: current.data.drafts.filter(
+                  templates: current.data.templates.filter(
                     (item) => item.templateId !== id && item._id !== id
                   )
                 }
               }
             : current
-      );
-      setDeleteTarget(null);
-      syncTemplatesMutate(undefined, {
-        onSuccess: async () => {
-          await Promise.all([refetchTemplates(), refetchDrafts()]);
-        }
-      });
-    },
-    onSettled: () => setDeletingId(null)
-  });
+        );
+        queryClient.setQueryData<typeof draftsData>(
+          templateDraftsQueryKey,
+          (current) =>
+            current?.data.drafts
+              ? {
+                  ...current,
+                  data: {
+                    ...current.data,
+                    drafts: current.data.drafts.filter(
+                      (item) => item.templateId !== id && item._id !== id
+                    )
+                  }
+                }
+              : current
+        );
+        setDeleteTarget(null);
+        syncTemplatesMutate(undefined, {
+          onSuccess: async () => {
+            await Promise.all([refetchTemplates(), refetchDrafts()]);
+          }
+        });
+      },
+      onSettled: () => setDeletingId(null)
+    });
 
   const { mutate: linkMediaMutate } = useMutation({
     mutationFn: linkTemplateMedia,
@@ -349,6 +357,7 @@ export default function TemplatesPage() {
               Refresh
             </Button>
             <Button
+              asChild
               className="whitespace-nowrap"
               tooltip="Create a new WhatsApp message template"
             >
@@ -442,8 +451,12 @@ export default function TemplatesPage() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
+              disabled={isDeletingTemplate}
               onClick={() => deleteTarget && deleteTemplateMutate(deleteTarget)}
             >
+              {isDeletingTemplate ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : null}
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>
