@@ -124,11 +124,19 @@ api.interceptors.response.use(
       originalRequest.url?.includes("/login") ||
       originalRequest.url?.includes("/signup") ||
       originalRequest.url?.includes("/refresh-token");
+    // A wrong current password on /update-password is also a 401, but the
+    // session is fine -- renewing the token and retrying would only repeat
+    // the same answer. An expired token on that route still renews normally,
+    // so this keys on the backend's specific message, not just the URL.
+    const isWrongCurrentPassword =
+      originalRequest.url?.includes(AUTH_ENDPOINTS.UPDATE_PASSWORD) &&
+      error.response?.data?.message === "Current password is incorrect.";
 
     if (
       error.response?.status === 401 &&
       !originalRequest._retry &&
-      !isAuthRoute
+      !isAuthRoute &&
+      !isWrongCurrentPassword
     ) {
       originalRequest._retry = true;
 
