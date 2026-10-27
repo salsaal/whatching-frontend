@@ -5,6 +5,7 @@ import {
   CheckCheck,
   Clock3,
   ContactRound,
+  CreditCard,
   FileText,
   Globe,
   ImageIcon,
@@ -17,6 +18,7 @@ import {
   Paperclip,
   Search,
   Send,
+  Trash2,
   X
 } from "lucide-react";
 import {
@@ -44,6 +46,7 @@ import { toast } from "sonner";
 
 import {
   assignConversation,
+  deleteConversation,
   getChatBootstrap,
   getConversationContext,
   getConversationMessages,
@@ -83,6 +86,16 @@ import {
   WhatsAppNumberSwitcher,
   useWhatsAppNumberContext
 } from "@/components/whatsapp/WhatsAppNumberSwitcher";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle
+} from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -696,6 +709,10 @@ function ConversationListItem({
   onSelect: () => void;
 }) {
   const name = subscriberName(conversation);
+  const spamMutedUntil = conversation.subscriberId?.spamMutedUntil;
+  const isSpamMuted = Boolean(
+    spamMutedUntil && new Date(spamMutedUntil).getTime() > Date.now()
+  );
   return (
     <button
       type="button"
@@ -754,6 +771,18 @@ function ConversationListItem({
           {conversation.unreadCount > 0 && (
             <Badge className="px-1.5 py-0 text-[10px]">
               {conversation.unreadCount}
+            </Badge>
+          )}
+          {isSpamMuted && spamMutedUntil && (
+            <Badge
+              variant="outline"
+              className="px-1.5 py-0 text-[10px] text-amber-700"
+              title={
+                conversation.subscriberId?.spamMutedReason ||
+                "Automated replies muted for this subscriber"
+              }
+            >
+              Muted until {formatDateTime(spamMutedUntil)}
             </Badge>
           )}
         </div>
@@ -998,6 +1027,35 @@ function MessageBubble({
           {formatDateTime(message.createdAt || message.sentAt)}
           {isOutbound && renderOutboundStatusIcon(message.status)}
         </div>
+        {message.status === "failed" && message.errorCategory === "payment" && (
+          <div
+            className={cn(
+              "mt-2 flex items-start gap-2 rounded-lg p-2 text-xs",
+              isOutbound
+                ? "bg-primary-foreground/10"
+                : "bg-destructive/10 text-destructive"
+            )}
+          >
+            <CreditCard className="mt-0.5 size-3.5 shrink-0" />
+            <span>
+              {message.errorMessage ||
+                "This message failed because a payment method is needed."}
+              {message.paymentSetupUrl && (
+                <>
+                  {" "}
+                  <a
+                    href={message.paymentSetupUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-medium underline underline-offset-2"
+                  >
+                    Add payment method
+                  </a>
+                </>
+              )}
+            </span>
+          </div>
+        )}
       </div>
       {isOutbound && canReplyToMessage(message) && (
         <button
@@ -1072,6 +1130,9 @@ export default function ConversationsPage() {
   const [selectedContactId, setSelectedContactId] = useState("");
   const [contactSearch, setContactSearch] = useState("");
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [isMobileDetailsOpen, setIsMobileDetailsOpen] = useState(false);
+  const [isDeleteConversationOpen, setIsDeleteConversationOpen] =
+    useState(false);
   const detailsCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
   );
@@ -1609,6 +1670,27 @@ export default function ConversationsPage() {
       }
     });
 
+  const {
+    mutate: deleteConversationMutate,
+    isPending: isDeletingConversation
+  } = useMutation({
+    mutationFn: deleteConversation,
+    meta: { showToast: false },
+    onSuccess: async (_data, conversationId) => {
+      toast.success("Conversation deleted.");
+      setIsDeleteConversationOpen(false);
+      if (selectedIdRef.current === conversationId) {
+        setSelectedId("");
+      }
+      await invalidateConversations();
+    },
+    onError: (error: AxiosError<{ message?: string }>) => {
+      toast.error(
+        error.response?.data?.message || "Conversation could not be deleted."
+      );
+    }
+  });
+
   const { mutate: sendReply, isPending: isSending } = useMutation({
     mutationFn: sendConversationReply,
     meta: { showToast: false },
@@ -2003,6 +2085,253 @@ export default function ConversationsPage() {
     return () => URL.revokeObjectURL(url);
   }, [attachment]);
 
+  // Shared between the desktop hover-collapse aside (xl and up) and the
+  // mobile/tablet Dialog fallback below it -- same content, two surfaces.
+  const renderConversationDetails = () => {
+    if (!contextConversation) return null;
+
+    return (
+      <>
+        <div className="text-center">
+          <Avatar className="mx-auto size-16">
+            <AvatarFallback className="bg-primary/10 text-xl text-primary">
+              {initials(subscriberName(contextConversation))}
+            </AvatarFallback>
+          </Avatar>
+          <h2 className="mt-3 font-heading text-xl font-semibold">
+            {subscriberName(contextConversation)}
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            {contextConversation.subscriberId?.phoneNumber ||
+              contextConversation.subscriberId?.waId}
+          </p>
+        </div>
+
+        <Separator className="my-4" />
+
+        <div className="space-y-2">
+          <p className="text-sm font-semibold">Contact name</p>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <Label className="text-xs text-muted-foreground">
+                First name
+              </Label>
+              <Input
+                className="mt-1"
+                value={contactFirstName}
+                placeholder="First name"
+                onChange={(event) => setContactFirstName(event.target.value)}
+              />
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground">Last name</Label>
+              <Input
+                className="mt-1"
+                value={contactLastName}
+                placeholder="Last name"
+                onChange={(event) => setContactLastName(event.target.value)}
+              />
+            </div>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            className="w-full cursor-pointer"
+            disabled={isUpdatingContact}
+            onClick={saveContactName}
+          >
+            {isUpdatingContact && (
+              <Loader2 className="mr-2 size-3.5 animate-spin" />
+            )}
+            Save contact
+          </Button>
+        </div>
+
+        <Separator className="my-4" />
+
+        <div className="space-y-3">
+          <div>
+            <p className="mb-1 text-xs font-medium text-muted-foreground">
+              Assigned agent
+            </p>
+            <Select
+              value={contextConversation.assignedTo?._id || "unassigned"}
+              disabled={isAssigning}
+              onValueChange={(value) =>
+                assignMutate({
+                  conversationId: contextConversation._id,
+                  assignedToUserId: value === "unassigned" ? null : value
+                })
+              }
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="unassigned">Unassigned</SelectItem>
+                {assigneeOptions.map((member) => (
+                  <SelectItem key={member.userId._id} value={member.userId._id}>
+                    {member.userId.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <p className="mb-1 text-xs font-medium text-muted-foreground">
+              Status
+            </p>
+            <Select
+              value={contextConversation.status}
+              disabled={isUpdatingStatus}
+              onValueChange={(value) =>
+                updateStatusMutate({
+                  conversationId: contextConversation._id,
+                  status: value as ConversationStatus
+                })
+              }
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {statusOptions
+                  .filter((option) => option.value !== "all")
+                  .map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <Separator className="my-4" />
+
+        <div className="grid gap-3 text-sm">
+          <div className="rounded-lg bg-muted/40 p-3">
+            <p className="text-xs text-muted-foreground">Reply window</p>
+            <p className="mt-1 font-medium">
+              {replyWindow?.isOpen ? "Open" : "Closed"}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Expires {formatDateTime(replyWindow?.expiresAt)}
+            </p>
+          </div>
+          <div className="rounded-lg bg-muted/40 p-3">
+            <p className="text-xs text-muted-foreground">Bot state</p>
+            <p className="mt-1 font-medium capitalize">
+              {contextConversation.mode.replaceAll("_", " ")}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Trigger: {contextConversation.botState?.activeTriggerKey || "-"}
+            </p>
+          </div>
+          <div className="rounded-lg bg-muted/40 p-3">
+            <p className="text-xs text-muted-foreground">Handoff</p>
+            <p className="mt-1 font-medium">
+              {contextConversation.takeoverState?.handoffReason ||
+                "No handoff reason"}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Requested{" "}
+              {formatDateTime(
+                contextConversation.takeoverState?.handoffRequestedAt
+              )}
+            </p>
+            <div className="mt-2 rounded-md bg-white px-2 py-1 text-xs">
+              <span className="text-muted-foreground">Manual source: </span>
+              <span className="font-medium">
+                {contextConversation.takeoverState?.manualTakeoverSource
+                  ? takeoverSourceLabel[
+                      contextConversation.takeoverState.manualTakeoverSource
+                    ] || contextConversation.takeoverState.manualTakeoverSource
+                  : "Not in manual takeover"}
+              </span>
+            </div>
+            {contextConversation.takeoverState?.manualTakeoverBy && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                By {contextConversation.takeoverState.manualTakeoverBy.name}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <Separator className="my-4" />
+
+        <div>
+          <p className="mb-2 text-sm font-semibold">Subscriber</p>
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between gap-3">
+              <span className="text-muted-foreground">Opted in</span>
+              <span>
+                {contextData?.data.subscriber?.isOptedIn ? "Yes" : "No"}
+              </span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span className="text-muted-foreground">Last inbound</span>
+              <span>
+                {formatDateTime(contextData?.data.subscriber?.lastInboundAt)}
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {(contextData?.data.subscriber?.tags || []).map((tag) => (
+                <Badge key={tag} variant="secondary">
+                  {tag}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <Separator className="my-4" />
+
+        <div>
+          <p className="mb-2 text-sm font-semibold">Message media</p>
+          <div className="grid gap-2">
+            {(contextData?.data.mediaSummary || []).length ? (
+              contextData?.data.mediaSummary.map((item) => (
+                <div
+                  key={item._id}
+                  className="flex items-center justify-between rounded-lg bg-muted/40 px-3 py-2 text-sm"
+                >
+                  <span className="inline-flex items-center gap-2 capitalize">
+                    {item._id === "image" ? (
+                      <ImageIcon className="size-4" />
+                    ) : (
+                      <FileText className="size-4" />
+                    )}
+                    {item._id}
+                  </span>
+                  <Badge variant="outline">{item.count}</Badge>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No media in this conversation.
+              </p>
+            )}
+          </div>
+        </div>
+
+        <Separator className="my-4" />
+
+        <div className="rounded-lg bg-primary/5 p-3 text-sm">
+          <div className="flex items-center gap-2 font-medium text-primary">
+            <Bot className="size-4" />
+            Bot readiness
+          </div>
+          <p className="mt-1 text-muted-foreground">
+            Meta: {bootstrap?.data.messaging.metaStatus || "pending"} · Default
+            flow: {bootstrap?.data.bot.defaultFlowReady ? "ready" : "missing"}
+          </p>
+        </div>
+      </>
+    );
+  };
+
   return (
     <AppLayout hideHeader fullBleed>
       <div className="flex h-screen min-h-0 flex-col overflow-hidden p-3">
@@ -2228,6 +2557,44 @@ export default function ConversationsPage() {
                     <Badge variant="outline" className="capitalize">
                       {contextConversation.mode.replaceAll("_", " ")}
                     </Badge>
+                    {contextConversation.subscriberId?.spamMutedUntil &&
+                      new Date(
+                        contextConversation.subscriberId.spamMutedUntil
+                      ).getTime() > Date.now() && (
+                        <Badge
+                          variant="outline"
+                          className="text-amber-700"
+                          title={
+                            contextConversation.subscriberId.spamMutedReason ||
+                            "Automated replies muted for this subscriber"
+                          }
+                        >
+                          Muted until{" "}
+                          {formatDateTime(
+                            contextConversation.subscriberId.spamMutedUntil
+                          )}
+                        </Badge>
+                      )}
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="outline"
+                      className="xl:hidden"
+                      tooltip="Conversation details"
+                      onClick={() => setIsMobileDetailsOpen(true)}
+                    >
+                      <ContactRound className="size-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="outline"
+                      className="text-destructive hover:text-destructive"
+                      tooltip="Delete conversation"
+                      onClick={() => setIsDeleteConversationOpen(true)}
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
                   </div>
                 </div>
 
@@ -2400,7 +2767,12 @@ export default function ConversationsPage() {
                   )}
                   <div className="flex items-end gap-2">
                     <label
-                      className="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full border hover:bg-muted"
+                      className={cn(
+                        "flex size-10 shrink-0 items-center justify-center rounded-full border",
+                        !canSendMediaReply || isSending
+                          ? "pointer-events-none opacity-60"
+                          : "cursor-pointer hover:bg-muted"
+                      )}
                       title="Attach a file from your device"
                     >
                       <Paperclip className="size-4" />
@@ -2527,276 +2899,53 @@ export default function ConversationsPage() {
                     Close
                   </Button>
                 </div>
-                <div className="text-center">
-                  <Avatar className="mx-auto size-16">
-                    <AvatarFallback className="bg-primary/10 text-xl text-primary">
-                      {initials(subscriberName(contextConversation))}
-                    </AvatarFallback>
-                  </Avatar>
-                  <h2 className="mt-3 font-heading text-xl font-semibold">
-                    {subscriberName(contextConversation)}
-                  </h2>
-                  <p className="text-sm text-muted-foreground">
-                    {contextConversation.subscriberId?.phoneNumber ||
-                      contextConversation.subscriberId?.waId}
-                  </p>
-                </div>
-
-                <Separator className="my-4" />
-
-                <div className="space-y-2">
-                  <p className="text-sm font-semibold">Contact name</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <Label className="text-xs text-muted-foreground">
-                        First name
-                      </Label>
-                      <Input
-                        className="mt-1"
-                        value={contactFirstName}
-                        placeholder="First name"
-                        onChange={(event) =>
-                          setContactFirstName(event.target.value)
-                        }
-                      />
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">
-                        Last name
-                      </Label>
-                      <Input
-                        className="mt-1"
-                        value={contactLastName}
-                        placeholder="Last name"
-                        onChange={(event) =>
-                          setContactLastName(event.target.value)
-                        }
-                      />
-                    </div>
-                  </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="w-full cursor-pointer"
-                    disabled={isUpdatingContact}
-                    onClick={saveContactName}
-                  >
-                    {isUpdatingContact && (
-                      <Loader2 className="mr-2 size-3.5 animate-spin" />
-                    )}
-                    Save contact
-                  </Button>
-                </div>
-
-                <Separator className="my-4" />
-
-                <div className="space-y-3">
-                  <div>
-                    <p className="mb-1 text-xs font-medium text-muted-foreground">
-                      Assigned agent
-                    </p>
-                    <Select
-                      value={
-                        contextConversation.assignedTo?._id || "unassigned"
-                      }
-                      disabled={isAssigning}
-                      onValueChange={(value) =>
-                        assignMutate({
-                          conversationId: contextConversation._id,
-                          assignedToUserId:
-                            value === "unassigned" ? null : value
-                        })
-                      }
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="unassigned">Unassigned</SelectItem>
-                        {assigneeOptions.map((member) => (
-                          <SelectItem
-                            key={member.userId._id}
-                            value={member.userId._id}
-                          >
-                            {member.userId.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div>
-                    <p className="mb-1 text-xs font-medium text-muted-foreground">
-                      Status
-                    </p>
-                    <Select
-                      value={contextConversation.status}
-                      disabled={isUpdatingStatus}
-                      onValueChange={(value) =>
-                        updateStatusMutate({
-                          conversationId: contextConversation._id,
-                          status: value as ConversationStatus
-                        })
-                      }
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {statusOptions
-                          .filter((option) => option.value !== "all")
-                          .map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                              {option.label}
-                            </SelectItem>
-                          ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <Separator className="my-4" />
-
-                <div className="grid gap-3 text-sm">
-                  <div className="rounded-lg bg-muted/40 p-3">
-                    <p className="text-xs text-muted-foreground">
-                      Reply window
-                    </p>
-                    <p className="mt-1 font-medium">
-                      {replyWindow?.isOpen ? "Open" : "Closed"}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Expires {formatDateTime(replyWindow?.expiresAt)}
-                    </p>
-                  </div>
-                  <div className="rounded-lg bg-muted/40 p-3">
-                    <p className="text-xs text-muted-foreground">Bot state</p>
-                    <p className="mt-1 font-medium capitalize">
-                      {contextConversation.mode.replaceAll("_", " ")}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Trigger:{" "}
-                      {contextConversation.botState?.activeTriggerKey || "-"}
-                    </p>
-                  </div>
-                  <div className="rounded-lg bg-muted/40 p-3">
-                    <p className="text-xs text-muted-foreground">Handoff</p>
-                    <p className="mt-1 font-medium">
-                      {contextConversation.takeoverState?.handoffReason ||
-                        "No handoff reason"}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Requested{" "}
-                      {formatDateTime(
-                        contextConversation.takeoverState?.handoffRequestedAt
-                      )}
-                    </p>
-                    <div className="mt-2 rounded-md bg-white px-2 py-1 text-xs">
-                      <span className="text-muted-foreground">
-                        Manual source:{" "}
-                      </span>
-                      <span className="font-medium">
-                        {contextConversation.takeoverState?.manualTakeoverSource
-                          ? takeoverSourceLabel[
-                              contextConversation.takeoverState
-                                .manualTakeoverSource
-                            ] ||
-                            contextConversation.takeoverState
-                              .manualTakeoverSource
-                          : "Not in manual takeover"}
-                      </span>
-                    </div>
-                    {contextConversation.takeoverState?.manualTakeoverBy && (
-                      <p className="mt-2 text-xs text-muted-foreground">
-                        By{" "}
-                        {
-                          contextConversation.takeoverState.manualTakeoverBy
-                            .name
-                        }
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                <Separator className="my-4" />
-
-                <div>
-                  <p className="mb-2 text-sm font-semibold">Subscriber</p>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between gap-3">
-                      <span className="text-muted-foreground">Opted in</span>
-                      <span>
-                        {contextData?.data.subscriber?.isOptedIn ? "Yes" : "No"}
-                      </span>
-                    </div>
-                    <div className="flex justify-between gap-3">
-                      <span className="text-muted-foreground">
-                        Last inbound
-                      </span>
-                      <span>
-                        {formatDateTime(
-                          contextData?.data.subscriber?.lastInboundAt
-                        )}
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap gap-1">
-                      {(contextData?.data.subscriber?.tags || []).map((tag) => (
-                        <Badge key={tag} variant="secondary">
-                          {tag}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                <Separator className="my-4" />
-
-                <div>
-                  <p className="mb-2 text-sm font-semibold">Message media</p>
-                  <div className="grid gap-2">
-                    {(contextData?.data.mediaSummary || []).length ? (
-                      contextData?.data.mediaSummary.map((item) => (
-                        <div
-                          key={item._id}
-                          className="flex items-center justify-between rounded-lg bg-muted/40 px-3 py-2 text-sm"
-                        >
-                          <span className="inline-flex items-center gap-2 capitalize">
-                            {item._id === "image" ? (
-                              <ImageIcon className="size-4" />
-                            ) : (
-                              <FileText className="size-4" />
-                            )}
-                            {item._id}
-                          </span>
-                          <Badge variant="outline">{item.count}</Badge>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-sm text-muted-foreground">
-                        No media in this conversation.
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                <Separator className="my-4" />
-
-                <div className="rounded-lg bg-primary/5 p-3 text-sm">
-                  <div className="flex items-center gap-2 font-medium text-primary">
-                    <Bot className="size-4" />
-                    Bot readiness
-                  </div>
-                  <p className="mt-1 text-muted-foreground">
-                    Meta: {bootstrap?.data.messaging.metaStatus || "pending"} ·
-                    Default flow:{" "}
-                    {bootstrap?.data.bot.defaultFlowReady ? "ready" : "missing"}
-                  </p>
-                </div>
+                {renderConversationDetails()}
               </div>
             ) : null}
           </aside>
         </section>
       </div>
+      <Dialog open={isMobileDetailsOpen} onOpenChange={setIsMobileDetailsOpen}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Conversation details</DialogTitle>
+          </DialogHeader>
+          {renderConversationDetails()}
+        </DialogContent>
+      </Dialog>
+      <AlertDialog
+        open={isDeleteConversationOpen}
+        onOpenChange={setIsDeleteConversationOpen}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete conversation?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes{" "}
+              {contextConversation
+                ? subscriberName(contextConversation)
+                : "this conversation"}{" "}
+              from your inbox. This can&apos;t be undone from here.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-white hover:bg-destructive/90"
+              disabled={isDeletingConversation}
+              onClick={() =>
+                contextConversation &&
+                deleteConversationMutate(contextConversation._id)
+              }
+            >
+              {isDeletingConversation ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : null}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <Dialog
         open={isTemplateModalOpen}
         onOpenChange={(open) => {

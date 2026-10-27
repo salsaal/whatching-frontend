@@ -17,6 +17,7 @@ import {
   SendTemplateMessagePayload,
   SendTemplateMessageResponse
 } from "../types/chat.type";
+import { ApiResponse } from "../types/api";
 
 const compactParams = (params: object) =>
   Object.fromEntries(
@@ -49,6 +50,15 @@ export const getConversation = async (
   conversationId: string
 ): Promise<ConversationResponse> => {
   const res = await api.get<ConversationResponse>(
+    CONVERSATION_ENDPOINTS.GET_BY_ID(conversationId)
+  );
+  return res.data;
+};
+
+export const deleteConversation = async (
+  conversationId: string
+): Promise<ApiResponse> => {
+  const res = await api.delete<ApiResponse>(
     CONVERSATION_ENDPOINTS.GET_BY_ID(conversationId)
   );
   return res.data;
