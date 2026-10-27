@@ -47,7 +47,6 @@ import LocationPickerDialog, {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Select,
   SelectContent,
@@ -73,7 +72,6 @@ import {
 } from "./templateUtils";
 
 type HeaderFormatOption = "NONE" | TemplateHeaderFormat;
-type ActionMode = "NONE" | "CTA" | "QUICK_REPLY" | "ALL";
 
 interface CarouselCardState {
   mediaId: string;
@@ -269,8 +267,7 @@ export default function TemplateCreateForm({
   const [bodyExamples, setBodyExamples] = useState<Record<string, string>>({
     "1": "John"
   });
-  const [footerText, setFooterText] = useState("");
-  const [actionMode, setActionMode] = useState<ActionMode>("NONE");
+  const [footerText, setFooterText] = useState("Reply STOP to opt out");
   const [buttons, setButtons] = useState<TemplateButton[]>([]);
 
   const { data: selectedMediaData } = useQuery({
@@ -285,24 +282,9 @@ export default function TemplateCreateForm({
     [bodyExamples, bodyText]
   );
 
-  const visibleButtons = useMemo(() => {
-    if (actionMode === "NONE") return [];
-    if (actionMode === "CTA") {
-      return buttons.filter(
-        (button) => button.type === "URL" || button.type === "PHONE_NUMBER"
-      );
-    }
-    if (actionMode === "QUICK_REPLY") {
-      return buttons.filter((button) => button.type === "QUICK_REPLY");
-    }
-    return buttons;
-  }, [actionMode, buttons]);
   const visibleButtonEntries = useMemo(
-    () =>
-      buttons
-        .map((button, index) => ({ button, index }))
-        .filter(({ button }) => visibleButtons.includes(button)),
-    [buttons, visibleButtons]
+    () => buttons.map((button, index) => ({ button, index })),
+    [buttons]
   );
   const buttonCounts = useMemo(() => countButtons(buttons), [buttons]);
   const totalButtonsLeft = MAX_TOTAL_BUTTONS - buttonCounts.total;
@@ -389,7 +371,6 @@ export default function TemplateCreateForm({
           : button
       )
     );
-    setActionMode(buttonsComponent?.buttons?.length ? "ALL" : "NONE");
 
     const carousel = initialTemplate.components.find(
       (component) => component.type === "CAROUSEL"
@@ -603,7 +584,7 @@ export default function TemplateCreateForm({
       return null;
     }
 
-    const buttonLabels = visibleButtons
+    const buttonLabels = buttons
       .map((button) => button.text.trim().toLowerCase())
       .filter(Boolean);
     const hasDuplicateLabels =
@@ -659,7 +640,7 @@ export default function TemplateCreateForm({
           ];
 
           const cardButtons = buildButtonsComponent(
-            visibleButtons
+            buttons
               .filter((button) => button.text.trim())
               .slice(0, 2)
               .map((button) => ({
@@ -717,7 +698,7 @@ export default function TemplateCreateForm({
     }
 
     const buttonsComponent = buildButtonsComponent(
-      visibleButtons
+      buttons
         .filter((button) => button.text.trim())
         .map((button) => ({
           ...button,
@@ -857,6 +838,14 @@ export default function TemplateCreateForm({
         {isPendingEdit && (
           <div className="rounded-lg bg-amber-50 p-4 text-sm text-amber-800 shadow-xs">
             Pending templates cannot be edited while Meta is reviewing them.
+          </div>
+        )}
+
+        {isMetaTemplateEdit && !isPendingEdit && (
+          <div className="rounded-lg bg-muted/60 p-4 text-sm text-muted-foreground shadow-xs">
+            Category, language, name, and button structure lock after submission
+            to Meta — only text content can be edited. To change these, delete
+            and recreate the template.
           </div>
         )}
 
@@ -1115,29 +1104,20 @@ export default function TemplateCreateForm({
 
           {templateType === "CAROUSEL" && (
             <div className="mt-4 space-y-4">
-              <div className="grid gap-3 sm:grid-cols-[1fr_180px]">
-                <div className="rounded-sm bg-muted/60 p-3 text-sm text-muted-foreground">
-                  Carousel cards use a consistent media card format and submit
-                  image media IDs in each card header.
-                </div>
-                <div>
-                  <Label>Cards</Label>
-                  <Input
-                    type="number"
-                    min={2}
-                    max={10}
-                    value={carouselCardCount}
-                    onChange={(event) =>
-                      setCarouselCardCount(
-                        Math.max(
-                          2,
-                          Math.min(10, Number(event.target.value) || 2)
-                        )
-                      )
-                    }
-                    className="mt-2 h-11 border-0 bg-muted/70 shadow-none"
-                  />
-                </div>
+              <div className="sm:w-44">
+                <Label>Cards</Label>
+                <Input
+                  type="number"
+                  min={2}
+                  max={10}
+                  value={carouselCardCount}
+                  onChange={(event) =>
+                    setCarouselCardCount(
+                      Math.max(2, Math.min(10, Number(event.target.value) || 2))
+                    )
+                  }
+                  className="mt-2 h-11 border-0 bg-muted/70 shadow-none"
+                />
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2">
@@ -1264,181 +1244,138 @@ export default function TemplateCreateForm({
           title="Interactive Actions"
           description="Add call-to-actions and quick replies users can tap."
         >
-          <RadioGroup
-            value={actionMode}
-            onValueChange={(value) => setActionMode(value as ActionMode)}
-            disabled={isMetaTemplateEdit || !canEditFields}
-            className="grid gap-3 sm:grid-cols-4"
-          >
-            {[
-              ["NONE", "None"],
-              ["CTA", "Call to Actions"],
-              ["QUICK_REPLY", "Quick Replies"],
-              ["ALL", "All"]
-            ].map(([value, label]) => (
-              <Label
-                key={value}
-                className={cn(
-                  "flex cursor-pointer items-center gap-2 rounded-sm bg-muted/60 p-3 text-sm",
-                  actionMode === value && "bg-primary/10 text-primary"
-                )}
+          <div className="rounded-sm bg-primary/5 p-3 text-sm text-muted-foreground">
+            Click a button type below to add it. You can add{" "}
+            <span className="font-semibold text-foreground">
+              {totalButtonsLeft}
+            </span>{" "}
+            more button{totalButtonsLeft === 1 ? "" : "s"} total. Website left:{" "}
+            {urlButtonsLeft}; phone left: {phoneButtonsLeft}; quick replies can
+            use the remaining total slots. Button labels must be unique.
+          </div>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            {buttonTypeOptions.map((option) => {
+              const Icon = option.icon;
+
+              return (
+                <Button
+                  key={option.value}
+                  type="button"
+                  variant="outline"
+                  disabled={
+                    isMetaTemplateEdit ||
+                    !canEditFields ||
+                    totalButtonsLeft <= 0 ||
+                    (option.value === "URL" && urlButtonsLeft <= 0) ||
+                    (option.value === "PHONE_NUMBER" && phoneButtonsLeft <= 0)
+                  }
+                  className="h-auto justify-start whitespace-normal py-3"
+                  onClick={() => addButton(option.value)}
+                >
+                  <Icon className="size-4 shrink-0" />
+                  <span className="flex flex-col items-start text-left">
+                    <span>{option.label}</span>
+                    <span className="text-xs font-normal text-muted-foreground">
+                      {option.value === "URL"
+                        ? `${Math.max(urlButtonsLeft, 0)} left`
+                        : option.value === "PHONE_NUMBER"
+                          ? `${Math.max(phoneButtonsLeft, 0)} left`
+                          : `${Math.max(quickReplyButtonsLeft, 0)} left`}
+                    </span>
+                  </span>
+                </Button>
+              );
+            })}
+          </div>
+
+          <div className="mt-4 space-y-3">
+            {visibleButtonEntries.map(({ button, index }) => (
+              <div
+                key={`${button.type}-${index}`}
+                className="grid gap-3 rounded-sm bg-muted/40 p-3 lg:grid-cols-[180px_1fr_1fr_auto]"
               >
-                <RadioGroupItem value={value} />
-                {label}
-              </Label>
-            ))}
-          </RadioGroup>
+                <Select
+                  value={button.type}
+                  onValueChange={(value) =>
+                    updateButtonType(index, value as TemplateButtonType)
+                  }
+                  disabled={isMetaTemplateEdit || !canEditFields}
+                >
+                  <SelectTrigger className="h-10 w-full border-0 bg-white shadow-none">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {buttonTypeOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
 
-          {actionMode !== "NONE" && (
-            <>
-              <div className="mt-4 rounded-sm bg-primary/5 p-3 text-sm text-muted-foreground">
-                Click a button type below to add it. You can add{" "}
-                <span className="font-semibold text-foreground">
-                  {totalButtonsLeft}
-                </span>{" "}
-                more button{totalButtonsLeft === 1 ? "" : "s"} total. Website
-                left: {urlButtonsLeft}; phone left: {phoneButtonsLeft}; quick
-                replies can use the remaining total slots. Button labels must be
-                unique.
-              </div>
+                <Input
+                  value={button.text}
+                  onChange={(event) =>
+                    updateButton(index, "text", event.target.value)
+                  }
+                  disabled={!canEditFields}
+                  maxLength={25}
+                  placeholder="Button title"
+                  className={cn(
+                    "h-10 border-0 bg-white shadow-none",
+                    button.text &&
+                      buttons.some(
+                        (item, itemIndex) =>
+                          itemIndex !== index &&
+                          item.text.trim().toLowerCase() ===
+                            button.text.trim().toLowerCase()
+                      ) &&
+                      "ring-2 ring-destructive/30"
+                  )}
+                />
 
-              <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                {buttonTypeOptions
-                  .filter((option) =>
-                    actionMode === "CTA"
-                      ? option.value !== "QUICK_REPLY"
-                      : actionMode === "QUICK_REPLY"
-                        ? option.value === "QUICK_REPLY"
-                        : true
-                  )
-                  .map((option) => {
-                    const Icon = option.icon;
-
-                    return (
-                      <Button
-                        key={option.value}
-                        type="button"
-                        variant="outline"
-                        disabled={
-                          isMetaTemplateEdit ||
-                          !canEditFields ||
-                          totalButtonsLeft <= 0 ||
-                          (option.value === "URL" && urlButtonsLeft <= 0) ||
-                          (option.value === "PHONE_NUMBER" &&
-                            phoneButtonsLeft <= 0)
-                        }
-                        className="h-auto justify-start whitespace-normal py-3"
-                        onClick={() => addButton(option.value)}
-                      >
-                        <Icon className="size-4 shrink-0" />
-                        <span className="flex flex-col items-start text-left">
-                          <span>{option.label}</span>
-                          <span className="text-xs font-normal text-muted-foreground">
-                            {option.value === "URL"
-                              ? `${Math.max(urlButtonsLeft, 0)} left`
-                              : option.value === "PHONE_NUMBER"
-                                ? `${Math.max(phoneButtonsLeft, 0)} left`
-                                : `${Math.max(quickReplyButtonsLeft, 0)} left`}
-                          </span>
-                        </span>
-                      </Button>
-                    );
-                  })}
-              </div>
-
-              <div className="mt-4 space-y-3">
-                {visibleButtonEntries.map(({ button, index }) => (
-                  <div
-                    key={`${button.type}-${index}`}
-                    className="grid gap-3 rounded-sm bg-muted/40 p-3 lg:grid-cols-[180px_1fr_1fr_auto]"
-                  >
-                    <Select
-                      value={button.type}
-                      onValueChange={(value) =>
-                        updateButtonType(index, value as TemplateButtonType)
-                      }
-                      disabled={isMetaTemplateEdit || !canEditFields}
-                    >
-                      <SelectTrigger className="h-10 w-full border-0 bg-white shadow-none">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {buttonTypeOptions.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-
-                    <Input
-                      value={button.text}
-                      onChange={(event) =>
-                        updateButton(index, "text", event.target.value)
-                      }
-                      disabled={!canEditFields}
-                      maxLength={25}
-                      placeholder="Button title"
-                      className={cn(
-                        "h-10 border-0 bg-white shadow-none",
-                        button.text &&
-                          buttons.some(
-                            (item, itemIndex) =>
-                              itemIndex !== index &&
-                              item.text.trim().toLowerCase() ===
-                                button.text.trim().toLowerCase()
-                          ) &&
-                          "ring-2 ring-destructive/30"
-                      )}
-                    />
-
-                    {button.type === "URL" && (
-                      <Input
-                        value={button.url || ""}
-                        onChange={(event) =>
-                          updateButton(index, "url", event.target.value)
-                        }
-                        disabled={!canEditFields}
-                        placeholder="https://whatching.com/sale"
-                        className="h-10 border-0 bg-white shadow-none"
-                      />
-                    )}
-                    {button.type === "PHONE_NUMBER" && (
-                      <Input
-                        value={button.phone_number || ""}
-                        onChange={(event) =>
-                          updateButton(
-                            index,
-                            "phone_number",
-                            event.target.value
-                          )
-                        }
-                        disabled={!canEditFields}
-                        placeholder="+918777019999"
-                        className="h-10 border-0 bg-white shadow-none"
-                      />
-                    )}
-                    {button.type === "QUICK_REPLY" && (
-                      <div className="flex h-10 items-center rounded-sm bg-white px-3 text-xs text-muted-foreground">
-                        Trigger is selected when creating a broadcast.
-                      </div>
-                    )}
-
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="size-10 text-muted-foreground hover:text-destructive"
-                      onClick={() => removeButton(index)}
-                      disabled={isMetaTemplateEdit || !canEditFields}
-                    >
-                      <Trash2 className="size-4" />
-                    </Button>
+                {button.type === "URL" && (
+                  <Input
+                    value={button.url || ""}
+                    onChange={(event) =>
+                      updateButton(index, "url", event.target.value)
+                    }
+                    disabled={!canEditFields}
+                    placeholder="https://whatching.com/sale"
+                    className="h-10 border-0 bg-white shadow-none"
+                  />
+                )}
+                {button.type === "PHONE_NUMBER" && (
+                  <Input
+                    value={button.phone_number || ""}
+                    onChange={(event) =>
+                      updateButton(index, "phone_number", event.target.value)
+                    }
+                    disabled={!canEditFields}
+                    placeholder="+918777019999"
+                    className="h-10 border-0 bg-white shadow-none"
+                  />
+                )}
+                {button.type === "QUICK_REPLY" && (
+                  <div className="flex h-10 items-center rounded-sm bg-white px-3 text-xs text-muted-foreground">
+                    Trigger is selected when creating a broadcast.
                   </div>
-                ))}
+                )}
+
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-10 text-muted-foreground hover:text-destructive"
+                  onClick={() => removeButton(index)}
+                  disabled={isMetaTemplateEdit || !canEditFields}
+                >
+                  <Trash2 className="size-4" />
+                </Button>
               </div>
-            </>
-          )}
+            ))}
+          </div>
         </FieldBlock>
       </div>
 
@@ -1450,7 +1387,7 @@ export default function TemplateCreateForm({
             headerText={headerText}
             bodyText={previewBody}
             footerText={supportsFooter ? footerText : ""}
-            buttons={visibleButtons}
+            buttons={buttons}
             offerText={offerText}
             carouselCardCount={carouselCardCount}
             mediaUrl={selectedMediaUrl}
