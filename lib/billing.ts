@@ -49,9 +49,9 @@ export const plans: PlanDefinition[] = [
       "Messaging Template Management",
       "Analytics Dashboard",
       "Unlimited Free Incoming Conversation",
-      "Multi Agent Shared Inbox"
-    ],
-    comingSoon: ["Track Meta Ad Campaign"]
+      "Multi Agent Shared Inbox",
+      "Track Meta Ad Campaigns"
+    ]
   },
   {
     id: "pro",
@@ -78,7 +78,7 @@ export const plans: PlanDefinition[] = [
         "Automated Instagram Comments Reply"
       ]
     },
-    comingSoon: ["Whatsapp Forms", "Track Meta Ad Campaign"]
+    comingSoon: ["Whatsapp Forms"]
   },
   {
     id: "enterprise",

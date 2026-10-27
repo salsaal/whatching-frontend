@@ -163,7 +163,7 @@ export default function FlowsPage() {
     mutationFn: archiveBotCanvas,
     meta: { showToast: false },
     onSuccess: async () => {
-      toast.success("Flow archived.");
+      toast.success("Flow deleted.");
       setDeleteCanvas(null);
       await invalidate();
     },
@@ -411,7 +411,7 @@ export default function FlowsPage() {
                         onClick={() => setDeleteCanvas(canvas)}
                       >
                         <Trash2 className="size-4" />
-                        Archive
+                        Delete
                       </Button>
                     </div>
                   </CardContent>
@@ -489,10 +489,11 @@ export default function FlowsPage() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Archive flow?</AlertDialogTitle>
+            <AlertDialogTitle>Delete flow?</AlertDialogTitle>
             <AlertDialogDescription>
-              This archives {deleteCanvas?.name}. Published versions and active
-              automation should be moved to another canvas before archiving.
+              This deletes {deleteCanvas?.name} -- permanently removed in 30
+              days. Published versions and active automation should be moved to
+              another canvas before deleting.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -506,7 +507,7 @@ export default function FlowsPage() {
               }}
             >
               {isDeleting && <Loader2 className="mr-2 size-4 animate-spin" />}
-              Archive flow
+              Delete flow
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
