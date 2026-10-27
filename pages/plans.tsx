@@ -264,9 +264,7 @@ export default function PlansPage() {
 
                 {plan.comingSoon?.length ? (
                   <div className="mt-5 border-t pt-5">
-                    <p className="mb-3 text-sm font-semibold">
-                      Coming Pretty Soon
-                    </p>
+                    <p className="mb-3 text-sm font-semibold">Coming soon</p>
                     <ul className="space-y-3">
                       {plan.comingSoon.map((feature) => (
                         <li key={feature} className="flex gap-2 text-sm">

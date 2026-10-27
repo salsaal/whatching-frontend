@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, LogOut, UserRound } from "lucide-react";
+import { CheckCircle2, LogOut, UserRound, XCircle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/router";
 import { useEffect } from "react";
@@ -92,7 +92,11 @@ export default function ProfilePage() {
             <div>
               <p className="text-xs text-muted-foreground">Verified</p>
               <p className="mt-1 inline-flex items-center gap-2 font-medium">
-                <CheckCircle2 className="size-4 text-primary" />
+                {user?.isVerified ? (
+                  <CheckCircle2 className="size-4 text-primary" />
+                ) : (
+                  <XCircle className="size-4 text-muted-foreground" />
+                )}
                 {user?.isVerified ? "Yes" : "No"}
               </p>
             </div>

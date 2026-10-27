@@ -103,7 +103,7 @@ export default function ForgotPassword() {
             disabled={timer > 0}
           >
             <KeyRound className="size-4" />
-            {timer > 0 ? "Plesae Wait..." : "Send reset link"}
+            {timer > 0 ? "Please wait..." : "Send reset link"}
           </Button>
 
           {/* TIMER / RESEND */}

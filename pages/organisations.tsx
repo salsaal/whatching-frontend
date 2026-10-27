@@ -38,6 +38,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { CardGridLoadingSkeleton } from "@/components/ui/loading-skeletons";
 import assets from "@/json/assets";
+import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
 import { Organization, useOrganizationStore } from "@/stores/organizationStore";
 
@@ -226,8 +227,19 @@ function Organisations() {
                     <div className="grid grid-cols-2 gap-3 text-sm">
                       <div className="rounded-md border bg-white px-3 py-2">
                         <p className="text-xs text-muted-foreground">Status</p>
-                        <p className="mt-1 inline-flex items-center gap-1.5 font-semibold capitalize text-primary">
-                          <CheckCircle2 className="size-4" />
+                        <p
+                          className={cn(
+                            "mt-1 inline-flex items-center gap-1.5 font-semibold capitalize",
+                            organization?.metaConfig?.status === "ready"
+                              ? "text-primary"
+                              : "text-muted-foreground"
+                          )}
+                        >
+                          {organization?.metaConfig?.status === "ready" ? (
+                            <CheckCircle2 className="size-4" />
+                          ) : (
+                            <Smartphone className="size-4" />
+                          )}
                           {organization?.metaConfig?.status || "pending"}
                         </p>
                       </div>

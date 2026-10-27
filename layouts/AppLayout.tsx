@@ -144,6 +144,9 @@ export default function AppLayout({
     activeOrgId && activeOrganization?.subscriptionCurrentPeriodEnd
       ? `whatching:dismissed-cancel-banner:${activeOrgId}:${activeOrganization.subscriptionCurrentPeriodEnd}`
       : null;
+  const planBannerKey = activeOrgId
+    ? `whatching:dismissed-plan-banner:${activeOrgId}`
+    : null;
 
   useEffect(() => {
     if (!cancelBannerKey || typeof window === "undefined") return;
@@ -156,11 +159,32 @@ export default function AppLayout({
     }
   }, [cancelBannerKey]);
 
+  useEffect(() => {
+    if (!planBannerKey || typeof window === "undefined") return;
+    try {
+      setPlanBannerDismissed(
+        window.localStorage.getItem(planBannerKey) === "1"
+      );
+    } catch {
+      // Ignore storage access errors (private browsing, etc).
+    }
+  }, [planBannerKey]);
+
   const dismissCancelBanner = () => {
     setCancelBannerDismissed(true);
     if (!cancelBannerKey) return;
     try {
       window.localStorage.setItem(cancelBannerKey, "1");
+    } catch {
+      // Ignore storage access errors (private browsing, etc).
+    }
+  };
+
+  const dismissPlanBanner = () => {
+    setPlanBannerDismissed(true);
+    if (!planBannerKey) return;
+    try {
+      window.localStorage.setItem(planBannerKey, "1");
     } catch {
       // Ignore storage access errors (private browsing, etc).
     }
@@ -457,7 +481,7 @@ export default function AppLayout({
                 variant="ghost"
                 className="size-8 shrink-0 text-amber-900"
                 tooltip="Dismiss"
-                onClick={() => setPlanBannerDismissed(true)}
+                onClick={dismissPlanBanner}
               >
                 <X className="size-4" />
               </Button>

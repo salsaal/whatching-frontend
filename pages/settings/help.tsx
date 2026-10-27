@@ -26,6 +26,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { SettingsBackLink } from "@/components/settings/SettingsBackLink";
@@ -180,36 +187,42 @@ export default function HelpPage() {
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="support-category">Category</Label>
-                <select
-                  id="support-category"
-                  className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                <Select
                   value={category}
-                  onChange={(event) =>
-                    setCategory(event.target.value as SupportRequestCategory)
+                  onValueChange={(value) =>
+                    setCategory(value as SupportRequestCategory)
                   }
                 >
-                  {categories.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger id="support-category" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categories.map((item) => (
+                      <SelectItem key={item.value} value={item.value}>
+                        {item.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="support-priority">Priority</Label>
-                <select
-                  id="support-priority"
-                  className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                <Select
                   value={priority}
-                  onChange={(event) =>
-                    setPriority(event.target.value as SupportRequestPriority)
+                  onValueChange={(value) =>
+                    setPriority(value as SupportRequestPriority)
                   }
                 >
-                  <option value="low">Low</option>
-                  <option value="normal">Normal</option>
-                  <option value="high">High</option>
-                  <option value="urgent">Urgent</option>
-                </select>
+                  <SelectTrigger id="support-priority" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low">Low</SelectItem>
+                    <SelectItem value="normal">Normal</SelectItem>
+                    <SelectItem value="high">High</SelectItem>
+                    <SelectItem value="urgent">Urgent</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <div className="space-y-2">

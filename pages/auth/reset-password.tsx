@@ -107,12 +107,14 @@ export default function ResetPassword() {
               className="pl-9 pr-9"
               {...register("password")}
             />
-            <span
+            <button
+              type="button"
               onClick={() => setShow(!show)}
-              className="absolute right-3 top-3 cursor-pointer text-muted-foreground"
+              aria-label={show ? "Hide password" : "Show password"}
+              className="absolute right-3 top-3 cursor-pointer text-muted-foreground outline-none focus-visible:text-foreground"
             >
               {show ? <EyeOff size={18} /> : <Eye size={18} />}
-            </span>
+            </button>
             <p className="text-xs text-red-500 mt-1">
               {errors.password?.message}
             </p>

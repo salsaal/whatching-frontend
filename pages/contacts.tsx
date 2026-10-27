@@ -6,6 +6,7 @@ import {
   Download,
   Edit3,
   Instagram,
+  Loader2,
   Plus,
   Search,
   Tag as TagIcon,
@@ -63,6 +64,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import AppLayout from "@/layouts/AppLayout";
 import { cn } from "@/lib/utils";
@@ -567,23 +575,25 @@ export default function ContactsPage() {
             )}
             {syncEligibleNumbers.length > 0 && (
               <div className="flex min-w-0 flex-col gap-2">
-                <div className="flex min-w-0 gap-2">
+                <div className="flex min-w-0 flex-wrap gap-2">
                   {syncEligibleNumbers.length > 1 && (
-                    <select
+                    <Select
                       value={selectedSyncNumber?.id || ""}
-                      onChange={(event) =>
-                        setSelectedSyncNumberId(event.target.value)
-                      }
-                      className="h-10 rounded-sm border bg-background px-3 text-sm"
+                      onValueChange={(value) => setSelectedSyncNumberId(value)}
                     >
-                      {syncEligibleNumbers.map((number) => (
-                        <option key={number.id} value={number.id}>
-                          {number.displayPhoneNumber ||
-                            number.verifiedName ||
-                            number.phoneNumberId}
-                        </option>
-                      ))}
-                    </select>
+                      <SelectTrigger className="w-full sm:w-56">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {syncEligibleNumbers.map((number) => (
+                          <SelectItem key={number.id} value={number.id}>
+                            {number.displayPhoneNumber ||
+                              number.verifiedName ||
+                              number.phoneNumberId}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   )}
                   <Button
                     variant="outline"
@@ -967,6 +977,9 @@ export default function ContactsPage() {
                 if (editingTag?.id === deleteTagTarget.id) resetTagForm();
               }}
             >
+              {isDeletingTag ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : null}
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -1003,6 +1016,9 @@ export default function ContactsPage() {
                 deleteSingleSubscriber(deleteSubscriberTarget._id)
               }
             >
+              {isDeletingSubscriber ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : null}
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -1025,6 +1041,9 @@ export default function ContactsPage() {
               disabled={isDeletingSelected}
               onClick={() => deleteSelectedSubscribers(selectedIds)}
             >
+              {isDeletingSelected ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : null}
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>

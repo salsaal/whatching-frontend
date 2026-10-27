@@ -41,6 +41,14 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
+} from "@/components/ui/table";
 import { SettingsBackLink } from "@/components/settings/SettingsBackLink";
 import { QueryErrorState } from "@/components/shared/QueryErrorState";
 import { useCurrentMembership } from "@/hooks/useCurrentMembership";
@@ -541,38 +549,36 @@ export default function BillingSettingsPage() {
           ) : isBillingHistoryError ? (
             <QueryErrorState message="Billing history could not be loaded." />
           ) : transactions.length ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-primary">
-                    <th className="p-3">Date</th>
-                    <th className="p-3">Type</th>
-                    <th className="p-3">Description</th>
-                    <th className="p-3">Status</th>
-                    <th className="p-3 text-right">Amount</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {transactions.map((transaction) => (
-                    <tr key={transaction._id} className="border-t">
-                      <td className="p-3">
-                        {formatDate(transaction.createdAt)}
-                      </td>
-                      <td className="p-3 capitalize">
-                        {transaction.type.replaceAll("_", " ")}
-                      </td>
-                      <td className="max-w-md p-3">
-                        {transaction.description}
-                      </td>
-                      <td className="p-3 capitalize">{transaction.status}</td>
-                      <td className="p-3 text-right font-medium">
-                        {formatCurrency(transaction.amount)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {transactions.map((transaction) => (
+                  <TableRow key={transaction._id}>
+                    <TableCell>{formatDate(transaction.createdAt)}</TableCell>
+                    <TableCell className="capitalize">
+                      {transaction.type.replaceAll("_", " ")}
+                    </TableCell>
+                    <TableCell className="max-w-md">
+                      {transaction.description}
+                    </TableCell>
+                    <TableCell className="capitalize">
+                      {transaction.status}
+                    </TableCell>
+                    <TableCell className="text-right font-medium">
+                      {formatCurrency(transaction.amount)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           ) : (
             <div className="rounded-sm bg-muted/50 p-6 text-center text-sm text-muted-foreground">
               No billing transactions yet.
@@ -591,70 +597,68 @@ export default function BillingSettingsPage() {
           ) : isInvoicesError ? (
             <QueryErrorState message="Invoices could not be loaded." />
           ) : invoices.length ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-primary">
-                    <th className="p-3">Invoice</th>
-                    <th className="p-3">Date</th>
-                    <th className="p-3">Status</th>
-                    <th className="p-3 text-right">Amount</th>
-                    <th className="p-3 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {invoices.map((invoice) => (
-                    <tr key={invoice._id} className="border-t">
-                      <td className="p-3 font-medium">
-                        {invoice.invoiceNumber}
-                      </td>
-                      <td className="p-3">{formatDate(invoice.invoiceDate)}</td>
-                      <td className="p-3">
-                        <Badge
-                          variant={
-                            invoice.status === "sent"
-                              ? "default"
-                              : invoice.status === "failed"
-                                ? "destructive"
-                                : "secondary"
-                          }
-                          className="capitalize"
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Invoice</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {invoices.map((invoice) => (
+                  <TableRow key={invoice._id}>
+                    <TableCell className="font-medium">
+                      {invoice.invoiceNumber}
+                    </TableCell>
+                    <TableCell>{formatDate(invoice.invoiceDate)}</TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={
+                          invoice.status === "sent"
+                            ? "default"
+                            : invoice.status === "failed"
+                              ? "destructive"
+                              : "secondary"
+                        }
+                        className="capitalize"
+                      >
+                        {invoice.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right font-medium">
+                      {formatCurrency(invoice.amountTotalPaise / 100)}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          tooltip="Download PDF"
+                          disabled={isDownloadingInvoice}
+                          onClick={() => downloadInvoice(invoice)}
                         >
-                          {invoice.status}
-                        </Badge>
-                      </td>
-                      <td className="p-3 text-right font-medium">
-                        {formatCurrency(invoice.amountTotalPaise / 100)}
-                      </td>
-                      <td className="p-3">
-                        <div className="flex justify-end gap-2">
+                          <Download className="size-4" />
+                        </Button>
+                        {invoice.status === "failed" && (
                           <Button
                             variant="ghost"
                             size="icon"
-                            title="Download PDF"
-                            disabled={isDownloadingInvoice}
-                            onClick={() => downloadInvoice(invoice)}
+                            tooltip="Retry delivery"
+                            disabled={isRetryingInvoice}
+                            onClick={() => retryInvoiceMutate(invoice._id)}
                           >
-                            <Download className="size-4" />
+                            <RotateCcw className="size-4" />
                           </Button>
-                          {invoice.status === "failed" && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              title="Retry delivery"
-                              disabled={isRetryingInvoice}
-                              onClick={() => retryInvoiceMutate(invoice._id)}
-                            >
-                              <RotateCcw className="size-4" />
-                            </Button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           ) : (
             <div className="rounded-sm bg-muted/50 p-6 text-center text-sm text-muted-foreground">
               No invoices yet.
