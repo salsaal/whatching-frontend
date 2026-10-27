@@ -42,34 +42,39 @@ const parseKeywords = (value: string) =>
     .map((item) => item.trim())
     .filter(Boolean);
 
-type CooldownUnit = "minutes" | "hours" | "days";
+type CooldownUnit = "seconds" | "minutes" | "hours" | "days";
 
 const COOLDOWN_UNIT_SECONDS: Record<CooldownUnit, number> = {
+  seconds: 1,
   minutes: 60,
   hours: 3600,
   days: 86400
 };
 
+// Backend accepts whole seconds in [0, 30 days].
+const MAX_COOLDOWN_SECONDS = 30 * COOLDOWN_UNIT_SECONDS.days;
+const DEFAULT_COOLDOWN_SECONDS = 3600;
+
+// Picks the largest unit that divides the saved value exactly, so a stored
+// value always round-trips unchanged (90 shows as "90 seconds", never "2
+// minutes").
 const secondsToCooldownDuration = (
   totalSeconds: number
 ): { value: number; unit: CooldownUnit } => {
-  if (totalSeconds > 0 && totalSeconds % COOLDOWN_UNIT_SECONDS.days === 0) {
-    return { value: totalSeconds / COOLDOWN_UNIT_SECONDS.days, unit: "days" };
+  for (const unit of ["days", "hours", "minutes"] as const) {
+    const size = COOLDOWN_UNIT_SECONDS[unit];
+    if (totalSeconds > 0 && totalSeconds % size === 0) {
+      return { value: totalSeconds / size, unit };
+    }
   }
-  if (totalSeconds > 0 && totalSeconds % COOLDOWN_UNIT_SECONDS.hours === 0) {
-    return {
-      value: totalSeconds / COOLDOWN_UNIT_SECONDS.hours,
-      unit: "hours"
-    };
-  }
-  return {
-    value: Math.max(
-      1,
-      Math.round(totalSeconds / COOLDOWN_UNIT_SECONDS.minutes)
-    ),
-    unit: "minutes"
-  };
+  return { value: totalSeconds, unit: "seconds" };
 };
+
+const cooldownDurationToSeconds = (value: number, unit: CooldownUnit) =>
+  Math.min(
+    MAX_COOLDOWN_SECONDS,
+    Math.max(0, Math.round(value * COOLDOWN_UNIT_SECONDS[unit]))
+  );
 
 export default function TagFormDialog({
   open,
@@ -84,6 +89,9 @@ export default function TagFormDialog({
   const [channelScope, setChannelScope] = useState<TagChannelScope>("all");
   const [cooldownValue, setCooldownValue] = useState(1);
   const [cooldownUnit, setCooldownUnit] = useState<CooldownUnit>("hours");
+  const [initialCooldownSeconds, setInitialCooldownSeconds] = useState(
+    DEFAULT_COOLDOWN_SECONDS
+  );
   const [trigger, setTrigger] = useState<TagAutomationTrigger>("keyword");
   const [addKeywords, setAddKeywords] = useState("");
   const [removeKeywords, setRemoveKeywords] = useState("");
@@ -97,7 +105,9 @@ export default function TagFormDialog({
     setDescription(tag?.description || "");
     setMode(tag?.mode || "manual");
     setChannelScope(tag?.channelScope || "all");
-    const cooldown = secondsToCooldownDuration(tag?.cooldownSeconds ?? 3600);
+    const savedCooldown = tag?.cooldownSeconds ?? DEFAULT_COOLDOWN_SECONDS;
+    const cooldown = secondsToCooldownDuration(savedCooldown);
+    setInitialCooldownSeconds(savedCooldown);
     setCooldownValue(cooldown.value);
     setCooldownUnit(cooldown.unit);
     setTrigger(tag?.automation?.trigger || "keyword");
@@ -111,12 +121,23 @@ export default function TagFormDialog({
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
+    const cooldownSeconds = cooldownDurationToSeconds(
+      cooldownValue,
+      cooldownUnit
+    );
+    // The cooldown only matters for bot_decides tags (it's only shown for
+    // them), and only goes out when it actually changed -- otherwise editing
+    // e.g. a manual tag's description would silently overwrite it.
+    const shouldSendCooldown =
+      mode === "bot_decides" &&
+      (!tag || cooldownSeconds !== initialCooldownSeconds);
+
     const payload: CreateTagPayload | UpdateTagPayload = {
       ...(tag ? {} : { name: name.trim() }),
       description: description.trim() || undefined,
       mode,
       channelScope,
-      cooldownSeconds: cooldownValue * COOLDOWN_UNIT_SECONDS[cooldownUnit],
+      ...(shouldSendCooldown ? { cooldownSeconds } : {}),
       automation:
         mode === "bot_decides"
           ? {
@@ -228,25 +249,39 @@ export default function TagFormDialog({
                 <div className="mt-2 flex gap-2">
                   <Input
                     type="number"
-                    min={1}
-                    value={cooldownValue}
-                    onChange={(event) =>
-                      setCooldownValue(
-                        Math.max(1, Number(event.target.value) || 1)
-                      )
+                    min={0}
+                    max={
+                      MAX_COOLDOWN_SECONDS / COOLDOWN_UNIT_SECONDS[cooldownUnit]
                     }
+                    value={cooldownValue}
+                    onChange={(event) => {
+                      const next = Number(event.target.value);
+                      const unitMax =
+                        MAX_COOLDOWN_SECONDS /
+                        COOLDOWN_UNIT_SECONDS[cooldownUnit];
+                      setCooldownValue(
+                        Number.isFinite(next)
+                          ? Math.min(unitMax, Math.max(0, next))
+                          : 0
+                      );
+                    }}
                     className="w-24"
                   />
                   <Select
                     value={cooldownUnit}
-                    onValueChange={(value) =>
-                      setCooldownUnit(value as CooldownUnit)
-                    }
+                    onValueChange={(value) => {
+                      const unit = value as CooldownUnit;
+                      const unitMax =
+                        MAX_COOLDOWN_SECONDS / COOLDOWN_UNIT_SECONDS[unit];
+                      setCooldownUnit(unit);
+                      setCooldownValue((current) => Math.min(unitMax, current));
+                    }}
                   >
                     <SelectTrigger className="w-full">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="seconds">Seconds</SelectItem>
                       <SelectItem value="minutes">Minutes</SelectItem>
                       <SelectItem value="hours">Hours</SelectItem>
                       <SelectItem value="days">Days</SelectItem>
@@ -256,7 +291,8 @@ export default function TagFormDialog({
                 <p className="mt-1 text-xs text-muted-foreground">
                   After the bot adds or removes this tag, it won&apos;t
                   re-evaluate the same subscriber for this trigger again until
-                  this much time has passed.
+                  this much time has passed. Use 0 for no cooldown; the maximum
+                  is 30 days.
                 </p>
               </div>
 
