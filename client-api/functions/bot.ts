@@ -1,5 +1,5 @@
 import api from "../axiosInstance";
-import { BOT_ENDPOINTS } from "../endpoints";
+import { BOT_ENDPOINTS, BROADCAST_ENDPOINTS } from "../endpoints";
 import {
   BotCanvasDraftState,
   BotCanvasResponse,
@@ -69,20 +69,25 @@ export const getBotCanvasPublished = async (): Promise<BotCanvasResponse> => {
   return res.data;
 };
 
+// Served under broadcasts:manage (the /bot copy needs flows:manage), since
+// every caller is a broadcast or template quick-reply picker. A 404 means
+// the organization has no published bot flow yet.
 export const getBotCanvasTriggers = async (
   phoneNumberId?: string
 ): Promise<BotCanvasTriggersResponse> => {
   const res = await api.get<BotCanvasTriggersResponse>(
-    BOT_ENDPOINTS.CANVAS_PUBLISHED,
-    {
-      params: {
-        view: "triggerKeys",
-        ...(phoneNumberId ? { phoneNumberId } : {})
-      }
-    }
+    BROADCAST_ENDPOINTS.FLOW_TRIGGERS,
+    { params: phoneNumberId ? { phoneNumberId } : {} }
   );
   return res.data;
 };
+
+export const isNoPublishedFlowError = (error: unknown) =>
+  (error as { response?: { status?: number } } | null)?.response?.status ===
+  404;
+
+export const NO_PUBLISHED_FLOW_MESSAGE =
+  "Publish a bot flow to route quick replies to it";
 
 export const listBotCanvases = async (): Promise<BotCanvasesResponse> => {
   const res = await api.get<BotCanvasesResponse>(BOT_ENDPOINTS.CANVASES);

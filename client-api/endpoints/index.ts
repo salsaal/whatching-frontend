@@ -130,6 +130,7 @@ export const BROADCAST_ENDPOINTS = {
   GET_ALL: `${ORGANIZATIONS_BASE}/broadcasts`,
   CREATE: `${ORGANIZATIONS_BASE}/broadcasts`,
   AUDIENCE_COUNT: `${ORGANIZATIONS_BASE}/broadcasts/audience/count`,
+  FLOW_TRIGGERS: `${ORGANIZATIONS_BASE}/broadcasts/flow-triggers`,
   GET_BY_ID: (broadcastId: string) =>
     `${ORGANIZATIONS_BASE}/broadcasts/${broadcastId}`,
   START: (broadcastId: string) =>

@@ -57,7 +57,11 @@ import {
   updateConversationStatus
 } from "@/client-api/functions/chat";
 import { getTeam } from "@/client-api/functions/organizations";
-import { getBotCanvasTriggers } from "@/client-api/functions/bot";
+import {
+  NO_PUBLISHED_FLOW_MESSAGE,
+  getBotCanvasTriggers,
+  isNoPublishedFlowError
+} from "@/client-api/functions/bot";
 import {
   getAllSubscribers,
   updateSubscriber
@@ -1871,17 +1875,20 @@ function ConversationsPageContent() {
         ? selectedPhoneNumberId
         : undefined
       : conversationSenderPhoneNumberId;
-  const { data: templateTriggersData } = useQuery({
-    queryKey: ["bot-canvas-triggers", templateSenderPhoneNumberId],
-    queryFn: () => getBotCanvasTriggers(templateSenderPhoneNumberId as string),
-    enabled:
-      Boolean(
-        isTemplateModalOpen &&
-          templateSenderPhoneNumberId &&
-          selectedTemplateQuickReplies.length
-      ) && can("flows:manage"),
-    refetchOnMount: "always"
-  });
+  const { data: templateTriggersData, error: templateTriggersError } = useQuery(
+    {
+      queryKey: ["bot-canvas-triggers", templateSenderPhoneNumberId],
+      queryFn: () =>
+        getBotCanvasTriggers(templateSenderPhoneNumberId as string),
+      enabled:
+        Boolean(
+          isTemplateModalOpen &&
+            templateSenderPhoneNumberId &&
+            selectedTemplateQuickReplies.length
+        ) && can("broadcasts:manage"),
+      refetchOnMount: "always"
+    }
+  );
   const templateTriggerKeys = useMemo(
     () => new Set(templateTriggersData?.data?.triggerKeys || []),
     [templateTriggersData?.data?.triggerKeys]
@@ -3307,9 +3314,15 @@ function ConversationsPageContent() {
                                 <SelectTrigger className="w-full">
                                   <SelectValue
                                     placeholder={
-                                      templateSenderPhoneNumberId
-                                        ? "Choose flow trigger"
-                                        : "Select sender first"
+                                      !can("broadcasts:manage")
+                                        ? "You need Broadcasts access to route quick replies"
+                                        : isNoPublishedFlowError(
+                                              templateTriggersError
+                                            )
+                                          ? NO_PUBLISHED_FLOW_MESSAGE
+                                          : templateSenderPhoneNumberId
+                                            ? "Choose flow trigger"
+                                            : "Select sender first"
                                     }
                                   />
                                 </SelectTrigger>

@@ -29,7 +29,11 @@ import {
   previewBroadcastAudienceCount,
   startBroadcast
 } from "@/client-api/functions/broadcasts";
-import { getBotCanvasTriggers } from "@/client-api/functions/bot";
+import {
+  NO_PUBLISHED_FLOW_MESSAGE,
+  getBotCanvasTriggers,
+  isNoPublishedFlowError
+} from "@/client-api/functions/bot";
 import {
   getWhatsAppOutboundReadiness,
   testWhatsAppOutboundReadiness
@@ -284,11 +288,11 @@ function BroadcastsPageContent() {
     queryFn: () => listCampaigns({ sort: "recent", limit: 100 }),
     enabled: isCreateOpen && audienceMode === "campaign" && can("contacts:view")
   });
-  const { data: senderTriggersData } = useQuery({
+  const { data: senderTriggersData, error: senderTriggersError } = useQuery({
     queryKey: ["bot-canvas-triggers", senderPhoneNumberId],
     queryFn: () => getBotCanvasTriggers(senderPhoneNumberId),
     enabled:
-      Boolean(isCreateOpen && senderPhoneNumberId) && can("flows:manage"),
+      Boolean(isCreateOpen && senderPhoneNumberId) && can("broadcasts:manage"),
     refetchOnMount: "always"
   });
   const currentAudience = useMemo<BroadcastAudience>(() => {
@@ -617,6 +621,13 @@ function BroadcastsPageContent() {
       toast.error(
         "No flow triggers are available for the selected sender number"
       );
+      return;
+    }
+    if (
+      quickReplyButtons.length &&
+      isNoPublishedFlowError(senderTriggersError)
+    ) {
+      toast.error(NO_PUBLISHED_FLOW_MESSAGE);
       return;
     }
     const missingQuickReplyRoute = selectedQuickReplyRoutes.find(
@@ -1067,9 +1078,13 @@ function BroadcastsPageContent() {
                                 >
                                   <SelectValue
                                     placeholder={
-                                      senderTriggersData
-                                        ? "Choose flow trigger"
-                                        : "Select sender first"
+                                      isNoPublishedFlowError(
+                                        senderTriggersError
+                                      )
+                                        ? NO_PUBLISHED_FLOW_MESSAGE
+                                        : senderTriggersData
+                                          ? "Choose flow trigger"
+                                          : "Select sender first"
                                     }
                                   />
                                 </SelectTrigger>
