@@ -86,7 +86,8 @@ export default function AdAccountConnection() {
       ? new Date(data.data.disconnectAvailableAt).getTime()
       : 0,
     storedLastDisconnect
-      ? new Date(storedLastDisconnect).getTime() + AD_ACCOUNT_DISCONNECT_COOLDOWN_MS
+      ? new Date(storedLastDisconnect).getTime() +
+        AD_ACCOUNT_DISCONNECT_COOLDOWN_MS
       : 0
   ].reduce((latest, time) => Math.max(latest, time), 0);
   const isDisconnectCoolingDown = disconnectAvailableAt > Date.now();
