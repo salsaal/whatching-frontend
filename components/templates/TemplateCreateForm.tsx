@@ -332,6 +332,12 @@ export default function TemplateCreateForm({
   // but content -- body/header/footer text and existing button labels/
   // values -- can, as long as it isn't mid-review.
   const isMetaTemplateEdit = isEditing && !isDraftEdit;
+  // Meta only lets a submitted template change category once it's been
+  // rejected or paused -- never while approved.
+  const isCategoryEditableStatus = ["REJECTED", "PAUSED"].includes(
+    (initialTemplate?.status || "").toUpperCase()
+  );
+  const isCategoryLocked = isMetaTemplateEdit && !isCategoryEditableStatus;
   const isPendingEdit =
     initialTemplate?.status?.toUpperCase() === "PENDING" ||
     initialTemplate?.status?.toLowerCase() === "pending_review";
@@ -798,6 +804,10 @@ export default function TemplateCreateForm({
         templateId: initialTemplate.templateId,
         payload: {
           components: payload.components,
+          ...(category.toUpperCase() !==
+          (initialTemplate.category || "").toUpperCase()
+            ? { category: category as TemplateCategory }
+            : {}),
           phoneNumberId: payload.phoneNumberId
         }
       });
@@ -890,10 +900,9 @@ export default function TemplateCreateForm({
 
         {isMetaTemplateEdit && !isPendingEdit && (
           <div className="rounded-lg bg-muted/60 p-4 text-sm text-muted-foreground shadow-xs">
-            Name, language, and category can&apos;t change after submission.
-            Buttons, header, body, and footer can be edited. Meta re-reviews
-            every edit, and an approved template can be edited once per 24 hours
-            (10 times per 30 days).
+            {isCategoryEditableStatus
+              ? "Name and language can't change after submission. Category, buttons, header, body and footer can be edited."
+              : "Name, language, and category can't change after submission. Buttons, header, body, and footer can be edited. Meta re-reviews every edit, and an approved template can be edited once per 24 hours (10 times per 30 days)."}
           </div>
         )}
 
@@ -907,7 +916,7 @@ export default function TemplateCreateForm({
               <Select
                 value={category}
                 onValueChange={(value) => setCategory(value)}
-                disabled={isMetaTemplateEdit}
+                disabled={isCategoryLocked || !canEditFields}
               >
                 <SelectTrigger className="mt-2 h-11 w-full border-0 bg-muted/70 shadow-none">
                   <SelectValue />

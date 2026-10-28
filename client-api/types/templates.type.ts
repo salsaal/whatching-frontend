@@ -178,6 +178,8 @@ export interface UpdateDraftPayload {
 
 export interface UpdateApprovedTemplatePayload {
   components: TemplateComponent[];
+  // Only accepted by Meta for rejected or paused templates.
+  category?: TemplateCategory;
   phoneNumberId?: string;
 }
 
