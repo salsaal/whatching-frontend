@@ -37,19 +37,14 @@ export interface KeywordListProps {
 
 // Stored lists only ever need the extras: the backend adds the built-ins
 // itself, and older orgs have them saved as their default list.
-export const toExtraKeywords = (
-  value: string[],
-  builtIns: string[] = []
-) => {
+export const toExtraKeywords = (value: string[], builtIns: string[] = []) => {
   const locked = new Set(builtIns.map(normalizeKeyword));
   const seen = new Set<string>();
-  return value
-    .map(normalizeKeyword)
-    .filter((word) => {
-      if (!word || locked.has(word) || seen.has(word)) return false;
-      seen.add(word);
-      return true;
-    });
+  return value.map(normalizeKeyword).filter((word) => {
+    if (!word || locked.has(word) || seen.has(word)) return false;
+    seen.add(word);
+    return true;
+  });
 };
 
 function Chip({
@@ -213,10 +208,7 @@ function KeywordList({
       )}
 
       {conflicts.map((word) => (
-        <p
-          key={word}
-          className="flex gap-1.5 text-xs text-amber-800"
-        >
+        <p key={word} className="flex gap-1.5 text-xs text-amber-800">
           <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
           {conflictsWith?.message(word)}
         </p>

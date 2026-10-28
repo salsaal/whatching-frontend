@@ -18,8 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useBotSettings } from "@/hooks/useBotSettings";
 
 function BotSettingsTab() {
-  const { settings, planAllowed, isLoading, updateSettings } =
-    useBotSettings();
+  const { settings, planAllowed, isLoading, updateSettings } = useBotSettings();
 
   return (
     <div className="space-y-4">

@@ -222,7 +222,6 @@ function FlowsPageContent() {
           </div>
         </section>
 
-
         {isError && (
           <QueryErrorState message="Flows could not be loaded for this organisation." />
         )}
