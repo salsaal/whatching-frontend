@@ -5,6 +5,7 @@ import { useRouter } from "next/router";
 
 import {
   MutationCache,
+  QueryCache,
   QueryClient,
   QueryClientProvider,
   QueryKey
@@ -16,8 +17,10 @@ import { toast, Toaster } from "sonner";
 import "@/styles/globals.css";
 import "@xyflow/react/dist/style.css";
 import { ApiResponse } from "@/client-api/types/api";
+import { CurrentMembership } from "@/client-api/types/organizations.type";
 import RouteGuard from "@/components/auth/RouteGuard";
 import { AppErrorBoundary } from "@/components/shared/AppErrorBoundary";
+import { describePermission } from "@/lib/permissions";
 import { initSentry } from "@/lib/sentry";
 import { NuqsAdapter } from "nuqs/adapters/next/pages";
 
@@ -28,11 +31,41 @@ initSentry();
 
 interface ErrorData {
   response: {
+    status?: number;
     data: {
       message: string;
+      requiredRoles?: string[];
+      requiredPermission?: string;
     };
   };
 }
+
+// A 403 means "not allowed", never "logged out" -- only 401 ends a session,
+// and the axios interceptor handles that. The friendly wording is built from
+// the backend's requiredRoles/requiredPermission when present.
+const isForbidden = (error: unknown) =>
+  (error as ErrorData)?.response?.status === 403;
+
+const forbiddenMessage = (error: unknown) => {
+  const data = (error as ErrorData)?.response?.data;
+  if (data?.requiredRoles?.includes("owner")) {
+    return "Only the organization owner can do this.";
+  }
+  if (data?.requiredPermission) {
+    const schema = queryClient
+      .getQueriesData<CurrentMembership>({ queryKey: ["membership"] })
+      .map(([, membership]) => membership?.permissionSchema)
+      .find(Boolean);
+    return `You need ${describePermission(
+      data.requiredPermission,
+      schema
+    )} access. Ask your organization owner.`;
+  }
+  return data?.message || "You don't have permission to do this.";
+};
+
+// Several queries on one page can 403 at once; one toast id collapses them.
+const FORBIDDEN_TOAST_ID = "forbidden";
 
 type PageMeta = {
   title: string;
@@ -220,6 +253,15 @@ export const queryClient = new QueryClient({
       retry: 0
     }
   },
+  queryCache: new QueryCache({
+    onError: (error) => {
+      // Other query errors are shown inline by each page's error state; a
+      // 403 slipping past the page gate gets a toast here instead.
+      if (isForbidden(error)) {
+        toast.error(forbiddenMessage(error), { id: FORBIDDEN_TOAST_ID });
+      }
+    }
+  }),
   mutationCache: new MutationCache({
     onSuccess: (data: unknown, _v, _c, mutation) => {
       const apiData = data as ApiResponse;
@@ -232,6 +274,11 @@ export const queryClient = new QueryClient({
       // own onError toast (often a more specific message than the raw API
       // error) previously always got a second, generic toast from here too.
       if (mutation.meta?.showToast === false) return;
+
+      if (isForbidden(res)) {
+        toast.error(forbiddenMessage(res), { id: FORBIDDEN_TOAST_ID });
+        return;
+      }
 
       const result = res as unknown as ErrorData;
       if (result?.response?.data?.message) {
