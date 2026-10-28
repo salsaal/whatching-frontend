@@ -66,8 +66,10 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SettingsBackLink } from "@/components/settings/SettingsBackLink";
+import { useCurrentMembership } from "@/hooks/useCurrentMembership";
 import AppLayout from "@/layouts/AppLayout";
 import { useOrganizationStore } from "@/stores/organizationStore";
+import { PermissionGate } from "@/components/common/NoAccess";
 
 const initials = (name?: string) =>
   (name || "A")
@@ -521,12 +523,16 @@ function PermissionEditor({
   );
 }
 
-export default function AgentsSettingsPage() {
+function AgentsSettingsPageContent() {
   const activeOrganization = useOrganizationStore(
     (state) => state.activeOrganization
   );
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<TeamMember | null>(null);
+  // Adding, editing, and removing members are owner-only on the backend.
+  // While membership loads, `isOwner` is false, so the controls stay hidden
+  // rather than flashing in and back out.
+  const { isOwner, isLoading: isMembershipLoading } = useCurrentMembership();
   const [removeTarget, setRemoveTarget] = useState<TeamMember | null>(null);
 
   const { data, isLoading, isError, refetch } = useQuery({
@@ -608,18 +614,21 @@ export default function AgentsSettingsPage() {
               <p className="text-sm font-medium text-primary">Settings</p>
               <h1 className="font-heading text-3xl font-semibold">Agents</h1>
               <p className="mt-1 text-sm text-muted-foreground">
-                Add staff accounts so conversations can be assigned and handled
-                by your team.
+                {isOwner || isMembershipLoading
+                  ? "Add staff accounts so conversations can be assigned and handled by your team."
+                  : "Only the organization owner can add, edit or remove members."}
               </p>
             </div>
           </div>
-          <Button
-            onClick={() => setIsAddOpen(true)}
-            tooltip="Add a staff account to this organization"
-          >
-            <UserPlus className="size-4" />
-            Add agent
-          </Button>
+          {isOwner && (
+            <Button
+              onClick={() => setIsAddOpen(true)}
+              tooltip="Add a staff account to this organization"
+            >
+              <UserPlus className="size-4" />
+              Add agent
+            </Button>
+          )}
         </section>
 
         <section className="grid gap-4 md:grid-cols-3">
@@ -720,32 +729,34 @@ export default function AgentsSettingsPage() {
                     ) : null}
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  {member.role === "agent" && (
+                {isOwner && (
+                  <div className="flex gap-2">
+                    {member.role === "agent" && (
+                      <Button
+                        variant="outline"
+                        tooltip="Edit this agent's permissions"
+                        onClick={() => setEditTarget(member)}
+                      >
+                        <Pencil className="size-4" />
+                        Edit
+                      </Button>
+                    )}
                     <Button
                       variant="outline"
-                      tooltip="Edit this agent's permissions"
-                      onClick={() => setEditTarget(member)}
+                      className="text-destructive hover:text-destructive"
+                      disabled={member.role === "owner"}
+                      tooltip={
+                        member.role === "owner"
+                          ? "The organization owner cannot be removed"
+                          : "Remove this member's organization access"
+                      }
+                      onClick={() => setRemoveTarget(member)}
                     >
-                      <Pencil className="size-4" />
-                      Edit
+                      <Trash2 className="size-4" />
+                      Remove
                     </Button>
-                  )}
-                  <Button
-                    variant="outline"
-                    className="text-destructive hover:text-destructive"
-                    disabled={member.role === "owner"}
-                    tooltip={
-                      member.role === "owner"
-                        ? "The organization owner cannot be removed"
-                        : "Remove this member's organization access"
-                    }
-                    onClick={() => setRemoveTarget(member)}
-                  >
-                    <Trash2 className="size-4" />
-                    Remove
-                  </Button>
-                </div>
+                  </div>
+                )}
               </div>
             ))}
           </section>
@@ -828,5 +839,13 @@ export default function AgentsSettingsPage() {
         </AlertDialogContent>
       </AlertDialog>
     </AppLayout>
+  );
+}
+
+export default function AgentsSettingsPage() {
+  return (
+    <PermissionGate permission="team:view" feature="Agents & permissions">
+      <AgentsSettingsPageContent />
+    </PermissionGate>
   );
 }

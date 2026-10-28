@@ -72,8 +72,11 @@ import {
   SelectValue
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useCurrentMembership } from "@/hooks/useCurrentMembership";
 import AppLayout from "@/layouts/AppLayout";
+import { describePermission } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
+import { LockedButton, PermissionGate } from "@/components/common/NoAccess";
 
 const formatDate = (date?: string) =>
   date
@@ -123,8 +126,16 @@ const getContactSyncState = (number?: WhatsAppPhoneNumber) => {
   };
 };
 
-export default function ContactsPage() {
+function ContactsPageContent() {
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  // Viewing needs contacts:view (the page gate); changing contacts, tags, or
+  // syncing Business App contacts each need their own grant.
+  const { can, permissionSchema } = useCurrentMembership();
+  const canManageContacts = can("contacts:manage");
+  const canManageTags = can("tags:manage");
+  const canSyncContacts = canManageContacts && can("integrations:manage");
+  const lockedReason = (permission: string) =>
+    `You need ${describePermission(permission, permissionSchema)} access`;
   const [query, setQuery] = useState("");
   const [channel, setChannel] = useState<ContactChannel>("all");
   const [selectedSubscriber, setSelectedSubscriber] =
@@ -569,7 +580,7 @@ export default function ContactsPage() {
             </p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
-            {selectedIds.length > 0 && (
+            {selectedIds.length > 0 && canManageContacts && (
               <Button
                 variant="outline"
                 className="border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
@@ -579,7 +590,7 @@ export default function ContactsPage() {
                 Delete selected
               </Button>
             )}
-            {syncEligibleNumbers.length > 0 && (
+            {syncEligibleNumbers.length > 0 && canSyncContacts && (
               <div className="flex min-w-0 flex-col gap-2">
                 <div className="flex min-w-0 flex-wrap gap-2">
                   {syncEligibleNumbers.length > 1 && (
@@ -631,10 +642,20 @@ export default function ContactsPage() {
                 )}
               </div>
             )}
-            <Button variant="outline" onClick={() => setIsImportOpen(true)}>
-              <Upload className="size-4" />
-              Import bulk
-            </Button>
+            {canManageContacts ? (
+              <Button variant="outline" onClick={() => setIsImportOpen(true)}>
+                <Upload className="size-4" />
+                Import bulk
+              </Button>
+            ) : (
+              <LockedButton
+                variant="outline"
+                reason={lockedReason("contacts:manage")}
+              >
+                <Upload className="size-4" />
+                Import bulk
+              </LockedButton>
+            )}
             <Button
               variant="outline"
               isLoading={isExporting}
@@ -643,15 +664,22 @@ export default function ContactsPage() {
               <Download className="size-4" />
               Export CSV
             </Button>
-            <Button
-              onClick={() => {
-                setSelectedSubscriber(null);
-                setIsSubscriberModalOpen(true);
-              }}
-            >
-              <Plus className="size-4" />
-              Add subscriber
-            </Button>
+            {canManageContacts ? (
+              <Button
+                onClick={() => {
+                  setSelectedSubscriber(null);
+                  setIsSubscriberModalOpen(true);
+                }}
+              >
+                <Plus className="size-4" />
+                Add subscriber
+              </Button>
+            ) : (
+              <LockedButton reason={lockedReason("contacts:manage")}>
+                <Plus className="size-4" />
+                Add subscriber
+              </LockedButton>
+            )}
           </div>
         </section>
 
@@ -724,20 +752,24 @@ export default function ContactsPage() {
                       </span>
                     )}
                   </button>
-                  <button
-                    type="button"
-                    className="hidden shrink-0 cursor-pointer rounded-sm p-1 hover:text-primary group-hover:inline-flex"
-                    onClick={() => openEditTag(item)}
-                  >
-                    <Edit3 className="size-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    className="hidden shrink-0 cursor-pointer rounded-sm p-1 hover:text-destructive group-hover:inline-flex"
-                    onClick={() => setDeleteTagTarget(item)}
-                  >
-                    <Trash2 className="size-3.5" />
-                  </button>
+                  {canManageTags && (
+                    <>
+                      <button
+                        type="button"
+                        className="hidden shrink-0 cursor-pointer rounded-sm p-1 hover:text-primary group-hover:inline-flex"
+                        onClick={() => openEditTag(item)}
+                      >
+                        <Edit3 className="size-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        className="hidden shrink-0 cursor-pointer rounded-sm p-1 hover:text-destructive group-hover:inline-flex"
+                        onClick={() => setDeleteTagTarget(item)}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    </>
+                  )}
                 </div>
               ))
             ) : (
@@ -759,18 +791,30 @@ export default function ContactsPage() {
               />
               Select all visible
             </label>
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full sm:w-auto"
-              onClick={() => {
-                resetTagForm();
-                setIsTagsModalOpen(true);
-              }}
-            >
-              <Plus className="size-4" />
-              Add tag
-            </Button>
+            {canManageTags ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full sm:w-auto"
+                onClick={() => {
+                  resetTagForm();
+                  setIsTagsModalOpen(true);
+                }}
+              >
+                <Plus className="size-4" />
+                Add tag
+              </Button>
+            ) : (
+              <LockedButton
+                type="button"
+                variant="outline"
+                className="w-full sm:w-auto"
+                reason={lockedReason("tags:manage")}
+              >
+                <Plus className="size-4" />
+                Add tag
+              </LockedButton>
+            )}
           </div>
           <p className="mt-3 text-xs text-muted-foreground">
             Showing {filteredSubscribers.length} matching loaded contact
@@ -881,28 +925,30 @@ export default function ContactsPage() {
                         {formatDate(subscriber.lastInteraction)}
                       </td>
                       <td className="p-4">
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => {
-                              setSelectedSubscriber(subscriber);
-                              setIsSubscriberModalOpen(true);
-                            }}
-                          >
-                            <Edit3 className="size-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                            onClick={() =>
-                              setDeleteSubscriberTarget(subscriber)
-                            }
-                          >
-                            <Trash2 className="size-4" />
-                          </Button>
-                        </div>
+                        {canManageContacts && (
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => {
+                                setSelectedSubscriber(subscriber);
+                                setIsSubscriberModalOpen(true);
+                              }}
+                            >
+                              <Edit3 className="size-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                              onClick={() =>
+                                setDeleteSubscriberTarget(subscriber)
+                              }
+                            >
+                              <Trash2 className="size-4" />
+                            </Button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -1056,5 +1102,13 @@ export default function ContactsPage() {
         </AlertDialogContent>
       </AlertDialog>
     </AppLayout>
+  );
+}
+
+export default function ContactsPage() {
+  return (
+    <PermissionGate permission="contacts:view" feature="Contacts">
+      <ContactsPageContent />
+    </PermissionGate>
   );
 }

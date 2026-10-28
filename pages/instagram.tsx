@@ -160,6 +160,7 @@ import { Textarea } from "@/components/ui/textarea";
 import AppLayout from "@/layouts/AppLayout";
 import { cn } from "@/lib/utils";
 import { useOrganizationStore } from "@/stores/organizationStore";
+import { PermissionGate } from "@/components/common/NoAccess";
 
 type PageTab = "profile" | "canvas" | "rules" | "media" | "setup";
 type CanvasMode = "draft" | "published";
@@ -4218,6 +4219,14 @@ function InstagramMediaCard({ item }: { item: InstagramMedia }) {
   );
 }
 
-export default function InstagramIndexPage() {
+function InstagramIndexPageContent() {
   return <InstagramPage />;
+}
+
+export default function InstagramIndexPage() {
+  return (
+    <PermissionGate permission="instagram:manage" feature="Instagram">
+      <InstagramIndexPageContent />
+    </PermissionGate>
+  );
 }

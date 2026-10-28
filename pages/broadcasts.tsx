@@ -104,6 +104,7 @@ import {
 } from "@/lib/broadcastComponents";
 import { cn } from "@/lib/utils";
 import { useOrganizationStore } from "@/stores/organizationStore";
+import { PermissionGate } from "@/components/common/NoAccess";
 
 const formatDate = (date?: string | null) =>
   date
@@ -151,7 +152,7 @@ const statusClasses: Record<string, string> = {
   canceled: "bg-muted text-muted-foreground"
 };
 
-export default function BroadcastsPage() {
+function BroadcastsPageContent() {
   const router = useRouter();
   const broadcastLoadMoreRef = useRef<HTMLDivElement | null>(null);
   const subscriberLoadMoreRef = useRef<HTMLDivElement | null>(null);
@@ -1779,5 +1780,13 @@ export default function BroadcastsPage() {
         </AlertDialogContent>
       </AlertDialog>
     </AppLayout>
+  );
+}
+
+export default function BroadcastsPage() {
+  return (
+    <PermissionGate permission="broadcasts:manage" feature="Broadcasts">
+      <BroadcastsPageContent />
+    </PermissionGate>
   );
 }

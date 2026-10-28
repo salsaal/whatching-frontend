@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/table";
 import { getTemplateType, templateNeedsMedia } from "./templateUtils";
 import TemplateStatusBadge from "./TemplateStatusBadge";
+import { cn } from "@/lib/utils";
 
 interface TemplatesTableProps {
   templates: MessageTemplate[];
@@ -21,6 +22,8 @@ interface TemplatesTableProps {
   onEdit: (template: MessageTemplate) => void;
   onLinkMedia?: (template: MessageTemplate) => void;
   deletingId?: string | null;
+  // View-only members see the list but none of the edit/delete actions.
+  canManage?: boolean;
 }
 
 const formatDate = (date: string) =>
@@ -36,7 +39,8 @@ export default function TemplatesTable({
   onDelete,
   onEdit,
   onLinkMedia,
-  deletingId
+  deletingId,
+  canManage = true
 }: TemplatesTableProps) {
   if (isLoading) {
     return (
@@ -90,8 +94,13 @@ export default function TemplatesTable({
             return (
               <TableRow
                 key={template._id}
-                className="cursor-pointer border-0 hover:bg-muted/30 [&>td]:border-t [&>td]:border-muted"
-                onClick={() => onEdit(template)}
+                className={cn(
+                  "border-0 hover:bg-muted/30 [&>td]:border-t [&>td]:border-muted",
+                  canManage && "cursor-pointer"
+                )}
+                onClick={() => {
+                  if (canManage) onEdit(template);
+                }}
               >
                 <TableCell className="px-4 py-5 font-medium">
                   <span
@@ -125,59 +134,61 @@ export default function TemplatesTable({
                   {formatDate(template.createdAt)}
                 </TableCell>
                 <TableCell className="px-4 py-5">
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-9 text-muted-foreground"
-                      tooltip="Edit this template"
-                      disabled={template.status.toUpperCase() === "PENDING"}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onEdit(template);
-                      }}
-                    >
-                      <Edit3 className="size-4" />
-                    </Button>
-                    {templateNeedsMedia(template) &&
-                      template.source !== "draft" && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-9 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                          tooltip="Add the required media to this template"
-                          aria-label={`Add required media to ${template.name}`}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            onLinkMedia?.(template);
-                          }}
-                        >
-                          <ImagePlus className="size-4" />
-                          Add media
-                        </Button>
-                      )}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-9 text-muted-foreground hover:text-destructive"
-                      tooltip="Delete this template"
-                      disabled={deletingId === template.templateId}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onDelete(
-                          template.source === "draft"
-                            ? template._id
-                            : template.templateId
-                        );
-                      }}
-                    >
-                      {deletingId === template.templateId ? (
-                        <Loader2 className="size-4 animate-spin" />
-                      ) : (
-                        <Trash2 className="size-4" />
-                      )}
-                    </Button>
-                  </div>
+                  {canManage && (
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-9 text-muted-foreground"
+                        tooltip="Edit this template"
+                        disabled={template.status.toUpperCase() === "PENDING"}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onEdit(template);
+                        }}
+                      >
+                        <Edit3 className="size-4" />
+                      </Button>
+                      {templateNeedsMedia(template) &&
+                        template.source !== "draft" && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-9 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            tooltip="Add the required media to this template"
+                            aria-label={`Add required media to ${template.name}`}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              onLinkMedia?.(template);
+                            }}
+                          >
+                            <ImagePlus className="size-4" />
+                            Add media
+                          </Button>
+                        )}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-9 text-muted-foreground hover:text-destructive"
+                        tooltip="Delete this template"
+                        disabled={deletingId === template.templateId}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onDelete(
+                            template.source === "draft"
+                              ? template._id
+                              : template.templateId
+                          );
+                        }}
+                      >
+                        {deletingId === template.templateId ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="size-4" />
+                        )}
+                      </Button>
+                    </div>
+                  )}
                 </TableCell>
               </TableRow>
             );

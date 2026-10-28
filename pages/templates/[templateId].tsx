@@ -11,8 +11,9 @@ import TemplateCreateForm from "@/components/templates/TemplateCreateForm";
 import { mapDraftToTemplate } from "@/components/templates/templateUtils";
 import { DetailLoadingSkeleton } from "@/components/ui/loading-skeletons";
 import AppLayout from "@/layouts/AppLayout";
+import { PermissionGate } from "@/components/common/NoAccess";
 
-export default function TemplateDetailPage() {
+function TemplateDetailPageContent() {
   const router = useRouter();
   const templateId = router.query.templateId as string | undefined;
   const source = router.query.source === "draft" ? "draft" : "meta";
@@ -46,5 +47,13 @@ export default function TemplateDetailPage() {
         )}
       </div>
     </AppLayout>
+  );
+}
+
+export default function TemplateDetailPage() {
+  return (
+    <PermissionGate permission="templates:manage" feature="template editing">
+      <TemplateDetailPageContent />
+    </PermissionGate>
   );
 }

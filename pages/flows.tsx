@@ -63,6 +63,7 @@ import { CardGridLoadingSkeleton } from "@/components/ui/loading-skeletons";
 import { Switch } from "@/components/ui/switch";
 import AppLayout from "@/layouts/AppLayout";
 import { useOrganizationStore } from "@/stores/organizationStore";
+import { PermissionGate } from "@/components/common/NoAccess";
 
 const formatDate = (value?: string) =>
   value
@@ -74,7 +75,7 @@ const formatDate = (value?: string) =>
       }).format(new Date(value))
     : "-";
 
-export default function FlowsPage() {
+function FlowsPageContent() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const activeOrganization = useOrganizationStore(
@@ -513,5 +514,13 @@ export default function FlowsPage() {
         </AlertDialogContent>
       </AlertDialog>
     </AppLayout>
+  );
+}
+
+export default function FlowsPage() {
+  return (
+    <PermissionGate permission="flows:manage" feature="Flows">
+      <FlowsPageContent />
+    </PermissionGate>
   );
 }

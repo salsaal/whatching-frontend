@@ -7,12 +7,13 @@ import { useEffect } from "react";
 import CampaignsTab from "@/components/analytics/CampaignsTab";
 import AdAccountConnection from "@/components/whatsapp/AdAccountConnection";
 import AppLayout from "@/layouts/AppLayout";
+import { PermissionGate } from "@/components/common/NoAccess";
 
 const facebookGraphVersion =
   process.env.NEXT_PUBLIC_META_GRAPH_VERSION || "v20.0";
 const metaAppId = process.env.NEXT_PUBLIC_META_APP_ID;
 
-export default function CampaignsPage() {
+function CampaignsPageContent() {
   // AdAccountConnection's Meta login only needs window.FB to exist by the
   // time it's clicked -- no readiness state to track here, unlike the
   // embedded signup flow on the overview page.
@@ -64,5 +65,13 @@ export default function CampaignsPage() {
         <CampaignsTab />
       </div>
     </AppLayout>
+  );
+}
+
+export default function CampaignsPage() {
+  return (
+    <PermissionGate permission="contacts:view" feature="Campaigns">
+      <CampaignsPageContent />
+    </PermissionGate>
   );
 }

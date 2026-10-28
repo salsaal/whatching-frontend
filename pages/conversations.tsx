@@ -121,10 +121,12 @@ import { Separator } from "@/components/ui/separator";
 import { QueryErrorState } from "@/components/shared/QueryErrorState";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { useCurrentMembership } from "@/hooks/useCurrentMembership";
 import AppLayout from "@/layouts/AppLayout";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
 import { useOrganizationStore } from "@/stores/organizationStore";
+import { PermissionGate } from "@/components/common/NoAccess";
 
 const statusOptions: Array<{
   value: ConversationStatus | "all";
@@ -1082,7 +1084,7 @@ function ThreadSkeleton() {
   );
 }
 
-export default function ConversationsPage() {
+function ConversationsPageContent() {
   const queryClient = useQueryClient();
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const messageScrollRef = useRef<HTMLDivElement | null>(null);
@@ -1215,18 +1217,13 @@ export default function ConversationsPage() {
     enabled: Boolean(activeOrganization?._id),
     refetchOnMount: "always"
   });
-  // Mirrors the backend's hasMembershipPermission: owner/admin always pass,
-  // agents only with an explicit grant. Read from bootstrap rather than
-  // /team, which itself needs team:view that many agents don't have.
-  const currentChatUser = bootstrap?.data.currentUser;
-  const canDeleteConversation =
-    currentChatUser?.role === "owner" ||
-    currentChatUser?.role === "admin" ||
-    Boolean(
-      currentChatUser?.effectivePermissionGrants?.includes(
-        "conversations:manage_status"
-      )
-    );
+  // Each inbox action has its own grant; a view-only agent can read but not
+  // reply, assign, change status, or delete. All false while loading.
+  const { can } = useCurrentMembership();
+  const hasReplyAccess = can("conversations:reply");
+  const canAssign = can("conversations:assign");
+  const canManageStatus = can("conversations:manage_status");
+  const canDeleteConversation = canManageStatus;
 
   const { data: teamData } = useQuery({
     queryKey: ["team", activeOrganization?._id],
@@ -1884,10 +1881,11 @@ export default function ConversationsPage() {
     [templateTriggersData?.data?.triggerKeys]
   );
   const replyWindow = contextConversation?.replyWindow;
-  const canReply = Boolean(replyWindow?.isOpen && selectedId);
+  const canReply = Boolean(hasReplyAccess && replyWindow?.isOpen && selectedId);
   const isInstagramConversation = contextConversation?.channel === "instagram";
   const canSendMediaReply = canReply;
-  const canSendTemplate = contextConversation?.channel === "whatsapp";
+  const canSendTemplate =
+    contextConversation?.channel === "whatsapp" && can("templates:send");
   const templateRecipientPhone =
     templateMode === "contact"
       ? selectedContact?.phoneNumber || selectedContact?.waId || ""
@@ -2187,7 +2185,7 @@ export default function ConversationsPage() {
             </p>
             <Select
               value={contextConversation.assignedTo?._id || "unassigned"}
-              disabled={isAssigning}
+              disabled={isAssigning || !canAssign}
               onValueChange={(value) =>
                 assignMutate({
                   conversationId: contextConversation._id,
@@ -2195,7 +2193,14 @@ export default function ConversationsPage() {
                 })
               }
             >
-              <SelectTrigger className="w-full">
+              <SelectTrigger
+                className="w-full"
+                title={
+                  canAssign
+                    ? undefined
+                    : "You need Conversations → Assign conversations access"
+                }
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -2215,7 +2220,7 @@ export default function ConversationsPage() {
             </p>
             <Select
               value={contextConversation.status}
-              disabled={isUpdatingStatus}
+              disabled={isUpdatingStatus || !canManageStatus}
               onValueChange={(value) =>
                 updateStatusMutate({
                   conversationId: contextConversation._id,
@@ -2223,7 +2228,14 @@ export default function ConversationsPage() {
                 })
               }
             >
-              <SelectTrigger className="w-full">
+              <SelectTrigger
+                className="w-full"
+                title={
+                  canManageStatus
+                    ? undefined
+                    : "You need Conversations → Manage conversation status access"
+                }
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -2848,7 +2860,11 @@ export default function ConversationsPage() {
                       value={replyText}
                       disabled={!canReply || isSending}
                       placeholder={
-                        attachment ? "Add a caption..." : "Type a reply..."
+                        !hasReplyAccess
+                          ? "You need Conversations → View and reply access to reply."
+                          : attachment
+                            ? "Add a caption..."
+                            : "Type a reply..."
                       }
                       onChange={(event) => setReplyText(event.target.value)}
                       onKeyDown={handleReplyKeyDown}
@@ -3441,5 +3457,13 @@ function MediaLightbox({
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ConversationsPage() {
+  return (
+    <PermissionGate permission="conversations:view" feature="Conversations">
+      <ConversationsPageContent />
+    </PermissionGate>
   );
 }

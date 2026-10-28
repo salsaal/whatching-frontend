@@ -72,6 +72,7 @@ import {
 } from "@/lib/analyticsColors";
 import { cn } from "@/lib/utils";
 import { useOrganizationStore } from "@/stores/organizationStore";
+import { PermissionGate } from "@/components/common/NoAccess";
 
 const ranges: Array<{ value: AnalyticsRange; label: string }> = [
   { value: "7d", label: "7 days" },
@@ -81,7 +82,7 @@ const ranges: Array<{ value: AnalyticsRange; label: string }> = [
 
 const numberFormat = new Intl.NumberFormat("en-IN");
 
-export default function AnalyticsPage() {
+function AnalyticsPageContent() {
   const activeOrganization = useOrganizationStore(
     (state) => state.activeOrganization
   );
@@ -824,5 +825,13 @@ function TrendBadge({ trend }: { trend: AnalyticsTrend }) {
       <Icon className="size-3" />
       {label}
     </span>
+  );
+}
+
+export default function AnalyticsPage() {
+  return (
+    <PermissionGate permission="conversations:view" feature="Analytics">
+      <AnalyticsPageContent />
+    </PermissionGate>
   );
 }

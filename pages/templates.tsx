@@ -52,10 +52,13 @@ import {
 import { QueryErrorState } from "@/components/shared/QueryErrorState";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useCurrentMembership } from "@/hooks/useCurrentMembership";
 import AppLayout from "@/layouts/AppLayout";
+import { describePermission } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { useOrganizationStore } from "@/stores/organizationStore";
 import { useTemplateStore } from "@/stores/templateStore";
+import { LockedButton, PermissionGate } from "@/components/common/NoAccess";
 
 const statusIcons: Record<string, React.ElementType> = {
   ALL: CircleDashed,
@@ -118,8 +121,12 @@ const mergeTemplateLists = (
   return merged;
 };
 
-export default function TemplatesPage() {
+function TemplatesPageContent() {
   const router = useRouter();
+  // The list itself only needs templates:view; drafts, sync, create, edit,
+  // and delete all need templates:manage, so view-only members skip them.
+  const { can, permissionSchema } = useCurrentMembership();
+  const canManageTemplates = can("templates:manage");
   const queryClient = useQueryClient();
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<MessageTemplate | null>(
@@ -164,7 +171,7 @@ export default function TemplatesPage() {
   } = useQuery({
     queryKey: templateDraftsQueryKey,
     queryFn: getAllDraftTemplates,
-    enabled: Boolean(activeOrgId)
+    enabled: Boolean(activeOrgId) && canManageTemplates
   });
 
   const { mutate: syncTemplatesMutate, mutateAsync: syncTemplatesAsync } =
@@ -251,7 +258,7 @@ export default function TemplatesPage() {
   }, [activeOrgId, setTemplates]);
 
   useEffect(() => {
-    if (!activeOrgId) return;
+    if (!activeOrgId || !canManageTemplates) return;
     if (bootstrappedOrgIdRef.current === activeOrgId) return;
     bootstrappedOrgIdRef.current = activeOrgId;
 
@@ -265,6 +272,7 @@ export default function TemplatesPage() {
     });
   }, [
     activeOrgId,
+    canManageTemplates,
     refetchDrafts,
     refetchTemplates,
     syncTemplatesMutate,
@@ -311,6 +319,14 @@ export default function TemplatesPage() {
 
   const handleRefresh = async () => {
     setIsManualRefreshing(true);
+
+    if (!canManageTemplates) {
+      // Syncing from Meta needs templates:manage; view-only members just
+      // reload what's already stored.
+      await refetchTemplates();
+      setIsManualRefreshing(false);
+      return;
+    }
 
     try {
       await syncTemplatesAsync();
@@ -362,19 +378,32 @@ export default function TemplatesPage() {
               <RefreshCw className="size-4" />
               Refresh
             </Button>
-            <Button
-              asChild
-              className="whitespace-nowrap"
-              tooltip="Create a new WhatsApp message template"
-            >
-              <Link
-                href="/templates/create"
-                className="flex items-center gap-1"
+            {canManageTemplates ? (
+              <Button
+                asChild
+                className="whitespace-nowrap"
+                tooltip="Create a new WhatsApp message template"
+              >
+                <Link
+                  href="/templates/create"
+                  className="flex items-center gap-1"
+                >
+                  <FilePlus2 className="size-4" />
+                  Create template
+                </Link>
+              </Button>
+            ) : (
+              <LockedButton
+                className="whitespace-nowrap"
+                reason={`You need ${describePermission(
+                  "templates:manage",
+                  permissionSchema
+                )} access`}
               >
                 <FilePlus2 className="size-4" />
                 Create template
-              </Link>
-            </Button>
+              </LockedButton>
+            )}
           </div>
         </section>
 
@@ -430,6 +459,7 @@ export default function TemplatesPage() {
           templates={filteredTemplates}
           isLoading={isLoading}
           deletingId={deletingId}
+          canManage={canManageTemplates}
           onEdit={handleEdit}
           onLinkMedia={setMediaTarget}
           onDelete={(templateId) => {
@@ -483,5 +513,13 @@ export default function TemplatesPage() {
         }}
       />
     </AppLayout>
+  );
+}
+
+export default function TemplatesPage() {
+  return (
+    <PermissionGate permission="templates:view" feature="Templates">
+      <TemplatesPageContent />
+    </PermissionGate>
   );
 }

@@ -34,8 +34,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { QueryErrorState } from "@/components/shared/QueryErrorState";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useCurrentMembership } from "@/hooks/useCurrentMembership";
 import AppLayout from "@/layouts/AppLayout";
+import { describePermission } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
+import { LockedButton, PermissionGate } from "@/components/common/NoAccess";
 
 const mediaTabs: Array<{
   value: MediaFileType;
@@ -75,7 +78,9 @@ const getUploadFileType = (file: File): MediaFileType => {
 
 const allowedImageTypes = new Set(["image/jpeg", "image/jpg", "image/png"]);
 
-export default function MediaPage() {
+function MediaPageContent() {
+  const { can, permissionSchema } = useCurrentMembership();
+  const canManageMedia = can("media:manage");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [activeTab, setActiveTab] = useState<MediaFileType>("image");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -230,7 +235,7 @@ export default function MediaPage() {
           </div>
 
           <div className="flex flex-col gap-2 sm:flex-row">
-            {selectedIds.length > 0 && (
+            {selectedIds.length > 0 && canManageMedia && (
               <Button
                 variant="outline"
                 className="border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
@@ -240,13 +245,25 @@ export default function MediaPage() {
                 Delete selected
               </Button>
             )}
-            <Button
-              onClick={() => fileInputRef.current?.click()}
-              isLoading={isUploading}
-            >
-              <Upload className="size-4" />
-              Upload media
-            </Button>
+            {canManageMedia ? (
+              <Button
+                onClick={() => fileInputRef.current?.click()}
+                isLoading={isUploading}
+              >
+                <Upload className="size-4" />
+                Upload media
+              </Button>
+            ) : (
+              <LockedButton
+                reason={`You need ${describePermission(
+                  "media:manage",
+                  permissionSchema
+                )} access`}
+              >
+                <Upload className="size-4" />
+                Upload media
+              </LockedButton>
+            )}
             <input
               ref={fileInputRef}
               type="file"
@@ -402,5 +419,13 @@ export default function MediaPage() {
         </AlertDialogContent>
       </AlertDialog>
     </AppLayout>
+  );
+}
+
+export default function MediaPage() {
+  return (
+    <PermissionGate permission="media:view" feature="Media">
+      <MediaPageContent />
+    </PermissionGate>
   );
 }

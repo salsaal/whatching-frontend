@@ -50,6 +50,7 @@ import {
 } from "@/components/ui/table";
 import AppLayout from "@/layouts/AppLayout";
 import { cn } from "@/lib/utils";
+import { PermissionGate } from "@/components/common/NoAccess";
 
 const formatDate = (date?: string | null) =>
   date
@@ -151,7 +152,7 @@ const getTimelineRows = (broadcast: {
 
 const RECIPIENTS_PAGE_SIZE = 50;
 
-export default function BroadcastMetricsPage() {
+function BroadcastMetricsPageContent() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const recipientsLoadMoreRef = useRef<HTMLDivElement | null>(null);
@@ -593,5 +594,13 @@ export default function BroadcastMetricsPage() {
         )}
       </div>
     </AppLayout>
+  );
+}
+
+export default function BroadcastMetricsPage() {
+  return (
+    <PermissionGate permission="broadcasts:manage" feature="Broadcasts">
+      <BroadcastMetricsPageContent />
+    </PermissionGate>
   );
 }

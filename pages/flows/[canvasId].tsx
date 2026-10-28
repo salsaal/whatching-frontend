@@ -124,6 +124,7 @@ import {
   slugifyTrigger
 } from "@/lib/flowBuilder";
 import { useOrganizationStore } from "@/stores/organizationStore";
+import { PermissionGate } from "@/components/common/NoAccess";
 
 type MediaPickerTarget =
   | { kind: "node"; nodeId?: string }
@@ -4304,10 +4305,18 @@ function Field({
   );
 }
 
-export default function FlowsPage() {
+function FlowsPageContent() {
   return (
     <ReactFlowProvider>
       <FlowsBuilder />
     </ReactFlowProvider>
+  );
+}
+
+export default function FlowsPage() {
+  return (
+    <PermissionGate permission="flows:manage" feature="Flows">
+      <FlowsPageContent />
+    </PermissionGate>
   );
 }

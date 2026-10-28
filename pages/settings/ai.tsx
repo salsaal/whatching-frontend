@@ -7,8 +7,9 @@ import { AiUsageTopUp } from "@/components/settings/AiUsageTopUp";
 import { BotStatusToggle } from "@/components/settings/BotStatusToggle";
 import { KnowledgeBaseSection } from "@/components/settings/KnowledgeBaseSection";
 import AppLayout from "@/layouts/AppLayout";
+import { PermissionGate } from "@/components/common/NoAccess";
 
-export default function AiSettingsPage() {
+function AiSettingsPageContent() {
   return (
     <AppLayout>
       <div className="mx-auto max-w-7xl space-y-4">
@@ -58,5 +59,13 @@ export default function AiSettingsPage() {
         </div>
       </div>
     </AppLayout>
+  );
+}
+
+export default function AiSettingsPage() {
+  return (
+    <PermissionGate permission="flows:manage" feature="the AI Assistant">
+      <AiSettingsPageContent />
+    </PermissionGate>
   );
 }
