@@ -9,9 +9,7 @@ describe("hasMembershipPermission", () => {
     expect(hasMembershipPermission("owner", [], "broadcasts:manage")).toBe(
       true
     );
-    expect(hasMembershipPermission("admin", undefined, "team:view")).toBe(
-      true
-    );
+    expect(hasMembershipPermission("admin", undefined, "team:view")).toBe(true);
   });
 
   it("only lets agents through with the exact grant", () => {
@@ -32,9 +30,7 @@ describe("hasMembershipPermission", () => {
   });
 
   it("denies when the role is unknown", () => {
-    expect(hasMembershipPermission(undefined, [], "contacts:view")).toBe(
-      false
-    );
+    expect(hasMembershipPermission(undefined, [], "contacts:view")).toBe(false);
     expect(hasMembershipPermission(null, undefined, "contacts:view")).toBe(
       false
     );
