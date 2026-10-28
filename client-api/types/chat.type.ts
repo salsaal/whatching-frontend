@@ -1,3 +1,4 @@
+import { PermissionGroup } from "./organizations.type";
 import { BotSettings } from "./bot.type";
 
 export type ConversationStatus = "open" | "pending" | "resolved";
@@ -183,6 +184,7 @@ export interface ChatBootstrapResponse {
       unread: number;
     };
     currentUser: ChatCurrentUser;
+    permissionSchema?: PermissionGroup[];
     messaging: {
       metaStatus: string;
       phoneNumberId: string | null;

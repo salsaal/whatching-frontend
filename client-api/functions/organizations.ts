@@ -1,6 +1,9 @@
+import { isAxiosError } from "axios";
+
 import api from "../axiosInstance";
 import { ORGANIZATION_ENDPOINTS } from "../endpoints";
 import { ApiResponse } from "../types/api";
+import { getChatBootstrap } from "./chat";
 import {
   AdAccountsResponse,
   AdAccountSignupCompletePayload,
@@ -38,6 +41,7 @@ import {
   SyncSubscriptionResponse,
   SubscribeResponse,
   TeamResponse,
+  CurrentMembership,
   WhatsAppPhoneNumberResponse,
   WhatsAppPhoneNumbersResponse,
   WhatsAppOutboundReadinessResponse
@@ -262,6 +266,74 @@ export const replaceWhatsAppPhoneNumber = async (
 export const getTeam = async (): Promise<TeamResponse> => {
   const res = await api.get<TeamResponse>(ORGANIZATION_ENDPOINTS.TEAM);
   return res.data;
+};
+
+const statusOf = (error: unknown) =>
+  isAxiosError(error) ? error.response?.status : undefined;
+
+// Resolves the caller's own role and grants. GET /me/membership is the source
+// of truth; until the backend ships it (404), fall back to the chat bootstrap
+// (needs conversations:view) and then the team list (needs team:view), which
+// together cover nearly every member. If none of them are reachable the
+// member is treated as having no grants -- gated controls stay hidden and
+// the backend remains the real enforcement either way.
+export const getCurrentMembership = async (
+  userId?: string
+): Promise<CurrentMembership> => {
+  try {
+    const res = await api.get<{
+      data?: Record<string, unknown> & {
+        membership?: Record<string, unknown>;
+      };
+    }>(ORGANIZATION_ENDPOINTS.MY_MEMBERSHIP);
+    const payload = res.data?.data ?? {};
+    const membership = (payload.membership ?? payload) as {
+      role?: string | null;
+      effectivePermissionGrants?: string[];
+      permissionGrants?: string[];
+      permissionSchema?: CurrentMembership["permissionSchema"];
+    };
+    return {
+      role: membership.role ?? null,
+      effectivePermissionGrants:
+        membership.effectivePermissionGrants ??
+        membership.permissionGrants ??
+        [],
+      permissionSchema:
+        (payload.permissionSchema as CurrentMembership["permissionSchema"]) ??
+        membership.permissionSchema
+    };
+  } catch (error) {
+    if (statusOf(error) !== 404) throw error;
+  }
+
+  try {
+    const bootstrap = await getChatBootstrap();
+    const currentUser = bootstrap.data.currentUser;
+    return {
+      role: currentUser.role ?? null,
+      effectivePermissionGrants: currentUser.effectivePermissionGrants ?? [],
+      permissionSchema: bootstrap.data.permissionSchema
+    };
+  } catch (error) {
+    if (statusOf(error) !== 403) throw error;
+  }
+
+  try {
+    const team = await getTeam();
+    const membership = team.data.team.find(
+      (member) => member.userId._id === userId
+    );
+    return {
+      role: membership?.role ?? null,
+      effectivePermissionGrants: membership?.effectivePermissionGrants ?? [],
+      permissionSchema: team.data.permissionSchema
+    };
+  } catch (error) {
+    if (statusOf(error) !== 403) throw error;
+  }
+
+  return { role: null, effectivePermissionGrants: [] };
 };
 
 export const checkAgentEmail = async (

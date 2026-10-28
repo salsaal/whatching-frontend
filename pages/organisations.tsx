@@ -12,7 +12,7 @@ import {
 import Image from "next/image";
 import { useRouter } from "next/router";
 import React, { useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import {
@@ -89,8 +89,10 @@ function Organisations() {
     }
   });
 
+  const queryClient = useQueryClient();
   const handleView = (organization: Organization) => {
     setActiveOrganization(organization);
+    queryClient.invalidateQueries({ queryKey: ["membership"] });
     router.push("/overview");
   };
 

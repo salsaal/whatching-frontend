@@ -25,7 +25,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import React, { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   getIntegrationStatus,
@@ -110,9 +110,11 @@ export default function AppLayout({
 
   const activeOrgId = activeOrganization?._id;
 
+  const queryClient = useQueryClient();
   const handleSwitchOrganization = (organization: Organization) => {
     if (organization._id === activeOrgId) return;
     setActiveOrganization(organization);
+    queryClient.invalidateQueries({ queryKey: ["membership"] });
     router.push("/overview");
   };
 

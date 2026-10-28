@@ -465,6 +465,13 @@ export interface PermissionGroup {
   capabilities?: PermissionCapability[];
 }
 
+// The caller's own role and effective grants in the active organization.
+export interface CurrentMembership {
+  role: "owner" | "admin" | "agent" | string | null;
+  effectivePermissionGrants: string[];
+  permissionSchema?: PermissionGroup[];
+}
+
 export interface TeamResponse {
   status: string;
   results: number;
