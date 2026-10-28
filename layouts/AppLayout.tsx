@@ -59,6 +59,7 @@ import {
   getDaysUntil
 } from "@/lib/billing";
 import { cn } from "@/lib/utils";
+import { useCurrentMembership } from "@/hooks/useCurrentMembership";
 import { useLogout } from "@/hooks/useLogout";
 import { Organization, useOrganizationStore } from "@/stores/organizationStore";
 
@@ -126,16 +127,26 @@ export default function AppLayout({
     refetchOnWindowFocus: true
   });
 
+  // The layout renders on every page, so anything it fetches must be gated
+  // by permission -- otherwise a member without integrations:view gets a
+  // 403 on every single page. can() is false while membership loads, so the
+  // request also waits until the answer is known.
+  const { can, isOwner } = useCurrentMembership();
+  const canViewIntegration = can("integrations:view");
   const { data: integrationData, isLoading: isIntegrationLoading } = useQuery({
     queryKey: ["integration-status", activeOrgId],
     queryFn: getIntegrationStatus,
-    enabled: Boolean(activeOrgId),
+    enabled: Boolean(activeOrgId) && canViewIntegration,
     refetchOnMount: "always",
     refetchOnWindowFocus: true
   });
 
+  // Without integrations:view, GET /organizations (no permission needed) is
+  // the only source; skip the persisted integration so it can't be stale.
   const status =
-    integration?.state || activeOrganization?.metaConfig?.status || "pending";
+    (canViewIntegration ? integration?.state : undefined) ||
+    activeOrganization?.metaConfig?.status ||
+    "pending";
   const isReady = status === "ready";
   const currentPlan = activeOrganization?.planTier || "none";
   const isNoPlan = currentPlan === "none";
@@ -439,7 +450,7 @@ export default function AppLayout({
                     WhatsApp Business API:{" "}
                     <span className="capitalize">{status}</span>
                   </span>
-                  {!isReady && (
+                  {!isReady && isOwner && (
                     <Button
                       size="sm"
                       onClick={() => router.push("/overview?connectMeta=1")}

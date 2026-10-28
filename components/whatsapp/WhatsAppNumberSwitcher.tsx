@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue
 } from "@/components/ui/select";
+import { useCurrentMembership } from "@/hooks/useCurrentMembership";
 import { cn } from "@/lib/utils";
 import { useOrganizationStore } from "@/stores/organizationStore";
 
@@ -41,10 +42,14 @@ export function useWhatsAppNumberContext() {
     (state) => state.setSelectedWhatsAppPhoneNumber
   );
   const organizationId = activeOrganization?._id || "";
+  // Used by the layout on every page, so the request must respect the
+  // permission (and wait for membership to load, when can() is false).
+  const { can } = useCurrentMembership();
+  const canViewNumbers = can("whatsapp_numbers:view");
   const query = useQuery({
     queryKey: ["whatsapp-phone-numbers", organizationId],
     queryFn: getWhatsAppPhoneNumbers,
-    enabled: Boolean(organizationId),
+    enabled: Boolean(organizationId) && canViewNumbers,
     refetchOnMount: "always",
     refetchOnWindowFocus: true
   });
@@ -52,8 +57,11 @@ export function useWhatsAppNumberContext() {
     () => query.data?.data.phoneNumbers || [],
     [query.data?.data.phoneNumbers]
   );
-  const selectedPhoneNumberId =
-    selectedByOrg[organizationId] || ALL_WHATSAPP_NUMBERS;
+  // Without the permission there's no list to pick from, so everything
+  // falls back to "all numbers" rather than a stale saved selection.
+  const selectedPhoneNumberId = canViewNumbers
+    ? selectedByOrg[organizationId] || ALL_WHATSAPP_NUMBERS
+    : ALL_WHATSAPP_NUMBERS;
   const selectedNumber =
     numbers.find((number) => number.phoneNumberId === selectedPhoneNumberId) ||
     null;
@@ -85,6 +93,7 @@ export function useWhatsAppNumberContext() {
 
   return {
     ...query,
+    canViewNumbers,
     summary: query.data?.data,
     numbers,
     selectedPhoneNumberId,
@@ -114,10 +123,13 @@ export function WhatsAppNumberSwitcher({
     numbers,
     selectedPhoneNumberId,
     setSelectedPhoneNumberId,
-    isLoading
+    isLoading,
+    canViewNumbers
   } = useWhatsAppNumberContext();
   const currentValue = value ?? selectedPhoneNumberId;
   const usableNumbers = numbers.filter(isUsableWhatsAppNumber);
+
+  if (!canViewNumbers) return null;
 
   return (
     <Select

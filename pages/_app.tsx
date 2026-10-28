@@ -5,7 +5,6 @@ import { useRouter } from "next/router";
 
 import {
   MutationCache,
-  QueryCache,
   QueryClient,
   QueryClientProvider,
   QueryKey
@@ -64,7 +63,9 @@ const forbiddenMessage = (error: unknown) => {
   return data?.message || "You don't have permission to do this.";
 };
 
-// Several queries on one page can 403 at once; one toast id collapses them.
+// Only mutations (user actions) toast on 403. A background query that 403s
+// just leaves its widget hidden -- otherwise one stray ungated query would
+// toast on every page. One id still collapses rapid repeat clicks.
 const FORBIDDEN_TOAST_ID = "forbidden";
 
 type PageMeta = {
@@ -253,15 +254,6 @@ export const queryClient = new QueryClient({
       retry: 0
     }
   },
-  queryCache: new QueryCache({
-    onError: (error) => {
-      // Other query errors are shown inline by each page's error state; a
-      // 403 slipping past the page gate gets a toast here instead.
-      if (isForbidden(error)) {
-        toast.error(forbiddenMessage(error), { id: FORBIDDEN_TOAST_ID });
-      }
-    }
-  }),
   mutationCache: new MutationCache({
     onSuccess: (data: unknown, _v, _c, mutation) => {
       const apiData = data as ApiResponse;
