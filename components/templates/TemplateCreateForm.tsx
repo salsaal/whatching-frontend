@@ -100,6 +100,16 @@ const templateSupportsFooter = (
   templateType !== "CAROUSEL" &&
   templateType !== "LIMITED_TIME_OFFER";
 
+// These types are distinct Meta template structures, not just a different
+// header -- an edit can't move a submitted template into or out of them.
+const STRUCTURAL_TEMPLATE_TYPES: TemplateCreationType[] = [
+  "CAROUSEL",
+  "LIMITED_TIME_OFFER",
+  "LOCATION"
+];
+const isStructuralTemplateType = (type: TemplateCreationType) =>
+  STRUCTURAL_TEMPLATE_TYPES.includes(type);
+
 const categories: TemplateCategory[] = [
   "MARKETING",
   "UTILITY",
@@ -376,7 +386,14 @@ export default function TemplateCreateForm({
     const headerHandle = header?.example?.header_handle?.[0] || "";
     setSelectedMediaUrl(/^https?:\/\//i.test(headerHandle) ? headerHandle : "");
     setBodyText(bodyTextValue);
-    setFooterText(footer?.text || "");
+    // Prefill the default footer when the type allows one, the same as a new
+    // template. The user can still clear it before saving.
+    setFooterText(
+      footer?.text ||
+        (templateSupportsFooter(inferredType, initialTemplate.category)
+          ? DEFAULT_FOOTER_TEXT
+          : "")
+    );
     setButtons(
       groupTemplateButtons(
         (buttonsComponent?.buttons || []).map((button) =>
@@ -873,9 +890,10 @@ export default function TemplateCreateForm({
 
         {isMetaTemplateEdit && !isPendingEdit && (
           <div className="rounded-lg bg-muted/60 p-4 text-sm text-muted-foreground shadow-xs">
-            Category, language, name, and button structure lock after submission
-            to Meta — only text content can be edited. To change these, delete
-            and recreate the template.
+            Name, language, and category can&apos;t change after submission.
+            Buttons, header, body, and footer can be edited. Meta re-reviews
+            every edit, and an approved template can be edited once per 24
+            hours (10 times per 30 days).
           </div>
         )}
 
@@ -946,9 +964,18 @@ export default function TemplateCreateForm({
             <Select
               value={templateType}
               onValueChange={(value) => {
-                if (isMetaTemplateEdit) return;
-
                 const nextType = value as TemplateCreationType;
+                // A submitted template can switch between header types (Text,
+                // Image, Video, Document) but never into or out of a
+                // structurally different type.
+                if (
+                  isMetaTemplateEdit &&
+                  (isStructuralTemplateType(templateType) ||
+                    isStructuralTemplateType(nextType))
+                ) {
+                  return;
+                }
+
                 setTemplateType(nextType);
                 if (
                   nextType === "CAROUSEL" &&
@@ -983,14 +1010,23 @@ export default function TemplateCreateForm({
                   setSelectedMediaUrl("");
                 }
               }}
-              disabled={isMetaTemplateEdit}
+              disabled={
+                !canEditFields ||
+                (isMetaTemplateEdit && isStructuralTemplateType(templateType))
+              }
             >
               <SelectTrigger className="mt-2 h-11 w-full border-0 bg-muted/70 shadow-none">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 {templateTypes.map((item) => (
-                  <SelectItem key={item.value} value={item.value}>
+                  <SelectItem
+                    key={item.value}
+                    value={item.value}
+                    disabled={
+                      isMetaTemplateEdit && isStructuralTemplateType(item.value)
+                    }
+                  >
                     {item.label}
                   </SelectItem>
                 ))}
@@ -1316,7 +1352,6 @@ export default function TemplateCreateForm({
                   type="button"
                   variant="outline"
                   disabled={
-                    isMetaTemplateEdit ||
                     !canEditFields ||
                     totalButtonsLeft <= 0 ||
                     (option.value === "URL" && urlButtonsLeft <= 0) ||
@@ -1359,7 +1394,7 @@ export default function TemplateCreateForm({
                     onValueChange={(value) =>
                       updateButtonType(index, value as TemplateButtonType)
                     }
-                    disabled={isMetaTemplateEdit || !canEditFields}
+                    disabled={!canEditFields}
                   >
                     <SelectTrigger className="h-10 w-full border-0 bg-white shadow-none">
                       <SelectValue />
@@ -1428,7 +1463,7 @@ export default function TemplateCreateForm({
                     size="icon"
                     className="size-10 text-muted-foreground hover:text-destructive"
                     onClick={() => removeButton(index)}
-                    disabled={isMetaTemplateEdit || !canEditFields}
+                    disabled={!canEditFields}
                   >
                     <Trash2 className="size-4" />
                   </Button>
