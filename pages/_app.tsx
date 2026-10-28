@@ -128,15 +128,30 @@ const pageMeta: Record<string, PageMeta> = {
     description:
       "Handle WhatsApp and Instagram conversations with bot, agent, status, and queue visibility."
   },
-  "/flows": {
-    title: "WhatsApp Flows | Whatching",
+  "/bot/flows": {
+    title: "Bot Flows | Whatching",
     description:
       "Build, publish, and assign visual WhatsApp automation flows by organization or phone number."
   },
-  "/flows/[canvasId]": {
+  "/bot/flows/[canvasId]": {
     title: "Flow Builder | Whatching",
     description:
       "Edit WhatsApp automation blocks, routing, follow-ups, media, locations, and publish checks."
+  },
+  "/bot/ai": {
+    title: "Bot AI | Whatching",
+    description:
+      "Turn AI fallback replies on or off and track AI token usage and top-ups."
+  },
+  "/bot/knowledge": {
+    title: "Bot Knowledge | Whatching",
+    description:
+      "Manage the knowledge base the Whatching AI agent answers from."
+  },
+  "/bot/settings": {
+    title: "Bot Settings | Whatching",
+    description:
+      "Turn the WhatsApp bot on or off, configure spam protection, and manage menu, opt-in, and opt-out keywords."
   },
   "/instagram": {
     title: "Instagram Automation | Whatching",
@@ -204,11 +219,6 @@ const pageMeta: Record<string, PageMeta> = {
     title: "Help and Support | Whatching",
     description:
       "Create support tickets and attach screenshots for help from the Whatching team."
-  },
-  "/settings/ai": {
-    title: "AI Assistant | Whatching",
-    description:
-      "Manage bot status, AI fallback, token usage, top-ups, and the knowledge base for the Whatching AI agent."
   },
   "/templates": {
     title: "Templates | Whatching",

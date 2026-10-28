@@ -486,7 +486,7 @@ export default function OverviewPage() {
           ? `${formatCompactNumber(aiTokenUsage.used)} / ${formatCompactNumber(aiTokenIncludedLimit)}`
           : formatCompactNumber(activeOrganization?.usage?.aiTokensUsed || 0),
       icon: Bot,
-      href: isOwner ? "/settings/ai#usage" : undefined,
+      href: isOwner ? "/bot/ai#usage" : undefined,
       tooltip: isOwner
         ? "Tokens used this cycle out of your plan's included allowance."
         : undefined

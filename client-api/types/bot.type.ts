@@ -135,6 +135,7 @@ export interface BotSettings {
   systemPrompt?: string;
   defaultTriggerKey?: string;
   greetingKeywords?: string[];
+  optInKeywords?: string[];
   optOutKeywords?: string[];
   escalationTriggerIds?: string[];
   autoTimeoutMinutes?: number;
@@ -150,6 +151,7 @@ export type BotSettingsPatch = Partial<
     | "isBotEnabled"
     | "isAiEnabled"
     | "greetingKeywords"
+    | "optInKeywords"
     | "optOutKeywords"
     | "escalationTriggerIds"
     | "spamProtectionEnabled"
@@ -202,7 +204,12 @@ export interface BotStatus {
   };
 }
 
-export type BotSettingsResponse = ApiResponse<{ settings: BotSettings }>;
+// planAllowed is false when the plan lacks the chatbot builder; the
+// backend then rejects every settings PATCH.
+export type BotSettingsResponse = ApiResponse<{
+  settings: BotSettings;
+  planAllowed?: boolean;
+}>;
 export type BotCanvasResponse = ApiResponse<{
   canvasId?: string;
   canvas?: BotCanvasRecord & {

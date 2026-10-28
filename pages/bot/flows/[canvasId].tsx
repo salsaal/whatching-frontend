@@ -44,6 +44,7 @@ import {
   XCircle
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import { useRouter } from "next/router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -2014,13 +2015,15 @@ function FlowsBuilder() {
           <div>
             <div className="flex items-center gap-2">
               <Button
-                type="button"
+                asChild
                 variant="ghost"
-                size="icon"
-                className="size-9 cursor-pointer"
-                onClick={() => router.push("/flows")}
+                size="sm"
+                className="cursor-pointer"
               >
-                <ArrowLeft className="size-4" />
+                <Link href="/bot/flows" className="flex items-center gap-1.5">
+                  <ArrowLeft className="size-4" />
+                  Back to flows
+                </Link>
               </Button>
               <Bot className="size-5 text-primary" />
               <InlineEditableTitle

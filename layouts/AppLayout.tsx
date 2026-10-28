@@ -17,7 +17,6 @@ import {
   Settings,
   Target,
   UserRound,
-  Workflow,
   X,
   Zap
 } from "lucide-react";
@@ -78,8 +77,7 @@ const navigation = [
   { label: "Analytics", href: "/analytics", icon: BarChart3 },
   { label: "Templates", href: "/templates", icon: FileText },
   { label: "Broadcasts", href: "/broadcasts", icon: Megaphone },
-  { label: "Flows", href: "/flows", icon: Workflow },
-  { label: "AI Assistant", href: "/settings/ai", icon: Bot },
+  { label: "Bot", href: "/bot", icon: Bot },
   { label: "Instagram", href: "/instagram", icon: Instagram },
   { label: "Conversations", href: "/conversations", icon: MessageCircle },
   { label: "Contacts", href: "/contacts", icon: Contact },
@@ -236,16 +234,11 @@ export default function AppLayout({
     <nav className={cn("space-y-1", mobile ? "px-0" : "px-3 pt-8 pb-4")}>
       {navigation.map((item) => {
         const Icon = item.icon;
+        // Active on its own path and anything beneath it, so Bot covers
+        // every /bot/* tab and Settings covers its sub-pages.
         const isActive =
           router.pathname === item.href ||
-          (item.href === "/settings" &&
-            router.pathname.startsWith("/settings/") &&
-            router.pathname !== "/settings/help" &&
-            router.pathname !== "/settings/ai" &&
-            !router.pathname.startsWith("/settings/ai/")) ||
-          (item.href !== "/overview" &&
-            item.href !== "/settings" &&
-            router.pathname.startsWith(`${item.href}/`));
+          router.pathname.startsWith(`${item.href}/`);
 
         return (
           <Link

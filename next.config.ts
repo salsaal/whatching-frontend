@@ -24,7 +24,21 @@ const nextConfig: NextConfig = {
     removeConsole: false
     // removeConsole: process.env.NODE_ENV === "production"
   },
-  typescript: { ignoreBuildErrors: false }
+  typescript: { ignoreBuildErrors: false },
+  async redirects() {
+    return [
+      // /bot has no page of its own; Flows is the default tab.
+      { source: "/bot", destination: "/bot/flows", permanent: false },
+      // Flows moved under the Bot section. /settings/ai is handled by its
+      // own page, since its #hash target never reaches the server.
+      { source: "/flows", destination: "/bot/flows", permanent: true },
+      {
+        source: "/flows/:canvasId",
+        destination: "/bot/flows/:canvasId",
+        permanent: true
+      }
+    ];
+  }
 };
 
 export default nextConfig;

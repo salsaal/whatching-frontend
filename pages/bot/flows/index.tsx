@@ -61,9 +61,8 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { QueryErrorState } from "@/components/shared/QueryErrorState";
 import { CardGridLoadingSkeleton } from "@/components/ui/loading-skeletons";
 import { Switch } from "@/components/ui/switch";
-import AppLayout from "@/layouts/AppLayout";
 import { useOrganizationStore } from "@/stores/organizationStore";
-import { PermissionGate } from "@/components/common/NoAccess";
+import BotLayout from "@/components/bot/BotLayout";
 
 const formatDate = (value?: string) =>
   value
@@ -133,7 +132,7 @@ function FlowsPageContent() {
       toast.success("Flow created.");
       await invalidate();
       const canvasId = response.data?.canvas?._id || response.data?.canvasId;
-      if (canvasId) router.push(`/flows/${canvasId}`);
+      if (canvasId) router.push(`/bot/flows/${canvasId}`);
     },
     onError: handleError
   });
@@ -184,25 +183,14 @@ function FlowsPageContent() {
   });
 
   return (
-    <AppLayout>
-      <div className="mx-auto max-w-7xl space-y-6">
+    <>
+      <div className="space-y-6">
         <section className="rounded-lg bg-white p-5 shadow-xs">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex size-11 items-center justify-center rounded-sm bg-primary/10 text-primary">
-                <Workflow className="size-5" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-primary">
-                  WhatsApp automation
-                </p>
-                <h1 className="font-heading text-3xl font-semibold">Flows</h1>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Publish reusable canvases, choose the organisation fallback,
-                  and assign a different published flow to each WhatsApp number.
-                </p>
-              </div>
-            </div>
+            <p className="text-sm text-muted-foreground">
+              Publish reusable canvases, choose the organisation fallback, and
+              assign a different published flow to each WhatsApp number.
+            </p>
             <div className="flex flex-wrap gap-2">
               <Button
                 type="button"
@@ -234,29 +222,6 @@ function FlowsPageContent() {
           </div>
         </section>
 
-        <section className="flex items-center justify-between rounded-lg bg-white p-4 shadow-xs">
-          <div className="flex items-center gap-3">
-            <div className="flex size-9 items-center justify-center rounded-sm bg-primary/10 text-primary">
-              <Bot className="size-4" />
-            </div>
-            <div>
-              <p className="font-medium">Bot &amp; AI fallback</p>
-              <p className="text-xs text-muted-foreground">
-                Turn automation on/off, manage AI fallback, and the knowledge
-                base it answers from.
-              </p>
-            </div>
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="shrink-0 cursor-pointer"
-            onClick={() => router.push("/settings/ai")}
-          >
-            Manage in Settings
-          </Button>
-        </section>
 
         {isError && (
           <QueryErrorState message="Flows could not be loaded for this organisation." />
@@ -389,7 +354,7 @@ function FlowsPageContent() {
                       <Button
                         type="button"
                         className="cursor-pointer"
-                        onClick={() => router.push(`/flows/${canvas._id}`)}
+                        onClick={() => router.push(`/bot/flows/${canvas._id}`)}
                       >
                         <Edit3 className="size-4" />
                         Edit
@@ -513,14 +478,14 @@ function FlowsPageContent() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </AppLayout>
+    </>
   );
 }
 
-export default function FlowsPage() {
+export default function BotFlowsPage() {
   return (
-    <PermissionGate permission="flows:manage" feature="Flows">
+    <BotLayout activeTab="flows">
       <FlowsPageContent />
-    </PermissionGate>
+    </BotLayout>
   );
 }
