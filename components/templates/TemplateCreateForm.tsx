@@ -892,8 +892,8 @@ export default function TemplateCreateForm({
           <div className="rounded-lg bg-muted/60 p-4 text-sm text-muted-foreground shadow-xs">
             Name, language, and category can&apos;t change after submission.
             Buttons, header, body, and footer can be edited. Meta re-reviews
-            every edit, and an approved template can be edited once per 24
-            hours (10 times per 30 days).
+            every edit, and an approved template can be edited once per 24 hours
+            (10 times per 30 days).
           </div>
         )}
 
