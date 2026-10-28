@@ -42,6 +42,8 @@ import { useOrganizationStore } from "@/stores/organizationStore";
 // `data.ad_account_ids` are expected back; the FacebookSdk/Window.FB
 // ambient types are declared globally in pages/overview.tsx (the page that
 // loads the SDK script this component depends on).
+const AD_ACCOUNT_DISCONNECT_COOLDOWN_MS = 15 * 24 * 60 * 60 * 1000;
+
 const AD_ACCOUNT_SIGNUP_CONFIG_ID =
   process.env.NEXT_PUBLIC_META_AD_ACCOUNT_SIGNUP_CONFIG_ID;
 
@@ -72,6 +74,22 @@ export default function AdAccountConnection() {
     enabled: isPickerOpen
   });
   const adAccounts = data?.data.adAccounts || [];
+
+  // Ad accounts can be disconnected once per 15 days. Take the later of the
+  // backend's own answer (when the picker has loaded it) and the date
+  // implied by the stored last-disconnect time -- the latter is updated the
+  // moment we disconnect, so a cached "allowed" response can't win.
+  const storedLastDisconnect =
+    activeOrganization?.metaConfig?.lastAdAccountDisconnectedAt;
+  const disconnectAvailableAt = [
+    data?.data.disconnectAvailableAt
+      ? new Date(data.data.disconnectAvailableAt).getTime()
+      : 0,
+    storedLastDisconnect
+      ? new Date(storedLastDisconnect).getTime() + AD_ACCOUNT_DISCONNECT_COOLDOWN_MS
+      : 0
+  ].reduce((latest, time) => Math.max(latest, time), 0);
+  const isDisconnectCoolingDown = disconnectAvailableAt > Date.now();
 
   const { mutate: connectAdAccount, isPending: isConnecting } = useMutation({
     mutationFn: selectAdAccount,
@@ -106,7 +124,8 @@ export default function AdAccountConnection() {
           metaConfig: {
             ...activeOrganization.metaConfig,
             adAccountId: undefined,
-            adAccountName: undefined
+            adAccountName: undefined,
+            lastAdAccountDisconnectedAt: new Date().toISOString()
           }
         });
       }
@@ -303,10 +322,21 @@ export default function AdAccountConnection() {
                     size="sm"
                     variant="ghost"
                     className="w-full text-destructive hover:text-destructive"
+                    disabled={isDisconnectCoolingDown}
                     onClick={() => setIsDisconnectConfirmOpen(true)}
                   >
                     Disconnect ad account
                   </Button>
+                  {isDisconnectCoolingDown && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      You can disconnect again on{" "}
+                      {new Date(disconnectAvailableAt).toLocaleDateString(
+                        "en-IN",
+                        { day: "numeric", month: "short", year: "numeric" }
+                      )}
+                      . Ad accounts can be disconnected once every 15 days.
+                    </p>
+                  )}
                 </div>
               )}
             </>

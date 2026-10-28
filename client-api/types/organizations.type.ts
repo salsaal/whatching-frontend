@@ -655,6 +655,9 @@ export interface AdAccountsResponse {
   data: {
     adAccounts: AdAccount[];
     connectedAdAccountId: string | null;
+    // null when a disconnect is allowed now; otherwise when the 15-day
+    // cooldown ends (ISO date).
+    disconnectAvailableAt?: string | null;
   };
 }
 

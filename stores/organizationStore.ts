@@ -15,6 +15,7 @@ export interface OrganizationMetaConfig {
   messagingLimitScope?: "business_portfolio";
   adAccountId?: string;
   adAccountName?: string;
+  lastAdAccountDisconnectedAt?: string;
 }
 
 export interface OrganizationUsage {
