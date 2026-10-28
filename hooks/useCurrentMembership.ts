@@ -3,18 +3,16 @@ import { useQuery } from "@tanstack/react-query";
 
 import { getCurrentMembership } from "@/client-api/functions/organizations";
 import { hasMembershipPermission } from "@/lib/permissions";
-import { useAuthStore } from "@/stores/authStore";
 import { useOrganizationStore } from "@/stores/organizationStore";
 
 export const membershipQueryKey = (orgId?: string) => ["membership", orgId];
 
 export function useCurrentMembership() {
   const orgId = useOrganizationStore((state) => state.activeOrganization?._id);
-  const userId = useAuthStore((state) => state.user?._id);
 
   const { data, isPending } = useQuery({
     queryKey: membershipQueryKey(orgId),
-    queryFn: () => getCurrentMembership(userId),
+    queryFn: getCurrentMembership,
     enabled: Boolean(orgId),
     staleTime: 60_000
   });

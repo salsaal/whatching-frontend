@@ -472,6 +472,20 @@ export interface CurrentMembership {
   permissionSchema?: PermissionGroup[];
 }
 
+export interface MyMembershipResponse {
+  status: string;
+  data: {
+    membership: {
+      id: string;
+      role: "owner" | "admin" | "agent" | string;
+      status: string;
+      permissionGrants?: string[];
+      effectivePermissionGrants?: string[];
+    };
+    permissionSchema?: PermissionGroup[];
+  };
+}
+
 export interface TeamResponse {
   status: string;
   results: number;
