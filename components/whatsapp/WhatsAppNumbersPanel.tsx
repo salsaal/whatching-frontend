@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ListLoadingSkeleton } from "@/components/ui/loading-skeletons";
 import { useOrganizationStore } from "@/stores/organizationStore";
+import { useCurrentMembership } from "@/hooks/useCurrentMembership";
 
 const errorMessage = (error: AxiosError<{ message?: string }>) =>
   error.response?.data?.message || "WhatsApp number action failed.";
@@ -32,6 +33,7 @@ export default function WhatsAppNumbersPanel({
   onAddNumber: () => void;
   addingNumber?: boolean;
 }) {
+  const { can } = useCurrentMembership();
   const queryClient = useQueryClient();
   const organizationId = useOrganizationStore(
     (state) => state.activeOrganization?._id
@@ -46,7 +48,7 @@ export default function WhatsAppNumbersPanel({
   const { data, isLoading } = useQuery({
     queryKey,
     queryFn: getWhatsAppPhoneNumbers,
-    enabled: Boolean(organizationId),
+    enabled: Boolean(organizationId) && can("whatsapp_numbers:view"),
     refetchOnMount: "always"
   });
   const summary = data?.data;

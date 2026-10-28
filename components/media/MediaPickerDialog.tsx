@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { useCurrentMembership } from "@/hooks/useCurrentMembership";
 
 const mediaTabs: Array<{
   value: MediaFileType;
@@ -52,6 +53,7 @@ export default function MediaPickerDialog({
   onOpenChange,
   onSelect
 }: MediaPickerDialogProps) {
+  const { can } = useCurrentMembership();
   const router = useRouter();
   const initialTab =
     (requiredType && mediaTypeByHeaderFormat[requiredType]) || "image";
@@ -59,7 +61,7 @@ export default function MediaPickerDialog({
   const { data, isLoading } = useQuery({
     queryKey: ["media"],
     queryFn: getAllMedia,
-    enabled: open
+    enabled: open && can("media:view")
   });
 
   const media = useMemo(() => data?.data.media || [], [data?.data.media]);
@@ -128,7 +130,12 @@ export default function MediaPickerDialog({
           </div>
         )}
 
-        {isLoading ? (
+        {!can("media:view") ? (
+          <p className="rounded-sm border border-dashed p-6 text-center text-sm text-muted-foreground">
+            You need Media → View access to pick from the media library. Ask
+            your organization owner.
+          </p>
+        ) : isLoading ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 6 }).map((_, index) => (
               <Skeleton key={index} className="aspect-[4/3] rounded-lg" />

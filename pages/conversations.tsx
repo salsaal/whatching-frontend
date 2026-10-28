@@ -1228,13 +1228,15 @@ function ConversationsPageContent() {
   const { data: teamData } = useQuery({
     queryKey: ["team", activeOrganization?._id],
     queryFn: getTeam,
-    enabled: Boolean(activeOrganization?._id)
+    enabled: Boolean(activeOrganization?._id) && can("team:view")
   });
 
   const { data: templatesData, isLoading: isTemplatesLoading } = useQuery({
     queryKey: ["conversation-templates", activeOrganization?._id],
     queryFn: getAllTemplates,
-    enabled: Boolean(activeOrganization?._id && isTemplateModalOpen)
+    enabled:
+      Boolean(activeOrganization?._id && isTemplateModalOpen) &&
+      can("templates:view")
   });
   const {
     data: contactsData,
@@ -1262,7 +1264,9 @@ function ConversationsPageContent() {
         ? currentPage + 1
         : undefined;
     },
-    enabled: Boolean(activeOrganization?._id && isTemplateModalOpen)
+    enabled:
+      Boolean(activeOrganization?._id && isTemplateModalOpen) &&
+      can("contacts:view")
   });
   const {
     data: conversationsData,
@@ -1811,11 +1815,12 @@ function ConversationsPageContent() {
   } = useQuery({
     queryKey: ["template-linked-media", linkedTemplateMediaId],
     queryFn: () => getMediaById(linkedTemplateMediaId),
-    enabled: Boolean(
-      isTemplateModalOpen &&
-        selectedTemplateMediaHeader &&
-        linkedTemplateMediaId
-    ),
+    enabled:
+      Boolean(
+        isTemplateModalOpen &&
+          selectedTemplateMediaHeader &&
+          linkedTemplateMediaId
+      ) && can("media:view"),
     staleTime: 60_000
   });
   const effectiveTemplateHeaderMedia =
@@ -1869,11 +1874,12 @@ function ConversationsPageContent() {
   const { data: templateTriggersData } = useQuery({
     queryKey: ["bot-canvas-triggers", templateSenderPhoneNumberId],
     queryFn: () => getBotCanvasTriggers(templateSenderPhoneNumberId as string),
-    enabled: Boolean(
-      isTemplateModalOpen &&
-        templateSenderPhoneNumberId &&
-        selectedTemplateQuickReplies.length
-    ),
+    enabled:
+      Boolean(
+        isTemplateModalOpen &&
+          templateSenderPhoneNumberId &&
+          selectedTemplateQuickReplies.length
+      ) && can("flows:manage"),
     refetchOnMount: "always"
   });
   const templateTriggerKeys = useMemo(

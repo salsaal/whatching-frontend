@@ -187,6 +187,17 @@ export default function AdAccountConnection() {
     });
   };
 
+  // Listing, connecting, and disconnecting are owner/admin-only; everyone
+  // else just sees which account is connected.
+  if (!isOwnerOrAdmin) {
+    return connectedAdAccountId ? (
+      <div className="inline-flex items-center gap-2 rounded-sm border px-3 py-1.5 text-sm">
+        <BadgeCheck className="size-4 text-primary" />
+        {connectedAdAccountName || connectedAdAccountId}
+      </div>
+    ) : null;
+  }
+
   return (
     <Popover
       open={isPickerOpen}

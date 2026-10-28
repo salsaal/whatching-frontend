@@ -214,6 +214,7 @@ function ContactsPageContent() {
     refetchOnMount: "always"
   });
   const { data: phoneNumbersData, refetch: refetchPhoneNumbers } = useQuery({
+    enabled: can("whatsapp_numbers:view"),
     queryKey: ["whatsapp-phone-numbers", "contacts-sync"],
     queryFn: getWhatsAppPhoneNumbers,
     refetchOnMount: "always"

@@ -188,18 +188,23 @@ export default function OverviewPage() {
   const isMetaReady =
     integration?.state === "ready" ||
     activeOrganization?.metaConfig?.status === "ready";
+  // Overview is open to every member, so each widget's request is gated by
+  // its own permission and the widget is hidden instead of 403ing.
+  const { isOwner, can } = useCurrentMembership();
+  const canViewNumbers = can("whatsapp_numbers:view");
+  const canViewCampaigns = can("contacts:view");
+  const canSyncIntegration = can("integrations:manage");
   const { data: phoneNumbersData } = useQuery({
     queryKey: ["whatsapp-phone-numbers", activeOrgId],
     queryFn: getWhatsAppPhoneNumbers,
-    enabled: Boolean(activeOrgId && isMetaReady),
+    enabled: Boolean(activeOrgId && isMetaReady) && canViewNumbers,
     refetchOnMount: "always"
   });
   const { data: campaignsData } = useQuery({
     queryKey: ["campaigns", "overview-count"],
     queryFn: () => listCampaigns({ limit: 1 }),
-    enabled: Boolean(activeOrgId)
+    enabled: Boolean(activeOrgId) && canViewCampaigns
   });
-  const { isOwner } = useCurrentMembership();
   const { data: aiTokenUsageData } = useQuery({
     queryKey: ["ai-token-usage", activeOrgId],
     queryFn: getAiTokenUsage,
@@ -243,7 +248,7 @@ export default function OverviewPage() {
   } = useQuery({
     queryKey: ["whatsapp-outbound-readiness", readinessRecordId],
     queryFn: () => getWhatsAppOutboundReadiness(readinessRecordId),
-    enabled: Boolean(readinessRecordId),
+    enabled: Boolean(readinessRecordId) && can("whatsapp_numbers:view"),
     // Only poll while a test is actually in flight waiting on Meta's
     // delivery webhook -- this was unconditional before, so every open
     // overview tab hit the backend every 4s forever, even for the steady
@@ -495,14 +500,20 @@ export default function OverviewPage() {
       icon: Gauge,
       tooltip: "Business-initiated conversations in a rolling 24-hour period."
     },
-    {
-      label: "Campaigns",
-      value: formatCompactNumber(campaignsData?.data.pagination.total || 0),
-      icon: Target,
-      href: "/campaigns",
-      tooltip:
-        "Distinct Click-to-WhatsApp ad campaigns that have driven contacts."
-    }
+    ...(canViewCampaigns
+      ? [
+          {
+            label: "Campaigns",
+            value: formatCompactNumber(
+              campaignsData?.data.pagination.total || 0
+            ),
+            icon: Target,
+            href: "/campaigns",
+            tooltip:
+              "Distinct Click-to-WhatsApp ad campaigns that have driven contacts."
+          }
+        ]
+      : [])
   ];
   const setupItems = useMemo(
     () => [
@@ -738,30 +749,34 @@ export default function OverviewPage() {
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() =>
-                  document
-                    .getElementById("whatsapp-numbers")
-                    ?.scrollIntoView({ behavior: "smooth" })
-                }
-              >
-                Manage numbers
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={isSyncingIntegration}
-                onClick={() => syncIntegrationMutate()}
-              >
-                {isSyncingIntegration ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="size-4" />
-                )}
-                Sync status
-              </Button>
+              {canViewNumbers && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() =>
+                    document
+                      .getElementById("whatsapp-numbers")
+                      ?.scrollIntoView({ behavior: "smooth" })
+                  }
+                >
+                  Manage numbers
+                </Button>
+              )}
+              {canSyncIntegration && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={isSyncingIntegration}
+                  onClick={() => syncIntegrationMutate()}
+                >
+                  {isSyncingIntegration ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="size-4" />
+                  )}
+                  Sync status
+                </Button>
+              )}
             </div>
           </section>
         ) : (
@@ -849,47 +864,53 @@ export default function OverviewPage() {
               ) : null}
 
               <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:items-center">
-                <Button
-                  type="button"
-                  className="w-full sm:w-auto"
-                  disabled={!metaAppId || !metaConfigId || isConnectingMeta}
-                  onClick={
-                    isMetaReady
-                      ? () =>
-                          document
-                            .getElementById("whatsapp-numbers")
-                            ?.scrollIntoView({ behavior: "smooth" })
-                      : startEmbeddedSignup
-                  }
-                >
-                  {isConnectingMeta ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <Smartphone className="size-4" />
-                  )}
-                  {isMetaReady ? "Manage numbers" : "Connect Meta"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full sm:w-auto"
-                  disabled={!isMetaReady || isSyncingIntegration}
-                  onClick={() => syncIntegrationMutate()}
-                >
-                  {isSyncingIntegration ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <RefreshCw className="size-4" />
-                  )}
-                  Sync status
-                </Button>
-                <button
-                  type="button"
-                  className="text-sm text-muted-foreground underline-offset-2 hover:text-primary hover:underline"
-                  onClick={() => setIsManualConnectOpen(true)}
-                >
-                  Connect manually
-                </button>
+                {(isMetaReady ? canViewNumbers : isOwner) && (
+                  <Button
+                    type="button"
+                    className="w-full sm:w-auto"
+                    disabled={!metaAppId || !metaConfigId || isConnectingMeta}
+                    onClick={
+                      isMetaReady
+                        ? () =>
+                            document
+                              .getElementById("whatsapp-numbers")
+                              ?.scrollIntoView({ behavior: "smooth" })
+                        : startEmbeddedSignup
+                    }
+                  >
+                    {isConnectingMeta ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Smartphone className="size-4" />
+                    )}
+                    {isMetaReady ? "Manage numbers" : "Connect Meta"}
+                  </Button>
+                )}
+                {canSyncIntegration && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full sm:w-auto"
+                    disabled={!isMetaReady || isSyncingIntegration}
+                    onClick={() => syncIntegrationMutate()}
+                  >
+                    {isSyncingIntegration ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="size-4" />
+                    )}
+                    Sync status
+                  </Button>
+                )}
+                {isOwner && (
+                  <button
+                    type="button"
+                    className="text-sm text-muted-foreground underline-offset-2 hover:text-primary hover:underline"
+                    onClick={() => setIsManualConnectOpen(true)}
+                  >
+                    Connect manually
+                  </button>
+                )}
               </div>
             </div>
           </section>
@@ -952,10 +973,12 @@ export default function OverviewPage() {
             </div>
           </section>
         )}
-        <WhatsAppNumbersPanel
-          onAddNumber={startEmbeddedSignup}
-          addingNumber={isConnectingMeta}
-        />
+        {canViewNumbers && (
+          <WhatsAppNumbersPanel
+            onAddNumber={startEmbeddedSignup}
+            addingNumber={isConnectingMeta}
+          />
+        )}
       </div>
       <Dialog open={isPaymentPromptOpen} onOpenChange={setIsPaymentPromptOpen}>
         <DialogContent>

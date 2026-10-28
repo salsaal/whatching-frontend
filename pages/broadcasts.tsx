@@ -105,6 +105,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useOrganizationStore } from "@/stores/organizationStore";
 import { PermissionGate } from "@/components/common/NoAccess";
+import { useCurrentMembership } from "@/hooks/useCurrentMembership";
 
 const formatDate = (date?: string | null) =>
   date
@@ -153,6 +154,7 @@ const statusClasses: Record<string, string> = {
 };
 
 function BroadcastsPageContent() {
+  const { can } = useCurrentMembership();
   const router = useRouter();
   const broadcastLoadMoreRef = useRef<HTMLDivElement | null>(null);
   const subscriberLoadMoreRef = useRef<HTMLDivElement | null>(null);
@@ -198,7 +200,7 @@ function BroadcastsPageContent() {
   } = useQuery({
     queryKey: ["whatsapp-outbound-readiness", senderRecordId],
     queryFn: () => getWhatsAppOutboundReadiness(senderRecordId),
-    enabled: Boolean(senderRecordId),
+    enabled: Boolean(senderRecordId) && can("whatsapp_numbers:view"),
     // Only poll while a test is actually in flight waiting on Meta's
     // delivery webhook -- see pages/overview.tsx for the same fix and why.
     refetchInterval: (query) => {
@@ -245,6 +247,7 @@ function BroadcastsPageContent() {
     refetchInterval: 5000
   });
   const { data: templatesData } = useQuery({
+    enabled: can("templates:view"),
     queryKey: ["templates"],
     queryFn: getAllTemplates
   });
@@ -270,7 +273,7 @@ function BroadcastsPageContent() {
         ? currentPage + 1
         : undefined;
     },
-    enabled: isCreateOpen && audienceMode === "specific"
+    enabled: isCreateOpen && audienceMode === "specific" && can("contacts:view")
   });
   const { data: tagsData } = useQuery({
     queryKey: ["subscriber-tags"],
@@ -279,12 +282,13 @@ function BroadcastsPageContent() {
   const { data: campaignsData } = useQuery({
     queryKey: ["campaigns", "broadcast-audience"],
     queryFn: () => listCampaigns({ sort: "recent", limit: 100 }),
-    enabled: isCreateOpen && audienceMode === "campaign"
+    enabled: isCreateOpen && audienceMode === "campaign" && can("contacts:view")
   });
   const { data: senderTriggersData } = useQuery({
     queryKey: ["bot-canvas-triggers", senderPhoneNumberId],
     queryFn: () => getBotCanvasTriggers(senderPhoneNumberId),
-    enabled: Boolean(isCreateOpen && senderPhoneNumberId),
+    enabled:
+      Boolean(isCreateOpen && senderPhoneNumberId) && can("flows:manage"),
     refetchOnMount: "always"
   });
   const currentAudience = useMemo<BroadcastAudience>(() => {

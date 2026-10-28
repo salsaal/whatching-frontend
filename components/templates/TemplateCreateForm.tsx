@@ -71,6 +71,7 @@ import {
   groupTemplateButtons,
   mapDraftToTemplate
 } from "./templateUtils";
+import { useCurrentMembership } from "@/hooks/useCurrentMembership";
 
 type HeaderFormatOption = "NONE" | TemplateHeaderFormat;
 
@@ -251,6 +252,7 @@ export default function TemplateCreateForm({
   initialTemplate,
   editKind
 }: TemplateCreateFormProps) {
+  const { can } = useCurrentMembership();
   const router = useRouter();
   const queryClient = useQueryClient();
   const { addTemplate, upsertTemplate, removeTemplate } = useTemplateStore();
@@ -300,7 +302,7 @@ export default function TemplateCreateForm({
   const { data: selectedMediaData } = useQuery({
     queryKey: ["media", selectedMediaId],
     queryFn: () => getMediaById(selectedMediaId),
-    enabled: Boolean(selectedMediaId)
+    enabled: Boolean(selectedMediaId) && can("media:view")
   });
 
   const variables = useMemo(() => extractVariables(bodyText), [bodyText]);
