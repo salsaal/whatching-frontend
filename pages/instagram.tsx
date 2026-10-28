@@ -43,6 +43,7 @@ import {
   Tags,
   Trash2,
   UserCheck,
+  Unlink,
   UserRound,
   Video,
   Workflow,
@@ -84,6 +85,7 @@ import {
   getInstagramCommentRules,
   getInstagramFlows,
   getInstagramMedia,
+  disconnectInstagram,
   getInstagramStatus,
   publishInstagramCanvasById,
   publishInstagramCanvas,
@@ -113,6 +115,7 @@ import {
   InstagramLoginAccount,
   InstagramMedia,
   InstagramQuickReply,
+  InstagramStatusResponse,
   InstagramTemplateButton,
   InstagramTriggerType
 } from "@/client-api/types/instagram.type";
@@ -161,6 +164,7 @@ import AppLayout from "@/layouts/AppLayout";
 import { cn } from "@/lib/utils";
 import { useOrganizationStore } from "@/stores/organizationStore";
 import { PermissionGate } from "@/components/common/NoAccess";
+import { useCurrentMembership } from "@/hooks/useCurrentMembership";
 
 type PageTab = "profile" | "canvas" | "rules" | "media" | "setup";
 type CanvasMode = "draft" | "published";
@@ -783,6 +787,8 @@ export function InstagramPage({
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [validationMessages, setValidationMessages] = useState<string[]>([]);
   const [isConnectOpen, setIsConnectOpen] = useState(false);
+  const [isDisconnectOpen, setIsDisconnectOpen] = useState(false);
+  const { can } = useCurrentMembership();
   const [mediaPickerTarget, setMediaPickerTarget] =
     useState<MediaPickerTarget | null>(null);
   const [mediaSearch, setMediaSearch] = useState("");
@@ -1211,6 +1217,32 @@ export function InstagramPage({
       queryClient.invalidateQueries({ queryKey: ["instagram-status"] });
     },
     onError: (error) => toast.error(getErrorMessage(error))
+  });
+
+  const disconnectMutation = useMutation({
+    mutationFn: disconnectInstagram,
+    meta: { showToast: false },
+    onSuccess: (response) => {
+      // Write the now-disconnected config straight into the status cache so
+      // the Profile tab drops to the Connect flow at once instead of showing
+      // the old profile card until the refetch lands.
+      queryClient.setQueryData<InstagramStatusResponse>(
+        ["instagram-status", activeOrgId],
+        (current) =>
+          current
+            ? {
+                ...current,
+                data: { ...current.data, instagram: response.data.instagram }
+              }
+            : current
+      );
+      queryClient.invalidateQueries({ queryKey: ["instagram-status"] });
+      setIsDisconnectOpen(false);
+      setActiveTab("profile");
+      toast.success("Instagram disconnected.");
+    },
+    onError: (error) =>
+      toast.error(getErrorMessage(error, "Couldn't disconnect Instagram."))
   });
 
   const syncMediaMutation = useMutation({
@@ -2806,7 +2838,10 @@ export function InstagramPage({
                 <h3 className="font-semibold">Connection</h3>
                 <div className="mt-4 space-y-3 text-sm">
                   {[
-                    ["Page ID", instagram?.pageId],
+                    // "me" marks an Instagram Login account, not a real page.
+                    ...(instagram?.pageId && instagram.pageId !== "me"
+                      ? [["Page ID", instagram.pageId]]
+                      : []),
                     ["IG business account", instagram?.igBusinessAccountId],
                     ["Connected", formatDate(instagram?.connectedAt)],
                     ["Profile sync", formatDate(instagram?.lastProfileSyncAt)],
@@ -2902,6 +2937,17 @@ export function InstagramPage({
               )}
               Refresh profile
             </Button>
+            {isReady && can("instagram:manage") && (
+              <Button
+                variant="outline"
+                className="text-destructive hover:text-destructive"
+                onClick={() => setIsDisconnectOpen(true)}
+                tooltip="Disconnect this Instagram account"
+              >
+                <Unlink className="mr-2 size-4" />
+                Disconnect Instagram
+              </Button>
+            )}
           </div>
         </div>
 
@@ -3577,6 +3623,44 @@ export function InstagramPage({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={isDisconnectOpen}
+        onOpenChange={(open) => {
+          if (!open && !disconnectMutation.isPending)
+            setIsDisconnectOpen(false);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Disconnect @{instagram?.username || "this account"}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Automations, comment rules and the message flow stop replying
+              until you reconnect. Your conversations and contacts are kept.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={disconnectMutation.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-white hover:bg-destructive/90"
+              disabled={disconnectMutation.isPending}
+              onClick={(event) => {
+                event.preventDefault();
+                disconnectMutation.mutate();
+              }}
+            >
+              {disconnectMutation.isPending && (
+                <Loader2 className="size-4 animate-spin" />
+              )}
+              Disconnect
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog
         open={Boolean(canvasToArchive)}
