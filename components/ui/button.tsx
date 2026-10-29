@@ -56,8 +56,6 @@ function Button({
     center?: boolean;
     tooltip?: React.ReactNode;
   }) {
-  const Comp = asChild ? Slot : "button";
-
   // An icon-only button (no visible text child) commonly relies solely on
   // `tooltip` for meaning, but that only renders a hover-only Radix
   // tooltip -- it never reaches assistive tech. Fall back to it for
@@ -65,8 +63,25 @@ function Button({
   // aria-label passed in props always wins (spread order below).
   const fallbackAriaLabel = typeof tooltip === "string" ? tooltip : undefined;
 
-  const button = (
-    <Comp
+  // With asChild the styles must land on the child itself (usually a link).
+  // Wrapping it in the inner span made Slot style the span instead, leaving
+  // the <a> inline, so its icon stacked above the label.
+  const button = asChild ? (
+    <Slot
+      data-slot="button"
+      className={cn(
+        buttonVariants({ variant, size }),
+        "gap-2",
+        spacebetween && "justify-between",
+        className
+      )}
+      aria-label={fallbackAriaLabel}
+      {...props}
+    >
+      {children}
+    </Slot>
+  ) : (
+    <button
       data-slot="button"
       className={cn(buttonVariants({ variant, size }), className)}
       disabled={isLoading || props.disabled}
@@ -85,7 +100,7 @@ function Button({
         )}
         {!isLoading && children}
       </span>
-    </Comp>
+    </button>
   );
 
   if (!tooltip) return button;
