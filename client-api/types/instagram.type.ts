@@ -428,6 +428,8 @@ export type InstagramAutomationSettingsPatch = Partial<
     | "spamProtectionEnabled"
     | "spamFloodThreshold"
     | "spamFloodWindowSeconds"
+    | "greetingKeywords"
+    | "optOutKeywords"
   >
 >;
 

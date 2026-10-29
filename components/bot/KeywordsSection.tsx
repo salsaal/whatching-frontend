@@ -1,6 +1,7 @@
-import { AlertTriangle, Lock, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Lock, X } from "lucide-react";
 import { KeyboardEvent, useMemo, useState } from "react";
 
+import { PausedNote } from "@/components/bot/SettingRow";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
@@ -90,7 +91,9 @@ function KeywordList({
   list,
   readOnly,
   conflictsWith,
-  emptyWarning
+  emptyWarning,
+  isAlwaysActive,
+  pausedLabel
 }: {
   title: string;
   description: string;
@@ -98,6 +101,10 @@ function KeywordList({
   extrasLabel?: string;
   list: KeywordListProps;
   readOnly?: boolean;
+  /** Keeps working even when the bot/automation switch is off. */
+  isAlwaysActive?: boolean;
+  /** Shown (and the list muted) while this list isn't running. */
+  pausedLabel?: string;
   /** Words that will win over this list; matching chips are flagged. */
   conflictsWith?: { words: Set<string>; message: (word: string) => string };
   emptyWarning?: string;
@@ -150,7 +157,16 @@ function KeywordList({
     <div className="space-y-3 py-4 first:pt-0 last:pb-0">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-medium">{title}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm font-medium">{title}</p>
+            {isAlwaysActive && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                <CheckCircle2 className="size-3" />
+                Always active
+              </span>
+            )}
+            {pausedLabel && <PausedNote label={pausedLabel} />}
+          </div>
           <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
           <p className="mt-0.5 text-xs text-muted-foreground">e.g. {example}</p>
         </div>
@@ -160,8 +176,8 @@ function KeywordList({
       </div>
 
       {locked.length > 0 && (
-        <div>
-          <p className="mb-1.5 text-xs text-muted-foreground">Always active</p>
+        <div className={cn(pausedLabel && "opacity-60")}>
+          <p className="mb-1.5 text-xs text-muted-foreground">Built in</p>
           <div className="flex flex-wrap gap-1.5">
             {locked.map((word) => (
               <Chip key={word} word={word} locked />
@@ -170,7 +186,7 @@ function KeywordList({
         </div>
       )}
 
-      <div>
+      <div className={cn(pausedLabel && "opacity-60")}>
         {extrasLabel && (
           <p className="mb-1.5 text-xs text-muted-foreground">{extrasLabel}</p>
         )}
@@ -233,12 +249,16 @@ export function KeywordsSection({
   greeting,
   optIn,
   optOut,
-  readOnly
+  readOnly,
+  greetingPausedLabel
 }: {
   greeting?: KeywordListProps;
   optIn?: KeywordListProps;
   optOut?: KeywordListProps;
   readOnly?: boolean;
+  /** Set while the bot/automation switch is off: menu keywords stop then,
+   * but opt-in/opt-out keep working for compliance. */
+  greetingPausedLabel?: string;
 }) {
   // Opt-in/opt-out words are checked before greetings, so a greeting that
   // is also one of those can never start the menu.
@@ -278,6 +298,7 @@ export function KeywordsSection({
             example="HI, HELLO, MENU"
             list={greeting}
             readOnly={readOnly}
+            pausedLabel={greetingPausedLabel}
             emptyWarning="Nothing will start the main menu flow from a keyword."
             conflictsWith={{
               words: consentWords,
@@ -294,6 +315,7 @@ export function KeywordsSection({
             extrasLabel="Additional opt-out words"
             list={optOut}
             readOnly={readOnly}
+            isAlwaysActive
             conflictsWith={
               optIn
                 ? {
@@ -313,6 +335,7 @@ export function KeywordsSection({
             extrasLabel="Additional opt-in words"
             list={optIn}
             readOnly={readOnly}
+            isAlwaysActive
           />
         )}
       </div>

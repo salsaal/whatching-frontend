@@ -6,6 +6,11 @@ import {
   getInstagramAutomationSettings,
   updateInstagramAutomationSettings
 } from "@/client-api/functions/instagram";
+import {
+  BUILT_IN_OPT_OUT_KEYWORDS,
+  KeywordsSection
+} from "@/components/bot/KeywordsSection";
+import { PausedNote } from "@/components/bot/SettingRow";
 import { SpamProtectionFields } from "@/components/settings/SpamProtectionFields";
 import { Switch } from "@/components/ui/switch";
 import { useOrganizationStore } from "@/stores/organizationStore";
@@ -39,6 +44,12 @@ export function InstagramAutomationToggle() {
     });
 
   const settings = settingsData?.data?.settings;
+  // Automation is the master switch: spam protection and greeting keywords
+  // stop with it, opt-out keywords keep working for compliance.
+  const pausedLabel =
+    settings && !settings.isAutomationEnabled
+      ? "Paused while automation is off"
+      : undefined;
 
   return (
     <div className="grid gap-2">
@@ -67,7 +78,10 @@ export function InstagramAutomationToggle() {
             <ShieldAlert className="size-4" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium">Spam protection</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm font-medium">Spam protection</p>
+              {pausedLabel && <PausedNote label={pausedLabel} />}
+            </div>
             <p className="text-xs text-muted-foreground">
               Automatically mute automated replies to a subscriber who sends too
               many messages too quickly.
@@ -83,13 +97,32 @@ export function InstagramAutomationToggle() {
           />
         </div>
         {settings?.spamProtectionEnabled && (
-          <SpamProtectionFields
-            threshold={settings.spamFloodThreshold}
-            windowSeconds={settings.spamFloodWindowSeconds}
-            onSave={(patch) => updateSettingsMutate(patch)}
-          />
+          <div className={pausedLabel ? "opacity-60" : undefined}>
+            <SpamProtectionFields
+              threshold={settings.spamFloodThreshold}
+              windowSeconds={settings.spamFloodWindowSeconds}
+              onSave={(patch) => updateSettingsMutate(patch)}
+            />
+          </div>
         )}
       </div>
+      {settings && (
+        <div className="rounded-lg border p-3">
+          <p className="mb-3 text-sm font-medium">Keywords</p>
+          <KeywordsSection
+            greetingPausedLabel={pausedLabel}
+            greeting={{
+              value: settings.greetingKeywords || [],
+              onSave: (next) => updateSettingsMutate({ greetingKeywords: next })
+            }}
+            optOut={{
+              value: settings.optOutKeywords || [],
+              builtIns: BUILT_IN_OPT_OUT_KEYWORDS,
+              onSave: (next) => updateSettingsMutate({ optOutKeywords: next })
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }
