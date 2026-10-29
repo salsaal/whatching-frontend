@@ -43,7 +43,6 @@ import {
   Tags,
   Trash2,
   UserCheck,
-  Unlink,
   UserRound,
   Video,
   Workflow,
@@ -68,6 +67,7 @@ import {
 } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import { useRouter } from "next/router";
+import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { toast } from "sonner";
 
 import {
@@ -123,7 +123,7 @@ import { MediaAsset } from "@/client-api/types/media.type";
 import MediaPickerDialog from "@/components/media/MediaPickerDialog";
 import { InstagramFlowBlockPreview } from "@/components/flows/FlowBlockPreview";
 import FlowDiagramPreviewDialog from "@/components/flows/FlowDiagramPreviewDialog";
-import { InstagramAutomationToggle } from "@/components/instagram/InstagramAutomationToggle";
+import { InstagramSettingsTab } from "@/components/instagram/InstagramSettingsTab";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -164,9 +164,10 @@ import AppLayout from "@/layouts/AppLayout";
 import { cn } from "@/lib/utils";
 import { useOrganizationStore } from "@/stores/organizationStore";
 import { PermissionGate } from "@/components/common/NoAccess";
-import { useCurrentMembership } from "@/hooks/useCurrentMembership";
 
-type PageTab = "profile" | "canvas" | "rules" | "media" | "setup";
+type PageTab = "profile" | "settings" | "canvas" | "rules" | "media" | "setup";
+// Tabs that can be linked to with ?tab= (setup is an internal-only view).
+const URL_TABS = ["profile", "settings", "canvas", "rules", "media"] as const;
 type CanvasMode = "draft" | "published";
 const instagramEdgeStyle = { strokeWidth: 1.25, strokeDasharray: "4 5" };
 type MediaPickerTarget =
@@ -775,8 +776,25 @@ export function InstagramPage({
     (state) => state.activeOrganization
   );
   const activeOrgId = activeOrganization?._id;
-  const [activeTab, setActiveTab] = useState<PageTab>(
-    canvasOnly ? "canvas" : "profile"
+  // The tab lives in the URL (?tab=settings) so refresh and back keep it;
+  // the canvas editor route always shows the canvas.
+  const [urlTab, setUrlTab] = useQueryState(
+    "tab",
+    parseAsStringLiteral(URL_TABS).withDefault("profile")
+  );
+  const [internalTab, setInternalTab] = useState<PageTab | null>(null);
+  const activeTab: PageTab = canvasOnly ? "canvas" : internalTab || urlTab;
+  const setActiveTab = useCallback(
+    (tab: PageTab) => {
+      if (canvasOnly) return;
+      if (tab === "setup") {
+        setInternalTab(tab);
+        return;
+      }
+      setInternalTab(null);
+      void setUrlTab(tab);
+    },
+    [canvasOnly, setUrlTab]
   );
   const [selectedCanvasId, setSelectedCanvasId] = useState(forcedCanvasId);
   const [canvasMode, setCanvasMode] = useState<CanvasMode>("draft");
@@ -788,7 +806,6 @@ export function InstagramPage({
   const [validationMessages, setValidationMessages] = useState<string[]>([]);
   const [isConnectOpen, setIsConnectOpen] = useState(false);
   const [isDisconnectOpen, setIsDisconnectOpen] = useState(false);
-  const { can } = useCurrentMembership();
   const [mediaPickerTarget, setMediaPickerTarget] =
     useState<MediaPickerTarget | null>(null);
   const [mediaSearch, setMediaSearch] = useState("");
@@ -1060,11 +1077,18 @@ export function InstagramPage({
     return () => observer.disconnect();
   }, [activeTab, fetchMoreFlows, hasMoreFlows, isFetchingMoreFlows]);
 
+  // Wait for the status before bouncing, or a refresh on ?tab=settings
+  // would always land on Profile.
   useEffect(() => {
-    if (!canvasOnly && !isReady && activeTab !== "profile") {
+    if (
+      !canvasOnly &&
+      !isStatusLoading &&
+      !isReady &&
+      activeTab !== "profile"
+    ) {
       setActiveTab("profile");
     }
-  }, [activeTab, canvasOnly, isReady]);
+  }, [activeTab, canvasOnly, isReady, isStatusLoading, setActiveTab]);
 
   useEffect(() => {
     if (!isReady) return;
@@ -2559,13 +2583,6 @@ export function InstagramPage({
           </div>
         </section>
 
-        <section className="rounded-lg bg-white p-5 shadow-xs">
-          <h3 className="mb-3 font-heading text-base font-semibold">
-            Automation settings
-          </h3>
-          <InstagramAutomationToggle />
-        </section>
-
         <section className="grid gap-4 lg:grid-cols-3">
           {isCanvasesLoading ? (
             <div className="lg:col-span-3">
@@ -2937,17 +2954,6 @@ export function InstagramPage({
               )}
               Refresh profile
             </Button>
-            {isReady && can("instagram:manage") && (
-              <Button
-                variant="outline"
-                className="text-destructive hover:text-destructive"
-                onClick={() => setIsDisconnectOpen(true)}
-                tooltip="Disconnect this Instagram account"
-              >
-                <Unlink className="mr-2 size-4" />
-                Disconnect Instagram
-              </Button>
-            )}
           </div>
         </div>
 
@@ -2966,6 +2972,9 @@ export function InstagramPage({
             >
               <TabsList>
                 <TabsTrigger value="profile">Profile</TabsTrigger>
+                <TabsTrigger value="settings" disabled={!isReady}>
+                  Settings
+                </TabsTrigger>
                 <TabsTrigger value="canvas" disabled={!isReady}>
                   Message Flow
                 </TabsTrigger>
@@ -3201,6 +3210,18 @@ export function InstagramPage({
               )}
               {renderProperties()}
             </aside>
+          </div>
+        )}
+
+        {activeTab === "settings" && !canvasOnly && isReady && (
+          <div className="min-h-0 flex-1 overflow-y-auto p-5">
+            <div className="mx-auto max-w-7xl">
+              <InstagramSettingsTab
+                canvases={canvases}
+                onOpenMessageFlow={() => setActiveTab("canvas")}
+                onDisconnect={() => setIsDisconnectOpen(true)}
+              />
+            </div>
           </div>
         )}
 
