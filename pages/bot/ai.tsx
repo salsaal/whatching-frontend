@@ -118,7 +118,9 @@ function BotAiTab() {
                 }
               />
             </TooltipTrigger>
-            <TooltipContent>Saved, but paused while the bot is off.</TooltipContent>
+            <TooltipContent>
+              Saved, but paused while the bot is off.
+            </TooltipContent>
           </Tooltip>
         </div>
         {isAiEnabled && !isSourcesLoading && readyCount === 0 && (
