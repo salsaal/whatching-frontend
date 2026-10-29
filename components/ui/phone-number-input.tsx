@@ -2,6 +2,7 @@
 
 import { CountryCodeSelect } from "@/components/ui/country-code-select";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
 interface PhoneNumberInputProps {
   countryCode: string;
@@ -12,6 +13,10 @@ interface PhoneNumberInputProps {
   onCountryCodeChange: (value: string) => void;
   onCountryIsoChange: (value: string) => void;
   onPhoneNumberChange: (value: string) => void;
+  /** Optional overrides so a page can match its own field style. */
+  id?: string;
+  inputClassName?: string;
+  selectClassName?: string;
 }
 
 export const buildInternationalPhoneNumber = (
@@ -35,7 +40,10 @@ export default function PhoneNumberInput({
   placeholder = "Phone number",
   onCountryCodeChange,
   onCountryIsoChange,
-  onPhoneNumberChange
+  onPhoneNumberChange,
+  id,
+  inputClassName,
+  selectClassName
 }: PhoneNumberInputProps) {
   return (
     <div className="grid gap-2 sm:grid-cols-[112px_1fr]">
@@ -44,9 +52,11 @@ export default function PhoneNumberInput({
         onValueChange={onCountryCodeChange}
         onCountryIsoChange={onCountryIsoChange}
         compact
-        className="h-10 px-2"
+        className={cn("h-10 px-2", selectClassName)}
       />
       <Input
+        id={id}
+        className={inputClassName}
         value={phoneNumber}
         disabled={disabled}
         inputMode="tel"

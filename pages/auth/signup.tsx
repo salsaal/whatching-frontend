@@ -4,20 +4,22 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import {
-  Eye,
-  EyeOff,
-  Mail,
-  User,
-  Lock,
-  LogIn,
-  UserPlus,
-  RefreshCcw
-} from "lucide-react";
+import { MailCheck, RefreshCcw } from "lucide-react";
 import { toast } from "sonner";
 import AuthLayout from "@/layouts/AuthLayout";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
+import {
+  AuthAlt,
+  AuthField,
+  AuthFormError,
+  AuthHeader,
+  AuthInput,
+  AuthSubmit,
+  authInputClass,
+  authLinkClass,
+  enter,
+  PasswordInput
+} from "@/components/auth/AuthUI";
 import PhoneNumberInput, {
   buildInternationalPhoneNumber
 } from "@/components/ui/phone-number-input";
@@ -42,7 +44,9 @@ const signupSchema = z
 type SignupForm = z.infer<typeof signupSchema>;
 
 export default function SignupPage() {
-  const [showPassword, setShowPassword] = useState(false);
+  const [formError, setFormError] = useState("");
+  const [shakeKey, setShakeKey] = useState(0);
+  const shake = () => setShakeKey((current) => current + 1);
   const [isEmailSent, setIsEmailSent] = useState(false);
   const [userEmail, setUserEmail] = useState("");
   const [timer, setTimer] = useState(30);
@@ -70,6 +74,7 @@ export default function SignupPage() {
   }, [isEmailSent, timer]);
 
   const onSubmit = (data: SignupForm) => {
+    setFormError("");
     mutate({
       name: [data.firstName, data.lastName].filter(Boolean).join(" "),
       email: data.email,
@@ -88,10 +93,8 @@ export default function SignupPage() {
       setIsEmailSent(true);
     },
     onError: (error: AxiosError<{ message?: string }>) => {
-      console.log("SIGNUP ERROR:", error);
-      console.log("RESPONSE:", error?.response);
-
-      toast.error(error?.response?.data?.message || "Signup failed");
+      setFormError(error?.response?.data?.message || "Signup failed");
+      shake();
     }
   });
 
@@ -105,75 +108,88 @@ export default function SignupPage() {
       toast.error(error?.response?.data?.message || "Failed to resend");
     }
   });
+  const phoneMotion = enter(0.3);
+
   return (
-    <AuthLayout>
-      <div className="w-full max-w-md mx-auto">
-        {/* 🔥 TOP ICON */}
-        <div className="flex justify-center mb-3 max-sm:mt-10">
-          <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
-            <User className="text-primary size-7 font-bold" />
-          </div>
-        </div>
+    <AuthLayout shakeKey={shakeKey}>
+      {!isEmailSent ? (
+        <>
+          <AuthHeader
+            title="Create your account"
+            subtitle="Start free, no credit card needed."
+            live
+          />
 
-        {/* 🔥 HEADER */}
-        {!isEmailSent && (
-          <div className="mb-10 text-center">
-            <h1 className="font-heading text-4xl max-sm:text-3xl font-medium leading-tight">
-              Create account
-            </h1>
-            <p className="mt-3 text-base text-muted-foreground font-body">
-              Start building WhatsApp flows & capturing leads
-            </p>
-          </div>
-        )}
-
-        {/* 🔥 FORM */}
-        {!isEmailSent ? (
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-            {/* NAME */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="relative">
-                <User className="absolute left-3 top-3.5 size-4 text-muted-foreground" />
-                <Input
-                  placeholder="First name"
-                  className="pl-9"
+          <form
+            onSubmit={handleSubmit(onSubmit, shake)}
+            className="mt-6 grid gap-4"
+            noValidate
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
+              <AuthField
+                label="First name"
+                htmlFor="signup-first-name"
+                error={errors.firstName?.message}
+                delay={0.18}
+              >
+                <AuthInput
+                  id="signup-first-name"
+                  autoComplete="given-name"
+                  placeholder="Aisha"
+                  aria-invalid={Boolean(errors.firstName)}
                   {...register("firstName")}
                 />
-                <p className="text-xs text-red-500 mt-1">
-                  {errors.firstName?.message}
-                </p>
-              </div>
-
-              <div className="relative">
-                <User className="absolute left-3 top-3.5 size-4 text-muted-foreground" />
-                <Input
-                  placeholder="Last name (optional)"
-                  className="pl-9"
+              </AuthField>
+              <AuthField
+                label="Last name"
+                htmlFor="signup-last-name"
+                error={errors.lastName?.message}
+                delay={0.18}
+                aside={
+                  <span className="text-xs text-muted-foreground">
+                    Optional
+                  </span>
+                }
+              >
+                <AuthInput
+                  id="signup-last-name"
+                  autoComplete="family-name"
+                  placeholder="Khan"
                   {...register("lastName")}
                 />
-                <p className="text-xs text-red-500 mt-1">
-                  {errors.lastName?.message}
-                </p>
-              </div>
+              </AuthField>
             </div>
 
-            {/* EMAIL */}
-            <div className="relative">
-              <Mail className="absolute left-3 top-3.5 size-4 text-muted-foreground" />
-              <Input
+            <AuthField
+              label="Work email"
+              htmlFor="signup-email"
+              error={errors.email?.message}
+              delay={0.22}
+            >
+              <AuthInput
+                id="signup-email"
                 type="email"
-                placeholder="Email address"
-                className="pl-9"
+                autoComplete="email"
+                placeholder="you@company.com"
+                aria-invalid={Boolean(errors.email)}
                 {...register("email")}
               />
-              <p className="text-xs text-red-500 mt-1">
-                {errors.email?.message}
-              </p>
-            </div>
+            </AuthField>
 
-            {/* PHONE */}
-            <div>
+            <div
+              className={cn("grid gap-[7px]", phoneMotion.className)}
+              style={phoneMotion.style}
+            >
+              <label
+                htmlFor="signup-phone"
+                className="text-[13.5px] font-semibold"
+              >
+                Phone
+              </label>
               <PhoneNumberInput
+                id="signup-phone"
+                inputClassName={authInputClass}
+                selectClassName={cn(authInputClass, "px-2")}
                 countryCode={countryCode}
                 countryIso={countryIso}
                 phoneNumber={watchedPhone}
@@ -185,102 +201,93 @@ export default function SignupPage() {
                 }
               />
               <input type="hidden" {...register("phone")} />
-              <p className="text-xs text-red-500 mt-1">
-                {errors.phone?.message}
-              </p>
-            </div>
-
-            {/* PASSWORD */}
-            <div className="relative">
-              <Lock className="absolute left-3 top-3.5 size-4 text-muted-foreground" />
-              <Input
-                type={showPassword ? "text" : "password"}
-                placeholder="Password"
-                className="pl-9 pr-9"
-                {...register("password")}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                aria-label={showPassword ? "Hide password" : "Show password"}
-                className="absolute right-3 top-3 cursor-pointer text-muted-foreground outline-none focus-visible:text-foreground"
-              >
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-              <p className="text-xs text-red-500 mt-1">
-                {errors.password?.message}
-              </p>
-            </div>
-
-            {/* CONFIRM PASSWORD */}
-            <div className="relative">
-              <Lock className="absolute left-3 top-3.5 size-4 text-muted-foreground" />
-              <Input
-                type={showPassword ? "text" : "password"}
-                placeholder="Confirm password"
-                className="pl-9"
-                {...register("confirmPassword")}
-              />
-              <p className="text-xs text-red-500 mt-1">
-                {errors.confirmPassword?.message}
-              </p>
-            </div>
-
-            {/* SUBMIT */}
-            <Button type="submit" className="w-full" isLoading={isPending}>
-              <UserPlus className="size-4" />
-              Create account
-            </Button>
-
-            {/* LOGIN LINK */}
-            <div className="text-center text-sm mt-4 font-body">
-              <span className="inline-flex items-center gap-2 justify-center">
-                <LogIn className="size-4 text-muted-foreground" />
-                <span>
-                  Already have an account?{" "}
-                  <Link href={"/auth/login"}>
-                    <span className="text-primary font-medium cursor-pointer hover:underline">
-                      Login
-                    </span>
-                  </Link>
-                </span>
-              </span>
-            </div>
-          </form>
-        ) : (
-          // ✅ SUCCESS STATE
-          <div className="text-center mt-6">
-            <h2 className="text-2xl font-heading font-medium">
-              Check your email 📩
-            </h2>
-
-            <p className="text-muted-foreground mt-3 text-sm">
-              We’ve sent a verification link to
-            </p>
-
-            <p className="font-medium mt-1">{userEmail}</p>
-
-            {/* 🔥 TIMER / RESEND */}
-            <div className="mt-6 text-sm">
-              {timer > 0 ? (
-                <p className="text-muted-foreground">
-                  Resend link in{" "}
-                  <span className="font-medium text-foreground">{timer}s</span>
+              {errors.phone && (
+                <p className="text-xs text-destructive">
+                  {errors.phone.message}
                 </p>
-              ) : (
-                <button
-                  onClick={() => resendMutate({ email: userEmail })}
-                  disabled={isResending}
-                  className="text-primary cursor-pointer font-medium hover:underline inline-flex items-center gap-2"
-                >
-                  <RefreshCcw className="size-4" />
-                  Resend verification link
-                </button>
               )}
             </div>
+
+            <AuthField
+              label="Password"
+              htmlFor="signup-password"
+              error={errors.password?.message}
+              delay={0.26}
+            >
+              <PasswordInput
+                id="signup-password"
+                autoComplete="new-password"
+                placeholder="At least 8 characters"
+                aria-invalid={Boolean(errors.password)}
+                {...register("password")}
+              />
+            </AuthField>
+
+            <AuthField
+              label="Confirm password"
+              htmlFor="signup-confirm-password"
+              error={errors.confirmPassword?.message}
+              delay={0.3}
+            >
+              <PasswordInput
+                id="signup-confirm-password"
+                autoComplete="new-password"
+                placeholder="Type it again"
+                aria-invalid={Boolean(errors.confirmPassword)}
+                {...register("confirmPassword")}
+              />
+            </AuthField>
+
+            <AuthFormError message={formError} />
+
+            <AuthSubmit isLoading={isPending}>Create account</AuthSubmit>
+          </form>
+
+          <AuthAlt>
+            Already have an account?{" "}
+            <Link href="/auth/login" className={authLinkClass}>
+              Log in
+            </Link>
+          </AuthAlt>
+        </>
+      ) : (
+        <div className="text-center">
+          <span className="mx-auto flex size-12 items-center justify-center rounded-full bg-accent text-primary">
+            <MailCheck className="size-6" />
+          </span>
+          <div className="mt-4">
+            <AuthHeader
+              title="Check your email"
+              subtitle={
+                <span className="mx-auto">
+                  We sent a verification link to{" "}
+                  <span className="font-medium text-foreground">
+                    {userEmail}
+                  </span>
+                </span>
+              }
+            />
           </div>
-        )}
-      </div>
+          <div className="mt-6 text-sm">
+            {timer > 0 ? (
+              <p className="text-muted-foreground">
+                Resend link in{" "}
+                <span className="font-medium text-foreground">{timer}s</span>
+              </p>
+            ) : (
+              <button
+                type="button"
+                onClick={() => resendMutate({ email: userEmail })}
+                disabled={isResending}
+                className={`${authLinkClass} inline-flex cursor-pointer items-center gap-2`}
+              >
+                <RefreshCcw className="size-4" />
+                Resend verification link
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </AuthLayout>
   );
 }

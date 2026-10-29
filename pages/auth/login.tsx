@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowRight, Eye, EyeOff } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -11,9 +10,17 @@ import { loginUser, resendVerification } from "@/client-api/functions/auth";
 import { useRouter } from "next/router";
 import { AxiosError } from "axios";
 import AuthLayout from "@/layouts/AuthLayout";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
+import {
+  AuthAlt,
+  AuthField,
+  AuthFormError,
+  AuthHeader,
+  AuthInput,
+  AuthSubmit,
+  authLinkClass,
+  PasswordInput
+} from "@/components/auth/AuthUI";
+import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { useAuthStore } from "@/stores/authStore";
 
@@ -26,7 +33,8 @@ const loginSchema = z.object({
 type LoginForm = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
-  const [showPassword, setShowPassword] = useState(false);
+  const [formError, setFormError] = useState("");
+  const [shakeKey, setShakeKey] = useState(0);
   const router = useRouter();
   const queryClient = useQueryClient();
   const setAuth = useAuthStore((state) => state.setAuth);
@@ -38,6 +46,7 @@ export default function LoginPage() {
     resolver: zodResolver(loginSchema)
   });
   const onSubmit = (data: LoginForm) => {
+    setFormError("");
     mutate(data);
   };
   const { mutate, isPending } = useMutation({
@@ -80,99 +89,77 @@ export default function LoginPage() {
         return;
       }
 
-      toast.error(message);
+      // Shown in the card (with a shake) rather than as a toast.
+      setFormError(message);
+      setShakeKey((current) => current + 1);
     }
   });
 
   return (
-    <AuthLayout>
-      <div className="w-full">
-        <div className="mb-8">
-          <h1 className="font-heading text-3xl font-semibold tracking-tight">
-            Welcome back
-          </h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Log in to your Whatching workspace.
-          </p>
-        </div>
+    <AuthLayout shakeKey={shakeKey}>
+      <AuthHeader
+        title="Welcome back"
+        subtitle="Your conversations are waiting."
+        live
+      />
 
-        <form
-          onSubmit={handleSubmit(onSubmit)}
-          className="space-y-5"
-          noValidate
+      <form
+        onSubmit={handleSubmit(onSubmit, () =>
+          setShakeKey((current) => current + 1)
+        )}
+        className="mt-6 grid gap-4"
+        noValidate
+      >
+        <AuthField
+          label="Email"
+          htmlFor="login-email"
+          error={errors.email?.message}
+          delay={0.18}
         >
-          <div className="space-y-1.5">
-            <Label htmlFor="login-email">Email</Label>
-            <Input
-              id="login-email"
-              type="email"
-              autoComplete="email"
-              placeholder="you@company.com"
-              aria-invalid={Boolean(errors.email)}
-              className="bg-white"
-              {...register("email")}
-            />
-            {errors.email && (
-              <p className="text-xs text-destructive">{errors.email.message}</p>
-            )}
-          </div>
+          <AuthInput
+            id="login-email"
+            type="email"
+            autoComplete="email"
+            placeholder="you@company.com"
+            aria-invalid={Boolean(errors.email)}
+            {...register("email")}
+          />
+        </AuthField>
 
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="login-password">Password</Label>
-              <Link
-                href="/auth/forgot-password"
-                className="text-xs font-medium text-primary hover:underline"
-              >
-                Forgot password?
-              </Link>
-            </div>
-            <div className="relative">
-              <Input
-                id="login-password"
-                type={showPassword ? "text" : "password"}
-                autoComplete="current-password"
-                placeholder="Your password"
-                aria-invalid={Boolean(errors.password)}
-                className="bg-white pr-11"
-                {...register("password")}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                aria-label={showPassword ? "Hide password" : "Show password"}
-                className="absolute inset-y-0 right-0 flex w-11 cursor-pointer items-center justify-center text-muted-foreground outline-none hover:text-foreground focus-visible:text-foreground"
-              >
-                {showPassword ? (
-                  <EyeOff className="size-4" />
-                ) : (
-                  <Eye className="size-4" />
-                )}
-              </button>
-            </div>
-            {errors.password && (
-              <p className="text-xs text-destructive">
-                {errors.password.message}
-              </p>
-            )}
-          </div>
+        <AuthField
+          label="Password"
+          htmlFor="login-password"
+          error={errors.password?.message}
+          delay={0.26}
+          aside={
+            <Link
+              href="/auth/forgot-password"
+              className={cn(authLinkClass, "text-[13px]")}
+            >
+              Forgot?
+            </Link>
+          }
+        >
+          <PasswordInput
+            id="login-password"
+            autoComplete="current-password"
+            placeholder="Your password"
+            aria-invalid={Boolean(errors.password)}
+            {...register("password")}
+          />
+        </AuthField>
 
-          <Button type="submit" className="w-full" isLoading={isPending}>
-            Log in
-            <ArrowRight className="size-4" />
-          </Button>
-        </form>
+        <AuthFormError message={formError} />
 
-        <p className="mt-8 text-center text-sm text-muted-foreground">
-          New to Whatching?{" "}
-          <Link
-            href="/auth/signup"
-            className="font-medium text-primary hover:underline"
-          >
-            Create an account
-          </Link>
-        </p>
-      </div>
+        <AuthSubmit isLoading={isPending}>Log in</AuthSubmit>
+      </form>
+
+      <AuthAlt>
+        New here?{" "}
+        <Link href="/auth/signup" className={authLinkClass}>
+          Create an account
+        </Link>
+      </AuthAlt>
     </AuthLayout>
   );
 }

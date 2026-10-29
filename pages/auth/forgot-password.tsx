@@ -1,6 +1,6 @@
 "use client";
 
-import { Mail, KeyRound } from "lucide-react";
+import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -9,8 +9,15 @@ import { useMutation } from "@tanstack/react-query";
 import { forgotPassword } from "@/client-api/functions/auth";
 import { AxiosError } from "axios";
 import AuthLayout from "@/layouts/AuthLayout";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import {
+  AuthAlt,
+  AuthField,
+  AuthFormError,
+  AuthHeader,
+  AuthInput,
+  AuthSubmit,
+  authLinkClass
+} from "@/components/auth/AuthUI";
 import { useEffect, useState } from "react";
 
 // 🔥 ZOD SCHEMA
@@ -31,6 +38,9 @@ export default function ForgotPassword() {
   });
 
   const [timer, setTimer] = useState(0);
+  const [formError, setFormError] = useState("");
+  const [shakeKey, setShakeKey] = useState(0);
+  const shake = () => setShakeKey((current) => current + 1);
 
   // 🔥 MUTATION
   const { mutate, isPending } = useMutation({
@@ -42,7 +52,8 @@ export default function ForgotPassword() {
     },
 
     onError: (error: AxiosError<{ message?: string }>) => {
-      toast.error(error.response?.data?.message || "Something went wrong");
+      setFormError(error.response?.data?.message || "Something went wrong");
+      shake();
     }
   });
 
@@ -59,71 +70,69 @@ export default function ForgotPassword() {
 
   // 🔥 SUBMIT
   const onSubmit = (data: ForgotPasswordForm) => {
+    setFormError("");
     mutate(data);
   };
 
   return (
-    <AuthLayout>
-      <div className="max-w-md mx-auto">
-        {/* ICON */}
-        <div className="flex justify-center mb-3">
-          <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
-            <KeyRound className="text-primary size-7" />
-          </div>
-        </div>
+    <AuthLayout shakeKey={shakeKey}>
+      <AuthHeader
+        title="Forgot your password?"
+        subtitle="We'll email you a link to reset it."
+      />
 
-        {/* HEADER */}
-        <div className="text-center mb-10">
-          <h1 className="text-4xl max-sm:text-3xl font-heading">
-            Forgot password
-          </h1>
-          <p className="text-muted-foreground mt-2">
-            Enter your email to receive a reset link
+      <form
+        onSubmit={handleSubmit(onSubmit, shake)}
+        className="mt-6 grid gap-4"
+        noValidate
+      >
+        <AuthField
+          label="Email"
+          htmlFor="forgot-email"
+          error={errors.email?.message}
+          delay={0.18}
+        >
+          <AuthInput
+            id="forgot-email"
+            type="email"
+            autoComplete="email"
+            placeholder="you@company.com"
+            aria-invalid={Boolean(errors.email)}
+            {...register("email")}
+          />
+        </AuthField>
+
+        <AuthFormError message={formError} />
+
+        <AuthSubmit isLoading={isPending} disabled={timer > 0} delay={0.26}>
+          {timer > 0 ? "Link sent" : "Send reset link"}
+        </AuthSubmit>
+
+        {timer > 0 ? (
+          <p className="text-center text-sm text-muted-foreground">
+            Didn&apos;t get it? You can resend in{" "}
+            <span className="font-medium text-foreground">{timer}s</span>
           </p>
-        </div>
-
-        {/* FORM */}
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-          {/* EMAIL */}
-          <div className="relative">
-            <Mail className="absolute left-3 top-3.5 size-4 text-muted-foreground" />
-            <Input
-              placeholder="Email address"
-              className="pl-9"
-              {...register("email")}
-            />
-            <p className="text-xs text-red-500 mt-1">{errors.email?.message}</p>
-          </div>
-
-          {/* SUBMIT BUTTON */}
-          <Button
-            type="submit"
-            className="w-full"
-            isLoading={isPending}
-            disabled={timer > 0}
-          >
-            <KeyRound className="size-4" />
-            {timer > 0 ? "Please wait..." : "Send reset link"}
-          </Button>
-
-          {/* TIMER / RESEND */}
-          {timer > 0 ? (
-            <p className="text-sm text-muted-foreground text-center mt-2">
-              Resend in{" "}
-              <span className="font-medium text-foreground">{timer}s</span>
-            </p>
-          ) : (
+        ) : (
+          getValues("email") && (
             <button
               type="button"
               onClick={() => mutate({ email: getValues("email") })}
               disabled={isPending}
-              className="text-sm text-primary text-center w-full mt-2 hover:underline"
+              className={`${authLinkClass} w-full cursor-pointer text-center text-sm`}
             >
               Resend reset link
             </button>
-          )}
-        </form>
-      </div>
+          )
+        )}
+      </form>
+
+      <AuthAlt delay={0.34}>
+        Remembered it?{" "}
+        <Link href="/auth/login" className={authLinkClass}>
+          Log in
+        </Link>
+      </AuthAlt>
     </AuthLayout>
   );
 }

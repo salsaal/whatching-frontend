@@ -89,14 +89,14 @@ export default function VerifyPage() {
 
   return (
     <AuthLayout>
-      <div className="max-w-md mx-auto text-center">
+      <div className="text-center">
         {/* ICON */}
-        <div className="mb-6 flex justify-center">
-          <div className="h-16 w-16 bg-primary/10 rounded-full flex items-center justify-center">
+        <div className="mb-4 flex justify-center">
+          <div className="flex size-12 items-center justify-center rounded-full bg-accent">
             {status === "loading" ? (
-              <Loader2 className="animate-spin text-primary size-7" />
+              <Loader2 className="size-6 animate-spin text-primary" />
             ) : (
-              <ShieldCheck className="text-primary size-7" />
+              <ShieldCheck className="size-6 text-primary" />
             )}
           </div>
         </div>
@@ -104,10 +104,10 @@ export default function VerifyPage() {
         {/* 🔄 LOADING */}
         {status === "loading" && (
           <>
-            <h1 className="text-4xl font-heading max-sm:text-3xl">
+            <h1 className="font-heading text-[28px] leading-tight font-extrabold tracking-[-0.5px]">
               Verifying your email...
             </h1>
-            <p className="text-muted-foreground mt-3">
+            <p className="mt-1.5 text-[14.5px] text-muted-foreground">
               Please wait while we verify your account
             </p>
           </>
@@ -116,15 +116,15 @@ export default function VerifyPage() {
         {/* ✅ SUCCESS */}
         {status === "success" && (
           <>
-            <h1 className="text-4xl font-heading max-sm:text-3xl">
+            <h1 className="font-heading text-[28px] leading-tight font-extrabold tracking-[-0.5px]">
               Email verified 🎉
             </h1>
-            <p className="text-muted-foreground mt-3 mb-6">
+            <p className="mt-1.5 mb-6 text-[14.5px] text-muted-foreground">
               Your account is now active
             </p>
 
             <Button
-              className="w-full"
+              className="auth-submit h-12 w-full rounded-[var(--radius)] text-[15px]"
               onClick={() => router.push("/organisations")}
             >
               Go to dashboard
@@ -135,11 +135,11 @@ export default function VerifyPage() {
 
         {status === "email_sent" && (
           <>
-            <h1 className="text-4xl font-heading max-sm:text-3xl">
+            <h1 className="font-heading text-[28px] leading-tight font-extrabold tracking-[-0.5px]">
               Check your email
             </h1>
 
-            <p className="text-muted-foreground mt-3 mb-6">
+            <p className="mt-1.5 mb-6 text-[14.5px] text-muted-foreground">
               We sent a fresh verification link to {email}.
             </p>
 
@@ -168,11 +168,11 @@ export default function VerifyPage() {
         {/* ❌ ERROR */}
         {status === "error" && (
           <>
-            <h1 className="text-4xl font-heading max-sm:text-3xl">
+            <h1 className="font-heading text-[28px] leading-tight font-extrabold tracking-[-0.5px]">
               Verification failed
             </h1>
 
-            <p className="text-muted-foreground mt-3 mb-6">
+            <p className="mt-1.5 mb-6 text-[14.5px] text-muted-foreground">
               The link may be expired or invalid
             </p>
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Eye, EyeOff, Lock, KeyRound } from "lucide-react";
+import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -11,8 +11,15 @@ import { resetPassword } from "@/client-api/functions/auth";
 import { useRouter } from "next/router";
 import { AxiosError } from "axios";
 import AuthLayout from "@/layouts/AuthLayout";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import {
+  AuthAlt,
+  AuthField,
+  AuthFormError,
+  AuthHeader,
+  AuthSubmit,
+  authLinkClass,
+  PasswordInput
+} from "@/components/auth/AuthUI";
 import { useAuthStore } from "@/stores/authStore";
 
 // 🔥 ZOD SCHEMA
@@ -29,7 +36,9 @@ const resetSchema = z
 type ResetForm = z.infer<typeof resetSchema>;
 
 export default function ResetPassword() {
-  const [show, setShow] = useState(false);
+  const [formError, setFormError] = useState("");
+  const [shakeKey, setShakeKey] = useState(0);
+  const shake = () => setShakeKey((current) => current + 1);
   const router = useRouter();
   const queryClient = useQueryClient();
   const setAuth = useAuthStore((state) => state.setAuth);
@@ -58,15 +67,18 @@ export default function ResetPassword() {
     },
 
     onError: (error: AxiosError<{ message?: string }>) => {
-      toast.error(error.response?.data?.message || "Reset failed");
+      setFormError(error.response?.data?.message || "Reset failed");
+      shake();
     }
   });
 
   const onSubmit = (data: ResetForm) => {
     if (!token) {
-      toast.error("Invalid or missing reset token");
+      setFormError("This reset link is invalid. Request a new one.");
+      shake();
       return;
     }
+    setFormError("");
 
     mutate({
       token,
@@ -77,70 +89,57 @@ export default function ResetPassword() {
     });
   };
   return (
-    <AuthLayout>
-      <div className="max-w-md mx-auto">
-        {/* 🔥 TOP ICON */}
-        <div className="flex justify-center mb-3">
-          <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
-            <KeyRound className="text-primary size-7" />
-          </div>
-        </div>
+    <AuthLayout shakeKey={shakeKey}>
+      <AuthHeader
+        title="Set a new password"
+        subtitle="Choose something you haven't used before."
+      />
 
-        {/* 🔥 HEADER */}
-        <div className="text-center mb-10">
-          <h1 className="text-4xl font-heading max-sm:text-3xl">
-            Reset password
-          </h1>
-          <p className="text-muted-foreground mt-2">
-            Enter your new password below
-          </p>
-        </div>
+      <form
+        onSubmit={handleSubmit(onSubmit, shake)}
+        className="mt-6 grid gap-4"
+        noValidate
+      >
+        <AuthField
+          label="New password"
+          htmlFor="reset-password"
+          error={errors.password?.message}
+          delay={0.18}
+        >
+          <PasswordInput
+            id="reset-password"
+            autoComplete="new-password"
+            placeholder="At least 6 characters"
+            aria-invalid={Boolean(errors.password)}
+            {...register("password")}
+          />
+        </AuthField>
 
-        {/* 🔥 FORM */}
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-          {/* PASSWORD */}
-          <div className="relative">
-            <Lock className="absolute left-3 top-3.5 size-4 text-muted-foreground" />
-            <Input
-              type={show ? "text" : "password"}
-              placeholder="New password"
-              className="pl-9 pr-9"
-              {...register("password")}
-            />
-            <button
-              type="button"
-              onClick={() => setShow(!show)}
-              aria-label={show ? "Hide password" : "Show password"}
-              className="absolute right-3 top-3 cursor-pointer text-muted-foreground outline-none focus-visible:text-foreground"
-            >
-              {show ? <EyeOff size={18} /> : <Eye size={18} />}
-            </button>
-            <p className="text-xs text-red-500 mt-1">
-              {errors.password?.message}
-            </p>
-          </div>
+        <AuthField
+          label="Confirm password"
+          htmlFor="reset-confirm-password"
+          error={errors.confirmPassword?.message}
+          delay={0.26}
+        >
+          <PasswordInput
+            id="reset-confirm-password"
+            autoComplete="new-password"
+            placeholder="Type it again"
+            aria-invalid={Boolean(errors.confirmPassword)}
+            {...register("confirmPassword")}
+          />
+        </AuthField>
 
-          {/* CONFIRM PASSWORD */}
-          <div className="relative">
-            <Lock className="absolute left-3 top-3.5 size-4 text-muted-foreground" />
-            <Input
-              type={show ? "text" : "password"}
-              placeholder="Confirm password"
-              className="pl-9"
-              {...register("confirmPassword")}
-            />
-            <p className="text-xs text-red-500 mt-1">
-              {errors.confirmPassword?.message}
-            </p>
-          </div>
+        <AuthFormError message={formError} />
 
-          {/* SUBMIT */}
-          <Button type="submit" className="w-full" isLoading={isPending}>
-            <KeyRound className="size-4" />
-            Reset password
-          </Button>
-        </form>
-      </div>
+        <AuthSubmit isLoading={isPending}>Reset password</AuthSubmit>
+      </form>
+
+      <AuthAlt>
+        <Link href="/auth/login" className={authLinkClass}>
+          Back to log in
+        </Link>
+      </AuthAlt>
     </AuthLayout>
   );
 }
