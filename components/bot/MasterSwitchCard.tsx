@@ -92,7 +92,9 @@ export function MasterSwitchCard({
         <div
           className={cn(
             "flex size-11 shrink-0 items-center justify-center rounded-md",
-            isOn ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+            isOn
+              ? "bg-primary/10 text-primary"
+              : "bg-muted text-muted-foreground"
           )}
         >
           <Power className="size-5" />
@@ -120,7 +122,9 @@ export function MasterSwitchCard({
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>{confirmTitle}</AlertDialogTitle>
-            <AlertDialogDescription>{confirmDescription}</AlertDialogDescription>
+            <AlertDialogDescription>
+              {confirmDescription}
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>

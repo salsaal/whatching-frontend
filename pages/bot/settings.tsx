@@ -136,7 +136,6 @@ function BotSettingsTab() {
           }}
         />
       </SettingRow>
-
     </div>
   );
 }
