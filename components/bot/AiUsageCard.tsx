@@ -9,15 +9,9 @@ import {
   TooltipTrigger
 } from "@/components/ui/tooltip";
 import { formatDate } from "@/lib/billing";
-import { cn } from "@/lib/utils";
+import { cn, formatTokenCount } from "@/lib/utils";
 import { useOrganizationStore } from "@/stores/organizationStore";
 
-// 3 significant digits keeps "2.99M" from rounding up to "3M", while
-// round numbers stay short ("3M", "500K").
-const tokenFormat = new Intl.NumberFormat("en-US", {
-  notation: "compact",
-  maximumSignificantDigits: 3
-});
 const exactFormat = new Intl.NumberFormat("en-IN");
 
 function Tokens({ value, className }: { value: number; className?: string }) {
@@ -25,7 +19,7 @@ function Tokens({ value, className }: { value: number; className?: string }) {
     <Tooltip>
       <TooltipTrigger asChild>
         <span className={cn("cursor-default", className)}>
-          {tokenFormat.format(value)}
+          {formatTokenCount(value)}
         </span>
       </TooltipTrigger>
       <TooltipContent>{exactFormat.format(value)} tokens</TooltipContent>
@@ -139,7 +133,7 @@ export function AiUsageCard() {
                   <TooltipTrigger asChild>
                     <span className="inline-flex cursor-default items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">
                       <Plus className="size-3" />
-                      {tokenFormat.format(usage.topUpRemaining)} top-up tokens
+                      {formatTokenCount(usage.topUpRemaining)} top-up tokens
                     </span>
                   </TooltipTrigger>
                   <TooltipContent>

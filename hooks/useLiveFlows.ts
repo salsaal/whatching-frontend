@@ -6,6 +6,7 @@ import {
   isUsableWhatsAppNumber,
   useWhatsAppNumberContext
 } from "@/components/whatsapp/WhatsAppNumberSwitcher";
+import { useCurrentMembership } from "@/hooks/useCurrentMembership";
 import { useOrganizationStore } from "@/stores/organizationStore";
 
 export const isPublishedCanvas = (canvas: BotCanvasRecord) =>
@@ -19,10 +20,13 @@ export function useLiveFlows() {
   const { numbers: allNumbers, isLoading: isNumbersLoading } =
     useWhatsAppNumberContext();
 
+  // /bot/canvases sits behind flows:manage; pages outside the Bot section
+  // (Overview) use this too, so don't fire it for members without access.
+  const { can } = useCurrentMembership();
   const canvasesQuery = useQuery({
     queryKey: ["bot-canvases", orgId],
     queryFn: listBotCanvases,
-    enabled: Boolean(orgId),
+    enabled: Boolean(orgId) && can("flows:manage"),
     refetchOnMount: "always"
   });
 
