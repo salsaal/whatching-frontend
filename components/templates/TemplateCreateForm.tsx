@@ -44,6 +44,16 @@ import MediaPickerDialog from "@/components/media/MediaPickerDialog";
 import LocationPickerDialog, {
   PickedLocation
 } from "@/components/location/LocationPickerDialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -124,6 +134,8 @@ const languages = [
   { label: "Arabic", value: "ar" },
   { label: "Spanish", value: "es" }
 ];
+
+const MEDIA_HEADER_FORMATS: string[] = ["IMAGE", "VIDEO", "DOCUMENT"];
 
 const templateTypes: Array<{
   label: string;
@@ -326,6 +338,20 @@ export default function TemplateCreateForm({
   const supportsHeaderSelector =
     templateType === "TEXT" || templateType === "LIMITED_TIME_OFFER";
   const isEditing = Boolean(initialTemplate);
+  // What the template was when the page opened, to catch accidental type
+  // changes (and keep its stored header when no new file is picked).
+  const loadedTemplateType = initialTemplate
+    ? (getTemplateType(initialTemplate) as TemplateCreationType)
+    : null;
+  // Only reusable while the type is unchanged: an image handle can't serve
+  // as a video example.
+  const existingHeaderHandle =
+    loadedTemplateType &&
+    loadedTemplateType === templateType &&
+    MEDIA_HEADER_FORMATS.includes(loadedTemplateType)
+      ? headerExampleUrl.trim()
+      : "";
+  const [isTypeChangeConfirmOpen, setIsTypeChangeConfirmOpen] = useState(false);
   const isDraftEdit = editKind === "draft";
   // A draft was never submitted to Meta, so it's still freely editable in
   // every way (structure included). Only an already-submitted template is
@@ -650,11 +676,23 @@ export default function TemplateCreateForm({
       return null;
     }
 
-    if (
-      ["IMAGE", "VIDEO", "DOCUMENT"].includes(headerFormat) &&
-      !selectedMediaId
-    ) {
-      toast.error("Select media for this template header");
+    if (!templateTypes.some((item) => item.value === templateType)) {
+      toast.error("Choose a template type.");
+      return null;
+    }
+
+    // A media template must keep its media: a picked file, or (when
+    // editing) the header handle Meta already has. Never send a media type
+    // without one; Meta would re-review it as a different template.
+    const mediaHeaderFormat = MEDIA_HEADER_FORMATS.includes(templateType)
+      ? templateType
+      : MEDIA_HEADER_FORMATS.includes(headerFormat)
+        ? headerFormat
+        : null;
+    if (mediaHeaderFormat && !selectedMediaId && !existingHeaderHandle) {
+      toast.error(
+        `Choose ${mediaHeaderFormat === "IMAGE" ? "an image" : mediaHeaderFormat === "VIDEO" ? "a video" : "a document"} for the header`
+      );
       return null;
     }
 
@@ -725,8 +763,10 @@ export default function TemplateCreateForm({
         format: headerFormat,
         ...(headerFormat === "TEXT"
           ? { text: headerText.trim() }
-          : ["IMAGE", "VIDEO", "DOCUMENT"].includes(headerFormat)
-            ? { mediaId: selectedMediaId }
+          : MEDIA_HEADER_FORMATS.includes(headerFormat)
+            ? selectedMediaId
+              ? { mediaId: selectedMediaId }
+              : { example: { header_handle: [existingHeaderHandle] } }
             : headerExampleUrl.trim()
               ? { example: { header_handle: [headerExampleUrl.trim()] } }
               : {})
@@ -797,9 +837,19 @@ export default function TemplateCreateForm({
     saveDraft(payload);
   };
 
-  const handleSubmitForReview = () => {
+  const handleSubmitForReview = (confirmedTypeChange = false) => {
     const payload = buildPayload();
     if (!payload) return;
+
+    if (
+      isEditing &&
+      !confirmedTypeChange &&
+      loadedTemplateType &&
+      loadedTemplateType !== templateType
+    ) {
+      setIsTypeChangeConfirmOpen(true);
+      return;
+    }
 
     if (isEditing && !isDraftEdit && initialTemplate?.templateId) {
       patchApproved({
@@ -844,6 +894,9 @@ export default function TemplateCreateForm({
     event.preventDefault();
     handleSubmitForReview();
   };
+
+  const typeLabel = (value: string) =>
+    templateTypes.find((item) => item.value === value)?.label || value;
 
   return (
     <form
@@ -917,7 +970,10 @@ export default function TemplateCreateForm({
               <Label>Template category</Label>
               <Select
                 value={category}
-                onValueChange={(value) => setCategory(value)}
+                onValueChange={(value) => {
+                  if (!value) return;
+                  setCategory(value);
+                }}
                 disabled={isCategoryLocked || !canEditFields}
               >
                 <SelectTrigger className="mt-2 h-11 w-full border-0 bg-muted/70 shadow-none">
@@ -937,7 +993,10 @@ export default function TemplateCreateForm({
               <Label>Template language</Label>
               <Select
                 value={language}
-                onValueChange={(value) => setLanguage(value)}
+                onValueChange={(value) => {
+                  if (!value) return;
+                  setLanguage(value);
+                }}
                 disabled={isMetaTemplateEdit || !canEditFields}
               >
                 <SelectTrigger className="mt-2 h-11 w-full border-0 bg-muted/70 shadow-none">
@@ -975,6 +1034,9 @@ export default function TemplateCreateForm({
             <Select
               value={templateType}
               onValueChange={(value) => {
+                // See components/ui/select.tsx: "" is a mount-time reset,
+                // never a choice, and treating it as one wiped the header.
+                if (!value) return;
                 const nextType = value as TemplateCreationType;
                 // A submitted template can switch between header types (Text,
                 // Image, Video, Document) but never into or out of a
@@ -1064,9 +1126,10 @@ export default function TemplateCreateForm({
           {supportsHeaderSelector ? (
             <Select
               value={headerFormat}
-              onValueChange={(value) =>
-                setHeaderFormat(value as HeaderFormatOption)
-              }
+              onValueChange={(value) => {
+                if (!value) return;
+                setHeaderFormat(value as HeaderFormatOption);
+              }}
               disabled={!canEditFields}
             >
               <SelectTrigger className="h-11 w-full border-0 bg-muted/70 shadow-none">
@@ -1402,9 +1465,10 @@ export default function TemplateCreateForm({
                 <div className="grid gap-3 rounded-sm bg-muted/40 p-3 lg:grid-cols-[180px_1fr_1fr_auto]">
                   <Select
                     value={button.type}
-                    onValueChange={(value) =>
-                      updateButtonType(index, value as TemplateButtonType)
-                    }
+                    onValueChange={(value) => {
+                      if (!value) return;
+                      updateButtonType(index, value as TemplateButtonType);
+                    }}
                     disabled={!canEditFields}
                   >
                     <SelectTrigger className="h-10 w-full border-0 bg-white shadow-none">
@@ -1550,6 +1614,40 @@ export default function TemplateCreateForm({
           </div>
         </div>
       </aside>
+
+      <AlertDialog
+        open={isTypeChangeConfirmOpen}
+        onOpenChange={setIsTypeChangeConfirmOpen}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Change the template type?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This changes the template from{" "}
+              {typeLabel(loadedTemplateType || "")} to {typeLabel(templateType)}
+              . Meta will re-review it
+              {loadedTemplateType &&
+              MEDIA_HEADER_FORMATS.includes(loadedTemplateType)
+                ? ` and the ${typeLabel(loadedTemplateType).toLowerCase()} will be removed`
+                : ""}
+              .
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>
+              Keep {typeLabel(loadedTemplateType || "")}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setIsTypeChangeConfirmOpen(false);
+                handleSubmitForReview(true);
+              }}
+            >
+              Change and submit
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <MediaPickerDialog
         open={isMediaPickerOpen}

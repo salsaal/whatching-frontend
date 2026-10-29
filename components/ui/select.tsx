@@ -5,9 +5,26 @@ import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 function Select({
+  onValueChange,
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Root>) {
-  return <SelectPrimitive.Root data-slot="select" {...props} />;
+  // Radix Select 2.x can fire onValueChange("") while mounting with a value
+  // already set. "" is never a real choice (SelectItem forbids it), but
+  // handlers took it as one: the template form reset an image template to
+  // text that way. Dropping it here protects every form at once.
+  return (
+    <SelectPrimitive.Root
+      data-slot="select"
+      onValueChange={
+        onValueChange
+          ? (value) => {
+              if (value) onValueChange(value);
+            }
+          : undefined
+      }
+      {...props}
+    />
+  );
 }
 
 function SelectGroup({
