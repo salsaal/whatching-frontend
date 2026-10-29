@@ -187,9 +187,13 @@ const pageMeta: Record<string, PageMeta> = {
     description:
       "Review workspace setup, integration health, message limits, and broadcast readiness."
   },
-  "/profile": {
+  "/account": {
     title: "Profile | Whatching",
     description: "Manage your Whatching profile and account details."
+  },
+  "/account/security": {
+    title: "Change password | Whatching",
+    description: "Change the password for your Whatching login."
   },
   "/reset-password/[token]": {
     title: "Reset Password | Whatching",

@@ -10,13 +10,12 @@ import { updatePassword } from "@/client-api/functions/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { SettingsBackLink } from "@/components/settings/SettingsBackLink";
-import AppLayout from "@/layouts/AppLayout";
+import AccountLayout from "@/layouts/AccountLayout";
 import { useAuthStore } from "@/stores/authStore";
 
 const MIN_PASSWORD_LENGTH = 8;
 
-export default function SecuritySettingsPage() {
+export default function AccountSecurityPage() {
   const setToken = useAuthStore((state) => state.setToken);
   const [currentPassword, setCurrentPassword] = useState("");
   const [password, setPassword] = useState("");
@@ -74,9 +73,8 @@ export default function SecuritySettingsPage() {
   };
 
   return (
-    <AppLayout>
-      <div className="mx-auto max-w-3xl space-y-4">
-        <SettingsBackLink />
+    <AccountLayout activeTab="security">
+      <div className="space-y-4">
         <section className="rounded-lg bg-white p-5 shadow-xs">
           <div className="flex items-center gap-3">
             <div className="flex size-10 shrink-0 items-center justify-center rounded-sm bg-primary/10 text-primary">
@@ -144,6 +142,6 @@ export default function SecuritySettingsPage() {
           </Button>
         </form>
       </div>
-    </AppLayout>
+    </AccountLayout>
   );
 }

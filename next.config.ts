@@ -42,6 +42,13 @@ const nextConfig: NextConfig = {
         source: "/flows/:canvasId",
         destination: "/bot/flows/:canvasId",
         permanent: true
+      },
+      // Profile and password moved out of the org into the account area.
+      { source: "/profile", destination: "/account", permanent: true },
+      {
+        source: "/settings/security",
+        destination: "/account/security",
+        permanent: true
       }
     ];
   }
