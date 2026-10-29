@@ -2,12 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/router";
-import {
-  useMutation,
-  useQueries,
-  useQuery,
-  useQueryClient
-} from "@tanstack/react-query";
+import { useMutation, useQueries, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import {
   Bot,
@@ -24,17 +19,10 @@ import {
   archiveBotCanvas,
   createBotCanvas,
   getBotCanvas,
-  listBotCanvases,
-  updateBotCanvas,
-  updateBotCanvasStatus
+  updateBotCanvas
 } from "@/client-api/functions/bot";
 import { BotCanvasRecord } from "@/client-api/types/bot.type";
-import { updateWhatsAppPhoneNumber } from "@/client-api/functions/organizations";
-import {
-  ALL_WHATSAPP_NUMBERS,
-  isUsableWhatsAppNumber,
-  useWhatsAppNumberContext
-} from "@/components/whatsapp/WhatsAppNumberSwitcher";
+import { LiveFlowsPanel } from "@/components/bot/LiveFlowsPanel";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -60,7 +48,7 @@ import { Label } from "@/components/ui/label";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { QueryErrorState } from "@/components/shared/QueryErrorState";
 import { CardGridLoadingSkeleton } from "@/components/ui/loading-skeletons";
-import { Switch } from "@/components/ui/switch";
+import { isPublishedCanvas, useLiveFlows } from "@/hooks/useLiveFlows";
 import { useOrganizationStore } from "@/stores/organizationStore";
 import BotLayout from "@/components/bot/BotLayout";
 
@@ -80,8 +68,6 @@ function FlowsPageContent() {
   const activeOrganization = useOrganizationStore(
     (state) => state.activeOrganization
   );
-  const { numbers, selectedPhoneNumberId, selectedNumber } =
-    useWhatsAppNumberContext();
   const [name, setName] = useState("");
   const [editingCanvas, setEditingCanvas] = useState<BotCanvasRecord | null>(
     null
@@ -91,17 +77,16 @@ function FlowsPageContent() {
   );
 
   const queryKey = ["bot-canvases", activeOrganization?._id];
-  const { data, isLoading, isError, refetch, isFetching } = useQuery({
-    queryKey,
-    queryFn: listBotCanvases,
-    enabled: Boolean(activeOrganization?._id),
-    refetchOnMount: "always"
-  });
-  const canvases = [...(data?.data?.canvases || [])].sort((a, b) => {
-    const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-    const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-    return aTime - bTime;
-  });
+  const {
+    canvases,
+    defaultCanvas,
+    numbers,
+    assignedCanvasFor,
+    isLoading,
+    isError,
+    refetch,
+    isFetching
+  } = useLiveFlows();
   const canvasDetailQueries = useQueries({
     queries: canvases.map((canvas) => ({
       queryKey: ["bot-canvas-detail", activeOrganization?._id, canvas._id],
@@ -148,17 +133,6 @@ function FlowsPageContent() {
     onError: handleError
   });
 
-  const { mutate: setCanvasStatus, isPending: isChangingCanvasStatus } =
-    useMutation({
-      mutationFn: updateBotCanvasStatus,
-      meta: { showToast: false },
-      onSuccess: async () => {
-        toast.success("Organisation fallback updated.");
-        await invalidate();
-      },
-      onError: handleError
-    });
-
   const { mutate: archiveCanvasMutate, isPending: isDeleting } = useMutation({
     mutationFn: archiveBotCanvas,
     meta: { showToast: false },
@@ -169,27 +143,14 @@ function FlowsPageContent() {
     },
     onError: handleError
   });
-  const { mutate: assignCanvasMutate, isPending: isAssigning } = useMutation({
-    mutationFn: updateWhatsAppPhoneNumber,
-    meta: { showToast: false },
-    onSuccess: async () => {
-      toast.success("Number flow assignment updated.");
-      await queryClient.invalidateQueries({
-        queryKey: ["whatsapp-phone-numbers", activeOrganization?._id]
-      });
-      await invalidate();
-    },
-    onError: handleError
-  });
-
   return (
     <>
       <div className="space-y-6">
         <section className="rounded-lg bg-white p-5 shadow-xs">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <p className="text-sm text-muted-foreground">
-              Publish reusable canvases, choose the organisation fallback, and
-              assign a different published flow to each WhatsApp number.
+              Build flows, then choose which one answers on each WhatsApp
+              number.
             </p>
             <div className="flex flex-wrap gap-2">
               <Button
@@ -226,6 +187,8 @@ function FlowsPageContent() {
           <QueryErrorState message="Flows could not be loaded for this organisation." />
         )}
 
+        {!isLoading && !isError && canvases.length > 0 && <LiveFlowsPanel />}
+
         <section className="grid gap-4 lg:grid-cols-3">
           {isLoading ? (
             <div className="lg:col-span-3">
@@ -233,20 +196,17 @@ function FlowsPageContent() {
             </div>
           ) : canvases.length ? (
             canvases.map((canvas) => {
-              const isSelectedNumberContext =
-                selectedPhoneNumberId !== ALL_WHATSAPP_NUMBERS &&
-                Boolean(selectedNumber);
-              const isAssignedToSelectedNumber =
-                selectedNumber?.activeCanvasId === canvas._id;
-              const isOrgFallback = canvas.status === "active";
+              const hasPublishedVersion = isPublishedCanvas(canvas);
+              const isDefault = defaultCanvas?._id === canvas._id;
               const assignedNumbers = numbers.filter(
-                (number) =>
-                  number.activeCanvasId === canvas._id &&
-                  isUsableWhatsAppNumber(number)
+                (number) => assignedCanvasFor(number)?._id === canvas._id
               );
-              const hasPublishedVersion = Boolean(
-                canvas.latestPublishedVersionId || canvas.publishedState
-              );
+              const liveOn = [
+                ...(isDefault ? ["Default"] : []),
+                ...assignedNumbers.map(
+                  (number) => number.displayPhoneNumber || number.phoneNumberId
+                )
+              ];
               const detail = canvasDetailById.get(canvas._id);
               const nodeCount =
                 canvas.publishedState?.nodes?.length ??
@@ -279,74 +239,27 @@ function FlowsPageContent() {
                       </Badge>
                     </div>
 
-                    <div className="flex min-h-6 flex-wrap gap-1.5">
-                      {isOrgFallback && (
-                        <Badge className="bg-emerald-100 text-emerald-800">
-                          Organisation fallback
-                        </Badge>
-                      )}
-                      {assignedNumbers.map((number) => (
-                        <Badge key={number.id} variant="outline">
-                          {number.displayPhoneNumber || number.phoneNumberId}
-                        </Badge>
-                      ))}
-                    </div>
-
-                    <div className="grid gap-2 text-sm">
-                      <div className="rounded-md bg-muted/50 p-3">
-                        <p className="text-xs text-muted-foreground">Blocks</p>
-                        <p className="mt-1 font-semibold">{nodeCount}</p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between rounded-md border px-3 py-2">
-                      <div>
-                        <p className="text-sm font-medium">
-                          {isSelectedNumberContext
-                            ? "Use for selected number"
-                            : "Organisation fallback"}
-                        </p>
+                    <div className="space-y-1 text-sm">
+                      <p>
+                        <span className="text-muted-foreground">Live on: </span>
+                        {liveOn.length ? (
+                          <span className="font-medium text-emerald-700">
+                            {liveOn.join(", ")}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">
+                            Not live
+                          </span>
+                        )}
+                      </p>
+                      {!hasPublishedVersion && (
                         <p className="text-xs text-muted-foreground">
-                          {isSelectedNumberContext
-                            ? "Overrides the fallback flow for this number."
-                            : "Used when a number has no specific assignment."}
+                          Publish to make it live
                         </p>
-                      </div>
-                      <Switch
-                        checked={
-                          isSelectedNumberContext
-                            ? isAssignedToSelectedNumber
-                            : isOrgFallback
-                        }
-                        disabled={
-                          isSelectedNumberContext
-                            ? isAssigning || !hasPublishedVersion
-                            : isChangingCanvasStatus
-                        }
-                        title={
-                          isSelectedNumberContext
-                            ? "Assign this published flow to the selected WhatsApp number"
-                            : "Use this flow as the organisation fallback"
-                        }
-                        onCheckedChange={(checked) => {
-                          if (isSelectedNumberContext && selectedNumber) {
-                            assignCanvasMutate({
-                              phoneNumberRecordId: selectedNumber.id,
-                              activeCanvasId: checked ? canvas._id : ""
-                            });
-                          } else if (checked) {
-                            setCanvasStatus({
-                              canvasId: canvas._id,
-                              status: "active"
-                            });
-                          } else {
-                            setCanvasStatus({
-                              canvasId: canvas._id,
-                              status: "inactive"
-                            });
-                          }
-                        }}
-                      />
+                      )}
+                      <p className="text-muted-foreground">
+                        {nodeCount} block{nodeCount === 1 ? "" : "s"}
+                      </p>
                     </div>
 
                     <div className="flex flex-wrap gap-2">
