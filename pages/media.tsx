@@ -197,7 +197,7 @@ function MediaPageContent() {
         <img
           src={item.cloudinaryUrl}
           alt={item.name}
-          className="h-full w-full object-cover"
+          className="h-full w-full object-contain"
         />
       );
     }
@@ -206,7 +206,7 @@ function MediaPageContent() {
       return (
         <video
           src={item.cloudinaryUrl}
-          className="h-full w-full object-cover"
+          className="h-full w-full object-contain"
           muted
           controls
         />
@@ -334,7 +334,7 @@ function MediaPageContent() {
         {isLoading ? (
           <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {Array.from({ length: 8 }).map((_, index) => (
-              <Skeleton key={index} className="aspect-[4/3] rounded-lg" />
+              <Skeleton key={index} className="aspect-square rounded-lg" />
             ))}
           </section>
         ) : visibleMedia.length ? (
@@ -350,7 +350,7 @@ function MediaPageContent() {
                     selected && "ring-primary"
                   )}
                 >
-                  <div className="relative aspect-[4/3] overflow-hidden bg-muted">
+                  <div className="relative aspect-square overflow-hidden bg-muted">
                     {renderPreview(item)}
                     <div className="absolute left-3 top-3 rounded-sm bg-white/95 p-1 shadow-xs">
                       <Checkbox

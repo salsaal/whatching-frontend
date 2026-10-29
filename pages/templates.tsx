@@ -503,6 +503,7 @@ function TemplatesPageContent() {
         open={Boolean(mediaTarget)}
         selectedMediaId={mediaTarget?.defaultMediaId}
         requiredType={mediaTarget ? getTemplateType(mediaTarget) : undefined}
+        incompatibleHint="Image templates support JPG or PNG"
         onOpenChange={(open) => !open && setMediaTarget(null)}
         onSelect={(media: MediaAsset) => {
           if (!mediaTarget) return;

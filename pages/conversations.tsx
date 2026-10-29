@@ -3388,6 +3388,7 @@ function ConversationsPageContent() {
         open={templateMediaPickerOpen}
         selectedMediaId={effectiveTemplateHeaderMedia?._id}
         requiredType={selectedTemplateMediaHeader?.format}
+        incompatibleHint="Image templates support JPG or PNG"
         onOpenChange={setTemplateMediaPickerOpen}
         onSelect={(media) => {
           setTemplateHeaderMedia(media);

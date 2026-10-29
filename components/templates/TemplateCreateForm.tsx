@@ -1559,6 +1559,7 @@ export default function TemplateCreateForm({
             : carouselCards[carouselMediaIndex]?.mediaId
         }
         requiredType={carouselMediaIndex === null ? headerFormat : "IMAGE"}
+        incompatibleHint="Image templates support JPG or PNG"
         onOpenChange={(open) => {
           setIsMediaPickerOpen(open);
           if (!open) setCarouselMediaIndex(null);
