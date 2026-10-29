@@ -51,114 +51,29 @@
    Theme tokens only; translucency via color-mix. Everything here is
    decorative motion and switches off under prefers-reduced-motion. */
 
-.auth-dots {
-  background-image: radial-gradient(var(--border) 1.2px, transparent 1.2px);
-  background-size: 22px 22px;
-  mask-image: radial-gradient(
-    ellipse 65% 55% at 50% 45%,
-    #000 25%,
-    transparent 75%
-  );
-}
-
-.auth-glow {
-  position: absolute;
+/* One soft halo behind the card, breathing slowly. */
+.auth-halo {
+  position: fixed;
+  left: 50%;
+  top: 46%;
+  width: 640px;
+  height: 640px;
   border-radius: 9999px;
-  filter: blur(80px);
+  filter: blur(70px);
+  pointer-events: none;
+  translate: -50% -50%;
+  background: radial-gradient(
+    circle,
+    color-mix(in oklch, var(--primary) 18%, transparent) 0%,
+    var(--accent) 45%,
+    transparent 70%
+  );
+  animation: auth-breathe 9s ease-in-out infinite;
 }
-.auth-glow-a {
-  width: 460px;
-  height: 460px;
-  top: -160px;
-  left: -120px;
-  background: color-mix(in oklch, var(--primary) 28%, transparent);
-  animation: auth-drift-a 18s ease-in-out infinite alternate;
-}
-.auth-glow-b {
-  width: 420px;
-  height: 420px;
-  bottom: -150px;
-  right: -110px;
-  background: var(--accent);
-  animation: auth-drift-b 22s ease-in-out infinite alternate;
-}
-@keyframes auth-drift-a {
-  to {
-    transform: translate(120px, 80px) scale(1.08);
-  }
-}
-@keyframes auth-drift-b {
-  to {
-    transform: translate(-110px, -70px) scale(1.12);
-  }
-}
-
-.auth-bubble {
-  position: absolute;
-  bottom: -60px;
-  padding: 9px 13px;
-  font-size: 13px;
-  font-weight: 500;
-  white-space: nowrap;
-  border-radius: 16px 16px 16px 4px;
-  background: var(--card);
-  color: var(--foreground);
-  border: 1px solid var(--border);
-  box-shadow: 0 6px 18px -10px
-    color-mix(in oklch, var(--foreground) 35%, transparent);
-  opacity: 0;
-  animation: auth-rise linear infinite;
-}
-.auth-bubble-me {
-  border-radius: 16px 16px 4px 16px;
-  background: var(--accent);
-  color: var(--accent-foreground);
-  border-color: color-mix(in oklch, var(--primary) 25%, transparent);
-}
-.auth-bubble:nth-child(1) {
-  left: 7%;
-  animation-duration: 17s;
-  animation-delay: -2s;
-}
-.auth-bubble:nth-child(2) {
-  left: 72%;
-  animation-duration: 19s;
-  animation-delay: -9s;
-}
-.auth-bubble:nth-child(3) {
-  left: 15%;
-  animation-duration: 21s;
-  animation-delay: -14s;
-}
-.auth-bubble:nth-child(4) {
-  left: 80%;
-  animation-duration: 18s;
-  animation-delay: -4s;
-}
-.auth-bubble:nth-child(5) {
-  left: 4%;
-  animation-duration: 20s;
-  animation-delay: -11s;
-}
-.auth-bubble:nth-child(6) {
-  left: 64%;
-  animation-duration: 16s;
-  animation-delay: -1s;
-}
-@keyframes auth-rise {
-  0% {
-    transform: translateY(0);
-    opacity: 0;
-  }
-  12% {
+@keyframes auth-breathe {
+  50% {
+    transform: scale(1.06);
     opacity: 0.85;
-  }
-  78% {
-    opacity: 0.85;
-  }
-  100% {
-    transform: translateY(-110vh);
-    opacity: 0;
   }
 }
 
@@ -258,9 +173,6 @@
 @media (max-width: 480px) {
   .auth-card {
     padding: 28px 22px 24px;
-  }
-  .auth-bubble:nth-child(n + 4) {
-    display: none;
   }
 }
 

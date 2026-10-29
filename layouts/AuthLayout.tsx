@@ -11,15 +11,6 @@ interface AuthLayoutProps {
   shakeKey?: number;
 }
 
-const bubbles: Array<{ text: string; isMe?: boolean }> = [
-  { text: "Hi! Is this in stock? 👀" },
-  { text: "Yes! Want me to reserve it?", isMe: true },
-  { text: "Order #4821 shipped ✅" },
-  { text: "Booked for 5 PM 🗓️", isMe: true },
-  { text: "Thanks, that was fast! 🙌" },
-  { text: "Here's your quote 📄", isMe: true }
-];
-
 // One centred card on a quiet animated backdrop, shared by every auth page.
 export default function AuthLayout({
   children,
@@ -36,40 +27,23 @@ export default function AuthLayout({
 
   return (
     <div className="auth-scope relative grid min-h-dvh grid-cols-[minmax(0,1fr)] place-items-center overflow-hidden bg-background px-4 py-6 text-foreground">
-      <div aria-hidden className="pointer-events-none fixed inset-0">
-        <div className="auth-glow auth-glow-a" />
-        <div className="auth-glow auth-glow-b" />
-        <div className="auth-dots absolute inset-0" />
-        <div className="absolute inset-0">
-          {bubbles.map((bubble) => (
-            <div
-              key={bubble.text}
-              className={cn("auth-bubble", bubble.isMe && "auth-bubble-me")}
-            >
-              {bubble.text}
-              {bubble.isMe && (
-                <span className="ml-1.5 font-semibold text-primary">✓✓</span>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
+      <div aria-hidden className="auth-halo" />
 
       <main className="relative z-10 w-full max-w-[400px]">
         <div
           className={cn(
-            "mb-[26px] flex items-center justify-center gap-2.5",
+            "mb-[26px] flex items-center justify-center gap-[10px]",
             logoMotion.className
           )}
           style={logoMotion.style}
         >
           <Image
-            src={assets.whatchingIcon}
+            src={assets.whatchingMark}
             alt=""
-            width={30}
-            height={30}
+            width={34}
+            height={34}
             priority
-            className="auth-bob h-[30px] w-auto"
+            className="auth-bob h-[34px] w-auto"
           />
           <span className="font-heading text-[22px] font-bold text-foreground">
             Whatching

@@ -18,7 +18,7 @@ export const enter = (
 });
 
 export const authInputClass =
-  "h-[46px] rounded-[var(--radius)] border-input bg-muted px-3.5 text-[15px] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:bg-card focus-visible:shadow-[0_0_0_4px_color-mix(in_oklch,var(--ring)_18%,transparent)] transition-[border-color,box-shadow,background-color] duration-150";
+  "h-[46px] rounded-[var(--radius)] border-border bg-card px-3.5 text-[15px] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:shadow-[0_0_0_4px_color-mix(in_oklch,var(--ring)_18%,transparent)] transition-[border-color,box-shadow,background-color] duration-150";
 
 export function AuthHeader({
   title,

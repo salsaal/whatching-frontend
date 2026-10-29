@@ -4,5 +4,7 @@ export default {
   whatchingLogo: "/assets/images/whatching.png",
   logo2: "/assets/images/logo2.png",
   authLayoutImage: "/assets/images/auth.png",
-  whatchingIcon: "/assets/images/whatchingicon.png"
+  whatchingIcon: "/assets/images/whatchingicon.png",
+  // Tightly cropped mark (the icon above has heavy built-in padding).
+  whatchingMark: "/assets/images/whatching-mark.png"
 };
