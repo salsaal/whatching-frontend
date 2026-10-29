@@ -1156,6 +1156,17 @@ const canvasEdgesToFlow = (
   }));
 };
 
+// The backend's name for a flow nobody has named yet.
+const DEFAULT_FLOW_NAME = "Untitled Bot Canvas";
+const RENAME_HINT_KEY = "whatching:flow-rename-hint-seen";
+
+const formatPublishedDate = (value: string) =>
+  new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric"
+  }).format(new Date(value));
+
 function FlowsBuilder() {
   const router = useRouter();
   const canvasId =
@@ -1214,10 +1225,29 @@ function FlowsBuilder() {
     refetchOnMount: "always"
   });
 
+  // Shown once, while the flow still has the default name.
+  const [hasSeenRenameHint, setHasSeenRenameHint] = useState(true);
+  useEffect(() => {
+    try {
+      setHasSeenRenameHint(localStorage.getItem(RENAME_HINT_KEY) === "1");
+    } catch {
+      setHasSeenRenameHint(true);
+    }
+  }, []);
+  const dismissRenameHint = () => {
+    setHasSeenRenameHint(true);
+    try {
+      localStorage.setItem(RENAME_HINT_KEY, "1");
+    } catch {
+      // Storage unavailable: the hint just shows again next time.
+    }
+  };
+
   const { mutate: renameCanvasMutate } = useMutation({
     mutationFn: updateBotCanvas,
     meta: { showToast: false },
     onSuccess: () => {
+      dismissRenameHint();
       toast.success("Flow renamed.");
       refetchDraft();
       queryClient.invalidateQueries({
@@ -1494,7 +1524,7 @@ function FlowsBuilder() {
   const updateNode = useCallback(
     (nodeId: string, updater: (data: BuilderNodeData) => BuilderNodeData) => {
       if (isPublishedMode) {
-        toast.info("Switch to Draft canvas to edit this flow.");
+        toast.info("Switch to Draft to edit this flow.");
         return;
       }
       setNodes((current) =>
@@ -1528,7 +1558,7 @@ function FlowsBuilder() {
   const onConnect = useCallback(
     (connection: Connection) => {
       if (isPublishedMode) {
-        toast.info("Switch to Draft canvas to connect blocks.");
+        toast.info("Switch to Draft to connect blocks.");
         return;
       }
       if (!connection.sourceHandle) return;
@@ -1560,7 +1590,7 @@ function FlowsBuilder() {
       position = { x: 260 + nodes.length * 24, y: 260 + nodes.length * 24 }
     ) => {
       if (isPublishedMode) {
-        toast.info("Switch to Draft canvas to add blocks.");
+        toast.info("Switch to Draft to add blocks.");
         return;
       }
       const node = createNode(type, position);
@@ -1575,7 +1605,7 @@ function FlowsBuilder() {
 
   const addAutomaticFollowUp = useCallback(() => {
     if (isPublishedMode) {
-      toast.info("Switch to Draft canvas to add a follow-up.");
+      toast.info("Switch to Draft to add a follow-up.");
       return;
     }
     if (!selectedNode) {
@@ -1688,7 +1718,7 @@ function FlowsBuilder() {
         | "automatic_follow_up";
       if (!type || !reactFlow) return;
       if (isPublishedMode) {
-        toast.info("Switch to Draft canvas to add blocks.");
+        toast.info("Switch to Draft to add blocks.");
         return;
       }
       const position = reactFlow.screenToFlowPosition({
@@ -1706,7 +1736,7 @@ function FlowsBuilder() {
 
   const deleteSelectedNode = () => {
     if (isPublishedMode) {
-      toast.info("Switch to Draft canvas to delete blocks.");
+      toast.info("Switch to Draft to delete blocks.");
       return;
     }
     if (!selectedNode) return;
@@ -1850,7 +1880,7 @@ function FlowsBuilder() {
 
   const saveCurrentDraft = async () => {
     if (isPublishedMode) {
-      toast.info("Switch to Draft canvas to save changes.");
+      toast.info("Switch to Draft to save changes.");
       return;
     }
     // Guards against a rapid double-click re-entering while the previous
@@ -1912,7 +1942,7 @@ function FlowsBuilder() {
 
   const publish = async () => {
     if (isPublishedMode) {
-      toast.info("Switch to Draft canvas to publish changes.");
+      toast.info("Switch to Draft to publish changes.");
       return;
     }
     // Same re-entrancy guard as saveCurrentDraft -- prevents a fast double
@@ -1959,7 +1989,7 @@ function FlowsBuilder() {
 
   const selectMedia = (media: MediaAsset) => {
     if (isPublishedMode) {
-      toast.info("Switch to Draft canvas to change media.");
+      toast.info("Switch to Draft to change media.");
       return;
     }
     const targetNode =
@@ -2008,6 +2038,10 @@ function FlowsBuilder() {
     setMediaPicker((current) => ({ ...current, open: false }));
   };
 
+  const canvasName = draftData?.data?.canvas?.name || "";
+  const isDefaultFlowName = !canvasName || canvasName === DEFAULT_FLOW_NAME;
+  const publishedState = getPublishedStateFromResponse(publishedData);
+
   return (
     <AppLayout hideHeader fullBleed>
       <div className="flex h-dvh flex-col overflow-hidden border bg-white shadow-xs">
@@ -2027,22 +2061,33 @@ function FlowsBuilder() {
               </Button>
               <Bot className="size-5 text-primary" />
               <InlineEditableTitle
-                value={draftData?.data?.canvas?.name || ""}
+                value={isDefaultFlowName ? "" : canvasName}
                 placeholder="Untitled flow"
                 className="font-heading text-2xl font-semibold"
-                disabled={!draftData?.data?.canvas?.name}
+                disabled={!canvasName}
                 onSave={(name) => renameCanvasMutate({ canvasId, name })}
               />
-              <Badge
-                variant={
-                  status?.defaultFlowReady && status?.optOutFlowReady
-                    ? "default"
-                    : "secondary"
-                }
-              >
-                {status?.publishedFlowCount || 0} published
+              <Badge variant={publishedState ? "default" : "secondary"}>
+                {!publishedState
+                  ? "Not published yet"
+                  : publishedState.publishedAt
+                    ? `Published ${formatPublishedDate(publishedState.publishedAt)}`
+                    : "Published"}
               </Badge>
             </div>
+            {isDefaultFlowName && !hasSeenRenameHint && (
+              <p className="mt-1 flex items-center gap-2 text-xs text-primary">
+                Click the name to give this flow a name your team will
+                recognise.
+                <button
+                  type="button"
+                  className="cursor-pointer text-muted-foreground underline-offset-2 hover:underline"
+                  onClick={dismissRenameHint}
+                >
+                  Got it
+                </button>
+              </p>
+            )}
             <p className="mt-1 text-sm text-muted-foreground max-w-[250px]">
               Build WhatsApp automation visually. Drafts autosave; publishing is
               explicit.
@@ -2059,8 +2104,8 @@ function FlowsBuilder() {
               className="mr-1"
             >
               <TabsList>
-                <TabsTrigger value="draft">Draft canvas</TabsTrigger>
-                <TabsTrigger value="published">Published canvas</TabsTrigger>
+                <TabsTrigger value="draft">Draft</TabsTrigger>
+                <TabsTrigger value="published">Published</TabsTrigger>
               </TabsList>
             </Tabs>
             <Button
@@ -2512,7 +2557,7 @@ function PropertiesPanel({
         <p className="text-sm font-semibold">Properties</p>
         <div className="mt-4 rounded-xl border border-dashed bg-muted/30 p-6 text-center text-sm text-muted-foreground">
           {readOnly
-            ? "Published canvas is read-only. Switch to Draft canvas to make changes."
+            ? "The published flow is read-only. Switch to Draft to make changes."
             : "Select a block to edit content, actions, routes, and media."}
         </div>
         <div className="mt-4 rounded-xl border bg-white p-3">
@@ -2606,8 +2651,8 @@ function PropertiesPanel({
           <p className="text-sm font-semibold">Properties</p>
           <p className="mt-1 text-xs text-muted-foreground">
             {readOnly
-              ? "Published canvas is read-only."
-              : "Edits update the draft canvas automatically."}
+              ? "The published flow is read-only."
+              : "Edits update the draft automatically."}
           </p>
         </div>
         <Button
@@ -2835,7 +2880,7 @@ function PropertiesPanel({
                 <div>
                   <p className="text-sm font-medium">Default start block</p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Incoming chats start from one default block in each canvas.
+                    Incoming chats start from one default block in each flow.
                   </p>
                 </div>
                 <Switch
@@ -3525,7 +3570,7 @@ function PropertiesPanel({
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
                   <span>
                     {action.type === "go_to_trigger"
-                      ? "Output dot visible on canvas"
+                      ? "Output dot visible in the editor"
                       : "No output dot for this action"}
                   </span>
                   <Button
