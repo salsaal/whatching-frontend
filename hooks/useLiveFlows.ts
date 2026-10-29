@@ -47,6 +47,10 @@ export function useLiveFlows() {
       ? publishedById.get(number.activeCanvasId) || null
       : null;
 
+  // What actually runs on a number: its own flow, else the default.
+  const effectiveCanvasFor = (number: (typeof numbers)[number]) =>
+    assignedCanvasFor(number) || defaultCanvas;
+
   const isNothingLive =
     !defaultCanvas && !numbers.some((number) => assignedCanvasFor(number));
 
@@ -58,6 +62,7 @@ export function useLiveFlows() {
     defaultCanvas,
     numbers,
     assignedCanvasFor,
+    effectiveCanvasFor,
     isNothingLive
   };
 }

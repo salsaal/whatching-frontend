@@ -22,7 +22,7 @@ import {
   updateBotCanvas
 } from "@/client-api/functions/bot";
 import { BotCanvasRecord } from "@/client-api/types/bot.type";
-import { LiveFlowsPanel } from "@/components/bot/LiveFlowsPanel";
+import { NumberFlowsPanel } from "@/components/bot/NumberFlowsPanel";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -81,7 +81,7 @@ function FlowsPageContent() {
     canvases,
     defaultCanvas,
     numbers,
-    assignedCanvasFor,
+    effectiveCanvasFor,
     isLoading,
     isError,
     refetch,
@@ -187,7 +187,7 @@ function FlowsPageContent() {
           <QueryErrorState message="Flows could not be loaded for this organisation." />
         )}
 
-        {!isLoading && !isError && canvases.length > 0 && <LiveFlowsPanel />}
+        {!isLoading && !isError && canvases.length > 0 && <NumberFlowsPanel />}
 
         <section className="grid gap-4 lg:grid-cols-3">
           {isLoading ? (
@@ -197,16 +197,17 @@ function FlowsPageContent() {
           ) : canvases.length ? (
             canvases.map((canvas) => {
               const hasPublishedVersion = isPublishedCanvas(canvas);
-              const isDefault = defaultCanvas?._id === canvas._id;
-              const assignedNumbers = numbers.filter(
-                (number) => assignedCanvasFor(number)?._id === canvas._id
-              );
-              const liveOn = [
-                ...(isDefault ? ["Default"] : []),
-                ...assignedNumbers.map(
-                  (number) => number.displayPhoneNumber || number.phoneNumberId
+              // Same rule as the number dropdowns: a number's own flow,
+              // else the default.
+              const liveOn = numbers
+                .filter(
+                  (number) => effectiveCanvasFor(number)?._id === canvas._id
                 )
-              ];
+                .map(
+                  (number) => number.displayPhoneNumber || number.phoneNumberId
+                );
+              const isNewNumbersFlow =
+                defaultCanvas?._id === canvas._id && numbers.length >= 2;
               const detail = canvasDetailById.get(canvas._id);
               const nodeCount =
                 canvas.publishedState?.nodes?.length ??
@@ -249,6 +250,11 @@ function FlowsPageContent() {
                         ) : (
                           <span className="text-muted-foreground">
                             Not live
+                          </span>
+                        )}
+                        {isNewNumbersFlow && (
+                          <span className="ml-2 inline-flex rounded-full bg-muted px-2 py-0.5 align-middle text-xs text-muted-foreground">
+                            New numbers
                           </span>
                         )}
                       </p>
