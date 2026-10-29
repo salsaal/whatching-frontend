@@ -1,15 +1,8 @@
 "use client";
 
-import {
-  Building2,
-  CalendarDays,
-  CheckCircle2,
-  LogOut,
-  Plus,
-  Smartphone,
-  Sparkles
-} from "lucide-react";
+import { Building2, ChevronDown, LogOut, Plus, UserRound } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/router";
 import React, { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -21,13 +14,6 @@ import {
 } from "@/client-api/functions/organizations";
 import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle
-} from "@/components/ui/card";
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -35,6 +21,14 @@ import {
   DialogHeader,
   DialogTitle
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { CardGridLoadingSkeleton } from "@/components/ui/loading-skeletons";
 import assets from "@/json/assets";
@@ -50,26 +44,117 @@ const formatDate = (date: string) =>
     year: "numeric"
   }).format(new Date(date));
 
-const planLabel = (planTier: string) =>
-  planTier === "none" ? "No active plan" : planTier?.toUpperCase();
+const roleLabel: Record<NonNullable<Organization["myRole"]>, string> = {
+  owner: "Owner",
+  admin: "Admin",
+  agent: "Agent"
+};
+
+function Chip({
+  dot,
+  children
+}: {
+  dot?: "green" | "grey" | "amber";
+  children: React.ReactNode;
+}) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-muted/70 px-2.5 py-1 text-xs font-medium">
+      {dot && (
+        <span
+          className={cn(
+            "size-1.5 rounded-full",
+            dot === "green" && "bg-emerald-500",
+            dot === "grey" && "bg-slate-400",
+            dot === "amber" && "bg-amber-500"
+          )}
+        />
+      )}
+      {children}
+    </span>
+  );
+}
+
+function OrganisationCard({
+  organization,
+  isLastOpened,
+  onOpen
+}: {
+  organization: Organization;
+  isLastOpened: boolean;
+  onOpen: () => void;
+}) {
+  const isConnected = organization.metaConfig?.status === "ready";
+  const hasPlan =
+    Boolean(organization.planTier) && organization.planTier !== "none";
+  const numberCount = organization.activePhoneNumberCount || 0;
+  const displayNumber = organization.metaConfig?.displayPhoneNumber;
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="group flex h-full w-full cursor-pointer flex-col rounded-lg border border-transparent bg-white p-5 text-left shadow-xs transition hover:border-primary/30 hover:shadow-md focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <h3 className="min-w-0 truncate font-heading text-lg font-semibold group-hover:text-primary">
+          {organization.name}
+        </h3>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {isLastOpened && (
+            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+              Last opened
+            </span>
+          )}
+          {organization.myRole && (
+            <span className="rounded-full border px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+              {roleLabel[organization.myRole]}
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-1.5">
+        <Chip dot={isConnected ? "green" : "grey"}>
+          {isConnected ? "Connected" : "Not connected"}
+        </Chip>
+        {hasPlan ? (
+          <Chip>{organization.planTier.toUpperCase()}</Chip>
+        ) : (
+          <Chip dot="amber">No plan</Chip>
+        )}
+        {numberCount > 0 && (
+          <Chip>
+            {numberCount} number{numberCount === 1 ? "" : "s"}
+          </Chip>
+        )}
+      </div>
+
+      <div className="mt-auto flex items-center justify-between gap-3 pt-5 text-xs text-muted-foreground">
+        <span className="truncate font-medium text-foreground">
+          {displayNumber || ""}
+        </span>
+        <span className="shrink-0">
+          Created {formatDate(organization.createdAt)}
+        </span>
+      </div>
+    </button>
+  );
+}
 
 function Organisations() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [name, setName] = useState("");
   const user = useAuthStore((state) => state.user);
   const { logout: handleLogout, isLoggingOut } = useLogout();
   const {
     organizations,
+    activeOrganization,
     setOrganizations,
     addOrganization,
     setActiveOrganization
   } = useOrganizationStore();
-
-  const firstName = useMemo(
-    () => user?.name?.split(" ")?.[0] || "there",
-    [user?.name]
-  );
 
   const { data: organizationsData, isLoading } = useQuery({
     queryKey: ["organizations", user?._id],
@@ -80,17 +165,14 @@ function Organisations() {
   const { mutate: createOrganization, isPending: isCreating } = useMutation({
     mutationFn: setupOrganization,
     onSuccess: (data) => {
-      const organization = data.data.organization;
-
-      addOrganization(organization);
+      addOrganization(data.data.organization);
       setName("");
       setIsCreateOpen(false);
       toast.success("Organisation created");
     }
   });
 
-  const queryClient = useQueryClient();
-  const handleView = (organization: Organization) => {
+  const handleOpen = (organization: Organization) => {
     setActiveOrganization(organization);
     queryClient.invalidateQueries({ queryKey: ["membership"] });
     router.push("/overview");
@@ -98,12 +180,10 @@ function Organisations() {
 
   const handleCreate = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-
     if (!name.trim()) {
       toast.error("Organisation name is required");
       return;
     }
-
     createOrganization({ name: name.trim() });
   };
 
@@ -112,6 +192,24 @@ function Organisations() {
       setOrganizations(organizationsData.data.organizations);
     }
   }, [organizationsData, setOrganizations]);
+
+  // The org in the store is the one used last, so it leads the list.
+  const lastOpenedId = activeOrganization?._id;
+  const sortedOrganizations = useMemo(
+    () =>
+      [...organizations].sort(
+        (a, b) =>
+          Number(b._id === lastOpenedId) - Number(a._id === lastOpenedId)
+      ),
+    [lastOpenedId, organizations]
+  );
+
+  const addButton = (
+    <Button onClick={() => setIsCreateOpen(true)}>
+      <Plus className="size-4" />
+      Add organisation
+    </Button>
+  );
 
   return (
     <div className="min-h-screen bg-[#f7faf8] text-foreground">
@@ -124,189 +222,90 @@ function Organisations() {
             height={42}
           />
 
-          <div className="flex items-center gap-3">
-            <div className="hidden size-10 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary sm:flex">
-              {user?.name?.charAt(0)?.toUpperCase() || "W"}
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              isLoading={isLoggingOut}
-              onClick={handleLogout}
-            >
-              <LogOut className="size-4" />
-              Logout
-            </Button>
-          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="flex cursor-pointer items-center gap-2 rounded-full p-1 pr-2 transition hover:bg-muted"
+              >
+                <span className="flex size-9 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+                  {user?.name?.charAt(0)?.toUpperCase() || "W"}
+                </span>
+                <span className="hidden max-w-40 truncate text-sm font-medium sm:block">
+                  {user?.name}
+                </span>
+                <ChevronDown className="size-4 text-muted-foreground" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-60">
+              <DropdownMenuLabel className="font-normal">
+                <p className="truncate text-sm font-medium">{user?.name}</p>
+                <p className="truncate text-xs text-muted-foreground">
+                  {user?.email}
+                </p>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <Link href="/profile">
+                  <UserRound className="size-4" />
+                  Profile
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={isLoggingOut}
+                onSelect={() => void handleLogout()}
+              >
+                <LogOut className="size-4" />
+                Log out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </header>
 
       <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-        <section className="mb-8">
-          <p className="text-sm font-medium text-primary">Workspace</p>
-          <h1 className="mt-2 font-heading text-3xl font-semibold tracking-normal sm:text-4xl">
-            Welcome, {firstName}
-          </h1>
-        </section>
-
-        <section className="mb-12 overflow-hidden rounded-lg bg-emerald-50/70 shadow-xs">
-          <div className="grid gap-8 p-6 sm:p-8 lg:grid-cols-[1fr_360px] lg:items-center lg:p-12">
-            <div className="max-w-2xl">
-              <div className="mb-5 inline-flex size-12 items-center justify-center rounded-sm bg-primary text-primary-foreground">
-                <Building2 className="size-6" />
+        {isLoading ? (
+          <CardGridLoadingSkeleton count={6} />
+        ) : sortedOrganizations.length ? (
+          <>
+            <section className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <h1 className="font-heading text-3xl font-semibold">
+                  Your organisations
+                </h1>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Pick one to continue
+                </p>
               </div>
-              <h2 className="font-heading text-2xl font-semibold">
-                Create New Organisation
-              </h2>
-              <p className="mt-2 text-sm text-muted-foreground sm:text-base">
-                One organisation is associated with one WhatsApp Business API
-                number and its billing workspace.
-              </p>
+              {addButton}
+            </section>
 
-              <Button className="mt-6" onClick={() => setIsCreateOpen(true)}>
-                <Plus className="size-4" />
-                Add organisation
-              </Button>
-            </div>
-
-            <div className="hidden rounded-lg bg-white p-6 shadow-xs lg:block">
-              <div className="flex flex-col items-start gap-4">
-                <div className="flex size-16 items-center p-4 justify-center rounded-sm bg-primary/10">
-                  <Sparkles className="size-6 text-primary" />
-                </div>
-                <div>
-                  <p className="font-heading text-xl font-semibold">
-                    WhatsApp growth hub
-                  </p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Manage broadcasts, contacts, templates, automations, and
-                    integrations per organisation.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section>
-          <div className="mb-5 flex items-center justify-between gap-4">
-            <div>
-              <h2 className="font-heading text-2xl font-semibold">
-                Recent Organisations
-              </h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Select an organisation to continue.
-              </p>
-            </div>
-          </div>
-
-          {isLoading ? (
-            <CardGridLoadingSkeleton count={6} />
-          ) : organizations.length ? (
-            <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-              {organizations.map((organization) => (
-                <Card
-                  key={organization?._id}
-                  className="overflow-hidden rounded-lg border-0 bg-white shadow-xs transition hover:border-primary/30 hover:shadow-sm"
-                >
-                  <CardHeader className="border-b  pb-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <CardTitle className="truncate font-heading text-2xl">
-                          {organization?.name}
-                        </CardTitle>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                          Created {formatDate(organization?.createdAt)}
-                        </p>
-                      </div>
-                      <div className="flex size-10 shrink-0 items-center justify-center rounded-sm bg-primary/10 text-primary">
-                        <Building2 className="size-5" />
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-5">
-                    <div className="grid grid-cols-2 gap-3 text-sm">
-                      <div className="rounded-md border bg-white px-3 py-2">
-                        <p className="text-xs text-muted-foreground">Status</p>
-                        <p
-                          className={cn(
-                            "mt-1 inline-flex items-center gap-1.5 font-semibold capitalize",
-                            organization?.metaConfig?.status === "ready"
-                              ? "text-primary"
-                              : "text-muted-foreground"
-                          )}
-                        >
-                          {organization?.metaConfig?.status === "ready" ? (
-                            <CheckCircle2 className="size-4" />
-                          ) : (
-                            <Smartphone className="size-4" />
-                          )}
-                          {organization?.metaConfig?.status || "pending"}
-                        </p>
-                      </div>
-                      <div className="rounded-md border bg-white px-3 py-2">
-                        <p className="text-xs text-muted-foreground">
-                          Active plan
-                        </p>
-                        <p className="mt-1 truncate font-semibold text-emerald-900">
-                          {planLabel(organization?.planTier)}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="grid gap-3 text-sm">
-                      <div className="flex items-center justify-between gap-3 rounded-sm bg-muted/50 px-3 py-2">
-                        <span className="inline-flex items-center gap-2 text-muted-foreground">
-                          <Smartphone className="size-4" />
-                          Number
-                        </span>
-                        <span className="truncate font-medium">
-                          {organization?.metaConfig?.displayPhoneNumber ||
-                            "N/A"}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3 rounded-sm bg-muted/50 px-3 py-2">
-                        <span className="inline-flex items-center gap-2 text-muted-foreground">
-                          <CalendarDays className="size-4" />
-                          Last updated
-                        </span>
-                        <span className="truncate font-medium">
-                          {formatDate(
-                            organization?.updatedAt || organization?.createdAt
-                          )}
-                        </span>
-                      </div>
-                    </div>
-                  </CardContent>
-                  <CardFooter>
-                    <Button
-                      variant="outline"
-                      className="w-full"
-                      onClick={() => handleView(organization)}
-                    >
-                      View
-                    </Button>
-                  </CardFooter>
-                </Card>
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {sortedOrganizations.map((organization) => (
+                <OrganisationCard
+                  key={organization._id}
+                  organization={organization}
+                  isLastOpened={organization._id === lastOpenedId}
+                  onOpen={() => handleOpen(organization)}
+                />
               ))}
             </div>
-          ) : (
-            <div className="flex min-h-64 flex-col items-center justify-center rounded-lg bg-white p-8 text-center shadow-xs">
-              <Building2 className="size-10 text-primary" />
-              <h3 className="mt-4 font-heading text-xl font-semibold">
-                No organisations yet
-              </h3>
-              <p className="mt-2 max-w-md text-sm text-muted-foreground">
-                Add your first organisation to connect WhatsApp Business API and
-                start managing campaigns.
-              </p>
-              <Button className="mt-5" onClick={() => setIsCreateOpen(true)}>
-                <Plus className="size-4" />
-                Add organisation
-              </Button>
+          </>
+        ) : (
+          <div className="mx-auto flex min-h-[60vh] max-w-md flex-col items-center justify-center text-center">
+            <div className="flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <Building2 className="size-7" />
             </div>
-          )}
-        </section>
+            <h1 className="mt-5 font-heading text-2xl font-semibold">
+              Create your first organisation
+            </h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              An organisation is your workspace: WhatsApp numbers, contacts,
+              flows and billing live inside it.
+            </p>
+            <div className="mt-6">{addButton}</div>
+          </div>
+        )}
       </main>
 
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>

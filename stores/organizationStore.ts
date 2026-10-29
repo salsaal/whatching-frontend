@@ -71,6 +71,10 @@ export interface Organization {
   createdAt: string;
   updatedAt: string;
   __v?: number;
+  /** From GET /my-organizations: the current user's role in this org. */
+  myRole?: "owner" | "admin" | "agent";
+  /** From GET /my-organizations: active WhatsApp numbers in this org. */
+  activePhoneNumberCount?: number;
 }
 
 export interface IntegrationStatus {
