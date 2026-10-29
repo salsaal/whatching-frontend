@@ -3,13 +3,14 @@
 import {
   ArrowRight,
   Building2,
-  KeyRound,
-  LogOut,
+  CreditCard,
+  MessageCircle,
+  Plug,
   Plus,
-  UserRound
+  Smartphone,
+  Users
 } from "lucide-react";
 import Image from "next/image";
-import Link from "next/link";
 import { useRouter } from "next/router";
 import React, { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -28,12 +29,11 @@ import {
   DialogHeader,
   DialogTitle
 } from "@/components/ui/dialog";
-import { UserAvatar, UserMenu } from "@/components/account/UserMenu";
+import { UserMenu } from "@/components/account/UserMenu";
 import { Input } from "@/components/ui/input";
 import { CardGridLoadingSkeleton } from "@/components/ui/loading-skeletons";
 import assets from "@/json/assets";
 import { cn } from "@/lib/utils";
-import { useLogout } from "@/hooks/useLogout";
 import { useAuthStore } from "@/stores/authStore";
 import { Organization, useOrganizationStore } from "@/stores/organizationStore";
 
@@ -87,6 +87,81 @@ const relativeTime = (value?: string | null) => {
   if (days < 30) return `${days}d ago`;
   return formatDate(value);
 };
+
+// Only owners can start Meta's signup; the overview's ?connectMeta=1 opens
+// it straight away.
+const setupPathFor = (organization: Organization) =>
+  organization.myRole === "owner" ? "/overview?connectMeta=1" : "/overview";
+
+const isOrgConnected = (organization: Organization) =>
+  organization.metaConfig?.status === "ready";
+const hasOrgPlan = (organization: Organization) =>
+  Boolean(organization.planTier) && organization.planTier !== "none";
+
+const greetingFor = (hour: number | null) =>
+  hour === null
+    ? "Hello"
+    : hour < 12
+      ? "Good morning"
+      : hour < 17
+        ? "Good afternoon"
+        : "Good evening";
+
+const plural = (count: number, word: string) =>
+  `${count.toLocaleString("en-IN")} ${word}${count === 1 ? "" : "s"}`;
+
+type AttentionItem = {
+  key: string;
+  kind: "setup" | "unread";
+  icon: React.ElementType;
+  text: string;
+  action: string;
+  organization: Organization;
+  path: string;
+  unread: number;
+};
+
+function SummaryTile({
+  icon: Icon,
+  label,
+  value,
+  onClick
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: number;
+  onClick?: () => void;
+}) {
+  const content = (
+    <>
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+        <Icon className="size-5" />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-xs text-muted-foreground">{label}</span>
+        <span className="block font-heading text-2xl font-semibold">
+          {value.toLocaleString("en-IN")}
+        </span>
+      </span>
+    </>
+  );
+  const className =
+    "flex items-center gap-3 rounded-lg bg-white p-4 text-left shadow-xs";
+  return onClick ? (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        className,
+        "cursor-pointer transition hover:shadow-md hover:ring-1 hover:ring-primary/30"
+      )}
+    >
+      {content}
+    </button>
+  ) : (
+    <div className={className}>{content}</div>
+  );
+}
 
 const lastMessageTime = (organization: Organization) => {
   const value = organization.usage?.lastMessageAt;
@@ -148,17 +223,15 @@ function OrganisationCard({
   /** Opens the org, optionally on a specific page. */
   onOpen: (path?: string) => void;
 }) {
-  const isConnected = organization.metaConfig?.status === "ready";
-  const hasPlan =
-    Boolean(organization.planTier) && organization.planTier !== "none";
+  const isConnected = isOrgConnected(organization);
+  const hasPlan = hasOrgPlan(organization);
   const numberCount = organization.activePhoneNumberCount || 0;
   const displayNumber = organization.metaConfig?.displayPhoneNumber;
   const unread = organization.unreadConversationCount || 0;
   const lastMessage = relativeTime(organization.usage?.lastMessageAt);
   // Only owners can start Meta's signup; the overview's ?connectMeta=1
   // opens it straight away.
-  const setupPath =
-    organization.myRole === "owner" ? "/overview?connectMeta=1" : "/overview";
+  const setupPath = setupPathFor(organization);
 
   return (
     <div
@@ -267,48 +340,6 @@ function OrganisationCard({
   );
 }
 
-function AccountCard() {
-  const user = useAuthStore((state) => state.user);
-  const { logout, isLoggingOut } = useLogout();
-  const linkClass =
-    "flex items-center gap-2.5 rounded-md px-2 py-2 text-sm font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground";
-  return (
-    <aside className="h-fit rounded-lg bg-white p-5 shadow-xs">
-      <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-        Your account
-      </p>
-      <div className="mt-3 flex items-center gap-3">
-        <UserAvatar name={user?.name} className="size-11 text-base" />
-        <div className="min-w-0">
-          <p className="truncate font-medium">{user?.name}</p>
-          <p className="truncate text-xs text-muted-foreground">
-            {user?.email}
-          </p>
-        </div>
-      </div>
-      <nav className="mt-4 space-y-0.5 border-t pt-3">
-        <Link href="/account" className={linkClass}>
-          <UserRound className="size-4" />
-          Profile
-        </Link>
-        <Link href="/account/security" className={linkClass}>
-          <KeyRound className="size-4" />
-          Change password
-        </Link>
-        <button
-          type="button"
-          disabled={isLoggingOut}
-          onClick={() => void logout()}
-          className={cn(linkClass, "w-full cursor-pointer")}
-        >
-          <LogOut className="size-4" />
-          Log out
-        </button>
-      </nav>
-    </aside>
-  );
-}
-
 function Organisations() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -378,6 +409,86 @@ function Organisations() {
     [lastOpenedId, organizations]
   );
 
+  // Hour is read after mount so the server render can't disagree with it.
+  const [hour, setHour] = useState<number | null>(null);
+  useEffect(() => setHour(new Date().getHours()), []);
+  const firstName = user?.name?.trim().split(/\s+/)[0] || "there";
+
+  const totals = useMemo(() => {
+    let busiest: Organization | null = null;
+    let unread = 0;
+    let orgsWithUnread = 0;
+    let contacts = 0;
+    let numbers = 0;
+    organizations.forEach((organization) => {
+      const count = organization.unreadConversationCount || 0;
+      unread += count;
+      if (count > 0) orgsWithUnread += 1;
+      if (count > (busiest?.unreadConversationCount || 0))
+        busiest = organization;
+      contacts += organization.usage?.subscribersCount || 0;
+      numbers += organization.activePhoneNumberCount || 0;
+    });
+    return { unread, orgsWithUnread, contacts, numbers, busiest } as {
+      unread: number;
+      orgsWithUnread: number;
+      contacts: number;
+      numbers: number;
+      busiest: Organization | null;
+    };
+  }, [organizations]);
+
+  // Setup problems first, then the busiest inboxes; five rows at most.
+  const attentionItems = useMemo(() => {
+    const items: AttentionItem[] = [];
+    organizations.forEach((organization) => {
+      if (!isOrgConnected(organization)) {
+        items.push({
+          key: `${organization._id}:connect`,
+          kind: "setup",
+          icon: Plug,
+          text: `${organization.name} isn't connected to WhatsApp yet.`,
+          action: "Finish setup",
+          organization,
+          path: setupPathFor(organization),
+          unread: 0
+        });
+      }
+      if (!hasOrgPlan(organization)) {
+        items.push({
+          key: `${organization._id}:plan`,
+          kind: "setup",
+          icon: CreditCard,
+          text: `${organization.name} has no active plan.`,
+          action: "Choose a plan",
+          organization,
+          path: "/plans",
+          unread: 0
+        });
+      }
+      const unread = organization.unreadConversationCount || 0;
+      if (unread > 0) {
+        items.push({
+          key: `${organization._id}:unread`,
+          kind: "unread",
+          icon: MessageCircle,
+          text: `${organization.name} has ${plural(unread, "unread conversation")}.`,
+          action: "Open inbox",
+          organization,
+          path: "/conversations",
+          unread
+        });
+      }
+    });
+    return items
+      .sort((a, b) =>
+        a.kind === b.kind ? b.unread - a.unread : a.kind === "setup" ? -1 : 1
+      )
+      .slice(0, 5);
+  }, [organizations]);
+
+  const isCompact = organizations.length <= 1 && attentionItems.length === 0;
+
   const addButton = (
     <Button onClick={() => setIsCreateOpen(true)}>
       <Plus className="size-4" />
@@ -400,25 +511,126 @@ function Organisations() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+      <main
+        className={cn(
+          "mx-auto max-w-5xl space-y-6 px-4 py-8 sm:px-6",
+          // One org and nothing to act on: centre the column so the page
+          // isn't top-heavy.
+          isCompact &&
+            "flex min-h-[calc(100vh-4.5rem)] flex-col justify-center space-y-0 gap-6"
+        )}
+      >
+        <section
+          className="relative overflow-hidden rounded-2xl px-6 py-12 shadow-xs sm:px-10"
+          style={{
+            backgroundImage:
+              // Dot pattern over a soft green wash; both are background
+              // images, so they're layered in one declaration.
+              "radial-gradient(rgba(16,185,129,0.12) 1px, transparent 1px), linear-gradient(135deg, #ecfdf5 0%, #ffffff 50%, rgba(209,250,229,0.7) 100%)",
+            backgroundSize: "18px 18px, 100% 100%"
+          }}
+        >
+          <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <h1 className="font-heading text-3xl font-semibold sm:text-4xl">
+                {greetingFor(hour)}, {firstName}
+              </h1>
+              <p className="mt-2 text-sm text-muted-foreground sm:text-base">
+                {isLoading
+                  ? "Loading your organisations…"
+                  : !organizations.length
+                    ? "Let's set up your first organisation."
+                    : totals.unread > 0
+                      ? `You have ${plural(totals.unread, "unread conversation")} across ${plural(totals.orgsWithUnread, "organisation")}.`
+                      : "All caught up. No unread conversations."}
+              </p>
+            </div>
+            <div className="shrink-0">{addButton}</div>
+          </div>
+        </section>
+
         {isLoading ? (
-          <CardGridLoadingSkeleton count={6} />
+          <CardGridLoadingSkeleton count={4} />
         ) : sortedOrganizations.length ? (
           <>
-            <section className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <h1 className="font-heading text-3xl font-semibold">
-                  Your organisations
-                </h1>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Pick one to continue
-                </p>
-              </div>
-              {addButton}
+            <section className="grid gap-3 sm:grid-cols-3">
+              <SummaryTile
+                icon={MessageCircle}
+                label="Unread conversations"
+                value={totals.unread}
+                onClick={
+                  totals.busiest
+                    ? () => handleOpen(totals.busiest!, "/conversations")
+                    : undefined
+                }
+              />
+              <SummaryTile
+                icon={Users}
+                label="Contacts"
+                value={totals.contacts}
+              />
+              <SummaryTile
+                icon={Smartphone}
+                label="WhatsApp numbers"
+                value={totals.numbers}
+              />
             </section>
 
-            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-              <div className="grid content-start gap-4 sm:grid-cols-2">
+            {attentionItems.length > 0 && (
+              <section className="rounded-lg bg-white p-5 shadow-xs">
+                <h2 className="font-heading text-base font-semibold">
+                  Needs attention
+                </h2>
+                <ul className="mt-3 divide-y">
+                  {attentionItems.map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <li
+                        key={item.key}
+                        className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-center"
+                      >
+                        <span
+                          className={cn(
+                            "flex size-8 shrink-0 items-center justify-center rounded-full",
+                            item.kind === "setup"
+                              ? "bg-amber-50 text-amber-700"
+                              : "bg-emerald-50 text-emerald-700"
+                          )}
+                        >
+                          <Icon className="size-4" />
+                        </span>
+                        <p className="min-w-0 flex-1 text-sm">{item.text}</p>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="shrink-0"
+                          onClick={() =>
+                            handleOpen(item.organization, item.path)
+                          }
+                        >
+                          {item.action}
+                          <ArrowRight className="size-3.5" />
+                        </Button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            )}
+
+            <section>
+              <h2 className="mb-3 flex items-center gap-2 font-heading text-xl font-semibold">
+                Your organisations
+                <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                  {sortedOrganizations.length}
+                </span>
+              </h2>
+              <div
+                className={cn(
+                  "grid gap-4 sm:grid-cols-2",
+                  sortedOrganizations.length > 4 && "lg:grid-cols-3"
+                )}
+              >
                 {sortedOrganizations.map((organization) => (
                   <OrganisationCard
                     key={organization._id}
@@ -428,18 +640,17 @@ function Organisations() {
                   />
                 ))}
               </div>
-              <AccountCard />
-            </div>
+            </section>
           </>
         ) : (
-          <div className="mx-auto flex min-h-[60vh] max-w-md flex-col items-center justify-center text-center">
+          <div className="flex flex-col items-center rounded-lg bg-white px-6 py-12 text-center shadow-xs">
             <div className="flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary">
               <Building2 className="size-7" />
             </div>
-            <h1 className="mt-5 font-heading text-2xl font-semibold">
+            <h2 className="mt-5 font-heading text-2xl font-semibold">
               Create your first organisation
-            </h1>
-            <p className="mt-2 text-sm text-muted-foreground">
+            </h2>
+            <p className="mt-2 max-w-md text-sm text-muted-foreground">
               An organisation is your workspace: WhatsApp numbers, contacts,
               flows and billing live inside it.
             </p>
