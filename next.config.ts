@@ -27,8 +27,14 @@ const nextConfig: NextConfig = {
   typescript: { ignoreBuildErrors: false },
   async redirects() {
     return [
-      // /bot has no page of its own; Flows is the default tab.
-      { source: "/bot", destination: "/bot/flows", permanent: false },
+      // /bot has no page of its own; Settings is the default tab.
+      { source: "/bot", destination: "/bot/settings", permanent: false },
+      // Knowledge was merged into the AI tab.
+      {
+        source: "/bot/knowledge",
+        destination: "/bot/ai#knowledge",
+        permanent: true
+      },
       // Flows moved under the Bot section. /settings/ai is handled by its
       // own page, since its #hash target never reaches the server.
       { source: "/flows", destination: "/bot/flows", permanent: true },

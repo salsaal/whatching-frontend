@@ -38,7 +38,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { EmptyState } from "@/components/shared/EmptyState";
 import {
   Dialog,
   DialogContent,
@@ -388,18 +387,55 @@ export function KnowledgeBaseSection() {
             );
           })
         ) : (
-          <EmptyState
-            icon={FileText}
-            title="No knowledge sources yet"
-            description="Add text, FAQs, or upload a document so the AI can answer from your own content."
-            action={
-              <Button size="sm" onClick={() => setIsAddSourceOpen(true)}>
-                <Plus className="size-4" />
-                Add source
-              </Button>
-            }
-            className="min-h-56 rounded-lg border bg-muted/10"
-          />
+          <div className="rounded-lg border bg-muted/10 p-6 text-center">
+            <p className="font-heading text-base font-semibold">
+              No knowledge sources yet
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              The AI can only answer from what you add here. Pick a way to
+              start:
+            </p>
+            <div className="mt-4 grid gap-3 text-left sm:grid-cols-3">
+              {(
+                [
+                  {
+                    type: "text",
+                    icon: FileText,
+                    title: "Paste text",
+                    description: "Policies, pricing, opening hours."
+                  },
+                  {
+                    type: "faq",
+                    icon: HelpCircle,
+                    title: "Add FAQs",
+                    description: "Questions with their exact answers."
+                  },
+                  {
+                    type: "file",
+                    icon: UploadCloud,
+                    title: "Upload a document",
+                    description: "A PDF or document you already have."
+                  }
+                ] as const
+              ).map((option) => (
+                <button
+                  key={option.type}
+                  type="button"
+                  className="cursor-pointer rounded-md border bg-white p-3 transition hover:border-primary/40 hover:shadow-xs"
+                  onClick={() => {
+                    setSourceType(option.type);
+                    setIsAddSourceOpen(true);
+                  }}
+                >
+                  <option.icon className="size-4 text-primary" />
+                  <p className="mt-2 text-sm font-medium">{option.title}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {option.description}
+                  </p>
+                </button>
+              ))}
+            </div>
+          </div>
         )}
       </div>
 

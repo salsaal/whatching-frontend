@@ -11,6 +11,7 @@ import {
   KnowledgeChunkResponse,
   KnowledgeChunksResponse,
   KnowledgeSourceResponse,
+  KnowledgeSearchTestResponse,
   KnowledgeSourcesResponse
 } from "../types/bot.type";
 import { ApiResponse } from "../types/api";
@@ -183,6 +184,19 @@ export const archiveBotCanvas = async (
 ): Promise<BotCanvasResponse> => {
   const res = await api.delete<BotCanvasResponse>(
     BOT_ENDPOINTS.CANVAS_BY_ID(canvasId)
+  );
+  return res.data;
+};
+
+// Shows what the AI would read for a question. Retrieval only: nothing is
+// sent and no AI tokens are used.
+export const testKnowledgeSearch = async (payload: {
+  query: string;
+  limit?: number;
+}): Promise<KnowledgeSearchTestResponse> => {
+  const res = await api.post<KnowledgeSearchTestResponse>(
+    BOT_ENDPOINTS.KNOWLEDGE_SEARCH_TEST,
+    payload
   );
   return res.data;
 };

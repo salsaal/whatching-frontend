@@ -10,11 +10,7 @@ import AppLayout from "@/layouts/AppLayout";
 // bookmarks working; it can't be a next.config redirect because the #hash
 // that picks the section never reaches the server.
 const destinationForHash = (hash: string) =>
-  hash === "#knowledge"
-    ? "/bot/knowledge"
-    : hash === "#usage"
-      ? "/bot/ai#usage"
-      : "/bot/ai";
+  hash === "#knowledge" ? "/bot/ai#knowledge" : "/bot/ai";
 
 export default function LegacyAiSettingsRedirect() {
   const router = useRouter();

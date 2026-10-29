@@ -44,7 +44,9 @@ export function SpamProtectionPresets({
     (preset) =>
       preset.threshold === threshold && preset.windowSeconds === windowSeconds
   );
-  const selected: PresetKey = forceCustom ? "custom" : (matched?.key ?? "custom");
+  const selected: PresetKey = forceCustom
+    ? "custom"
+    : (matched?.key ?? "custom");
 
   const options: Array<{ key: PresetKey; label: string; detail: string }> = [
     ...PRESETS.map((preset) => ({

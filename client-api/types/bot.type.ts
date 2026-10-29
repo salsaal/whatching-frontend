@@ -187,6 +187,20 @@ export interface KnowledgeChunk {
   disabledAt?: string | null;
 }
 
+export interface KnowledgeSearchResult {
+  id: string;
+  sourceId: string;
+  sourceTitle: string | null;
+  heading: string | null;
+  /** Reciprocal-rank-fusion score: only meaningful relative to the others. */
+  score: number;
+  excerpt: string;
+}
+
+export type KnowledgeSearchTestResponse = ApiResponse<{
+  chunks: KnowledgeSearchResult[];
+}>;
+
 export interface BotStatus {
   botEnabled: boolean;
   aiEnabled: boolean;

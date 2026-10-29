@@ -52,8 +52,8 @@ export function AiUsageTopUp() {
     mutationFn: verifyAiTokenTopup,
     meta: { showToast: false },
     onSuccess: (res) => {
-      // Shares a cache key with AiUsageSummary (rendered elsewhere on the
-      // page) so its stats update immediately without a refetch.
+      // Shares a cache key with the AI tab's usage strip (and the overview
+      // stat) so they update immediately without a refetch.
       queryClient.setQueryData(
         ["ai-token-usage", activeOrganization?._id],
         (previous: AiTokenUsageResponse | undefined) =>

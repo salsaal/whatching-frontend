@@ -172,6 +172,7 @@ export const BOT_ENDPOINTS = {
   CANVAS_STATUS_BY_ID: (canvasId: string) =>
     `${BOT_BASE}/canvases/${canvasId}/status`,
   KNOWLEDGE_SOURCES: `${BOT_BASE}/knowledge-sources`,
+  KNOWLEDGE_SEARCH_TEST: `${BOT_BASE}/knowledge-search/test`,
   KNOWLEDGE_TEXT: `${BOT_BASE}/knowledge-sources/text`,
   KNOWLEDGE_UPLOAD: `${BOT_BASE}/knowledge-sources/upload`,
   KNOWLEDGE_SOURCE_BY_ID: (sourceId: string) =>

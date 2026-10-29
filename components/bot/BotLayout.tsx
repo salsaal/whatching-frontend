@@ -6,13 +6,12 @@ import { PermissionGate } from "@/components/common/NoAccess";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import AppLayout from "@/layouts/AppLayout";
 
-export type BotTab = "flows" | "ai" | "knowledge" | "settings";
+export type BotTab = "settings" | "flows" | "ai";
 
 const tabs: Array<{ value: BotTab; label: string; href: string }> = [
+  { value: "settings", label: "Settings", href: "/bot/settings" },
   { value: "flows", label: "Flows", href: "/bot/flows" },
-  { value: "ai", label: "AI", href: "/bot/ai" },
-  { value: "knowledge", label: "Knowledge", href: "/bot/knowledge" },
-  { value: "settings", label: "Settings", href: "/bot/settings" }
+  { value: "ai", label: "AI", href: "/bot/ai" }
 ];
 
 // Shell for every /bot tab. Each tab is a real link with its own URL, so

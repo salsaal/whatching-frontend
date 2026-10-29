@@ -141,12 +141,7 @@ const pageMeta: Record<string, PageMeta> = {
   "/bot/ai": {
     title: "Bot AI | Whatching",
     description:
-      "Turn AI fallback replies on or off and track AI token usage and top-ups."
-  },
-  "/bot/knowledge": {
-    title: "Bot Knowledge | Whatching",
-    description:
-      "Manage the knowledge base the Whatching AI agent answers from."
+      "Turn AI replies on or off, manage and test the knowledge base the AI answers from, and track AI token usage."
   },
   "/bot/settings": {
     title: "Bot Settings | Whatching",

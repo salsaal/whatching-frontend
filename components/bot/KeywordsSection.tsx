@@ -152,9 +152,7 @@ function KeywordList({
         <div>
           <p className="text-sm font-medium">{title}</p>
           <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            e.g. {example}
-          </p>
+          <p className="mt-0.5 text-xs text-muted-foreground">e.g. {example}</p>
         </div>
         <span className="shrink-0 text-xs text-muted-foreground">
           {extras.length}/{MAX_KEYWORDS}
@@ -273,50 +271,50 @@ export function KeywordsSection({
         A message must be exactly this word (case doesn&apos;t matter).
       </p>
       <div className="divide-y">
-      {greeting && (
-        <KeywordList
-          title="Menu keywords"
-          description="Start your main menu flow. This list replaces the defaults."
-          example="HI, HELLO, MENU"
-          list={greeting}
-          readOnly={readOnly}
-          emptyWarning="Nothing will start the main menu flow from a keyword."
-          conflictsWith={{
-            words: consentWords,
-            message: (word) =>
-              `${word} is also an ${optOutWords.has(word) ? "opt-out" : "opt-in"} word. Those are checked first, so it will never start the menu.`
-          }}
-        />
-      )}
-      {optOut && (
-        <KeywordList
-          title="Opt-out keywords"
-          description="Stop broadcasts to the contact who sends one."
-          example="BAND KARO, NAHI CHAHIYE"
-          extrasLabel="Additional opt-out words"
-          list={optOut}
-          readOnly={readOnly}
-          conflictsWith={
-            optIn
-              ? {
-                  words: optInWords,
-                  message: (word) =>
-                    `${word} is also an opt-in word. A word should only be in one list.`
-                }
-              : undefined
-          }
-        />
-      )}
-      {optIn && (
-        <KeywordList
-          title="Opt-in keywords"
-          description="Resume broadcasts for a contact who opted out."
-          example="HAAN, CHALU KARO"
-          extrasLabel="Additional opt-in words"
-          list={optIn}
-          readOnly={readOnly}
-        />
-      )}
+        {greeting && (
+          <KeywordList
+            title="Menu keywords"
+            description="Start your main menu flow. This list replaces the defaults."
+            example="HI, HELLO, MENU"
+            list={greeting}
+            readOnly={readOnly}
+            emptyWarning="Nothing will start the main menu flow from a keyword."
+            conflictsWith={{
+              words: consentWords,
+              message: (word) =>
+                `${word} is also an ${optOutWords.has(word) ? "opt-out" : "opt-in"} word. Those are checked first, so it will never start the menu.`
+            }}
+          />
+        )}
+        {optOut && (
+          <KeywordList
+            title="Opt-out keywords"
+            description="Stop broadcasts to the contact who sends one."
+            example="BAND KARO, NAHI CHAHIYE"
+            extrasLabel="Additional opt-out words"
+            list={optOut}
+            readOnly={readOnly}
+            conflictsWith={
+              optIn
+                ? {
+                    words: optInWords,
+                    message: (word) =>
+                      `${word} is also an opt-in word. A word should only be in one list.`
+                  }
+                : undefined
+            }
+          />
+        )}
+        {optIn && (
+          <KeywordList
+            title="Opt-in keywords"
+            description="Resume broadcasts for a contact who opted out."
+            example="HAAN, CHALU KARO"
+            extrasLabel="Additional opt-in words"
+            list={optIn}
+            readOnly={readOnly}
+          />
+        )}
       </div>
     </div>
   );
