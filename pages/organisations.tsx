@@ -1,6 +1,13 @@
 "use client";
 
-import { Building2, ChevronDown, LogOut, Plus, UserRound } from "lucide-react";
+import {
+  ArrowRight,
+  Building2,
+  KeyRound,
+  LogOut,
+  Plus,
+  UserRound
+} from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/router";
@@ -21,14 +28,7 @@ import {
   DialogHeader,
   DialogTitle
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger
-} from "@/components/ui/dropdown-menu";
+import { UserAvatar, UserMenu } from "@/components/account/UserMenu";
 import { Input } from "@/components/ui/input";
 import { CardGridLoadingSkeleton } from "@/components/ui/loading-skeletons";
 import assets from "@/json/assets";
@@ -74,6 +74,70 @@ function Chip({
   );
 }
 
+const relativeTime = (value?: string | null) => {
+  if (!value) return null;
+  const ms = Date.now() - new Date(value).getTime();
+  if (!Number.isFinite(ms)) return null;
+  const minutes = Math.floor(ms / 60_000);
+  if (minutes < 1) return "Just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return formatDate(value);
+};
+
+const lastMessageTime = (organization: Organization) => {
+  const value = organization.usage?.lastMessageAt;
+  const time = value ? new Date(value).getTime() : 0;
+  return Number.isFinite(time) ? time : 0;
+};
+
+function Stat({
+  label,
+  value,
+  highlight,
+  onClick
+}: {
+  label: string;
+  value: string;
+  highlight?: boolean;
+  onClick?: () => void;
+}) {
+  const content = (
+    <>
+      <span className="block text-[11px] text-muted-foreground">{label}</span>
+      <span
+        className={cn(
+          "block truncate text-sm font-semibold",
+          highlight && "text-emerald-700"
+        )}
+      >
+        {value}
+      </span>
+    </>
+  );
+  return onClick ? (
+    <button
+      type="button"
+      onClick={(event) => {
+        // The whole card opens the org; this opens its inbox instead.
+        event.stopPropagation();
+        onClick();
+      }}
+      className={cn(
+        "min-w-0 cursor-pointer rounded-md px-2 py-1.5 text-left transition hover:bg-muted",
+        highlight && "bg-emerald-50 hover:bg-emerald-100"
+      )}
+    >
+      {content}
+    </button>
+  ) : (
+    <div className="min-w-0 px-2 py-1.5">{content}</div>
+  );
+}
+
 function OrganisationCard({
   organization,
   isLastOpened,
@@ -81,18 +145,33 @@ function OrganisationCard({
 }: {
   organization: Organization;
   isLastOpened: boolean;
-  onOpen: () => void;
+  /** Opens the org, optionally on a specific page. */
+  onOpen: (path?: string) => void;
 }) {
   const isConnected = organization.metaConfig?.status === "ready";
   const hasPlan =
     Boolean(organization.planTier) && organization.planTier !== "none";
   const numberCount = organization.activePhoneNumberCount || 0;
   const displayNumber = organization.metaConfig?.displayPhoneNumber;
+  const unread = organization.unreadConversationCount || 0;
+  const lastMessage = relativeTime(organization.usage?.lastMessageAt);
+  // Only owners can start Meta's signup; the overview's ?connectMeta=1
+  // opens it straight away.
+  const setupPath =
+    organization.myRole === "owner" ? "/overview?connectMeta=1" : "/overview";
 
   return (
-    <button
-      type="button"
-      onClick={onOpen}
+    <div
+      role="link"
+      tabIndex={0}
+      onClick={() => onOpen()}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onOpen();
+        }
+      }}
       className="group flex h-full w-full cursor-pointer flex-col rounded-lg border border-transparent bg-white p-5 text-left shadow-xs transition hover:border-primary/30 hover:shadow-md focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none"
     >
       <div className="flex items-start justify-between gap-3">
@@ -129,6 +208,53 @@ function OrganisationCard({
         )}
       </div>
 
+      {isConnected && hasPlan ? (
+        <div className="mt-4 grid grid-cols-3 gap-1 border-t pt-3">
+          <Stat
+            label="Contacts"
+            value={(organization.usage?.subscribersCount || 0).toLocaleString(
+              "en-IN"
+            )}
+          />
+          <Stat
+            label="Unread"
+            value={unread.toLocaleString("en-IN")}
+            highlight={unread > 0}
+            onClick={() => onOpen("/conversations")}
+          />
+          <Stat label="Last message" value={lastMessage || "No messages yet"} />
+        </div>
+      ) : (
+        <div className="mt-4 flex flex-wrap gap-2 border-t pt-3">
+          {!isConnected && (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onOpen(setupPath);
+              }}
+              className="inline-flex cursor-pointer items-center gap-1 rounded-md bg-primary/10 px-2.5 py-1.5 text-xs font-semibold text-primary transition hover:bg-primary/15"
+            >
+              Finish setup
+              <ArrowRight className="size-3.5" />
+            </button>
+          )}
+          {!hasPlan && (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onOpen("/plans");
+              }}
+              className="inline-flex cursor-pointer items-center gap-1 rounded-md bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-800 transition hover:bg-amber-100"
+            >
+              Choose a plan
+              <ArrowRight className="size-3.5" />
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="mt-auto flex items-center justify-between gap-3 pt-5 text-xs text-muted-foreground">
         <span className="truncate font-medium text-foreground">
           {displayNumber || ""}
@@ -137,7 +263,49 @@ function OrganisationCard({
           Created {formatDate(organization.createdAt)}
         </span>
       </div>
-    </button>
+    </div>
+  );
+}
+
+function AccountCard() {
+  const user = useAuthStore((state) => state.user);
+  const { logout, isLoggingOut } = useLogout();
+  const linkClass =
+    "flex items-center gap-2.5 rounded-md px-2 py-2 text-sm font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground";
+  return (
+    <aside className="h-fit rounded-lg bg-white p-5 shadow-xs">
+      <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+        Your account
+      </p>
+      <div className="mt-3 flex items-center gap-3">
+        <UserAvatar name={user?.name} className="size-11 text-base" />
+        <div className="min-w-0">
+          <p className="truncate font-medium">{user?.name}</p>
+          <p className="truncate text-xs text-muted-foreground">
+            {user?.email}
+          </p>
+        </div>
+      </div>
+      <nav className="mt-4 space-y-0.5 border-t pt-3">
+        <Link href="/account" className={linkClass}>
+          <UserRound className="size-4" />
+          Profile
+        </Link>
+        <Link href="/account/security" className={linkClass}>
+          <KeyRound className="size-4" />
+          Change password
+        </Link>
+        <button
+          type="button"
+          disabled={isLoggingOut}
+          onClick={() => void logout()}
+          className={cn(linkClass, "w-full cursor-pointer")}
+        >
+          <LogOut className="size-4" />
+          Log out
+        </button>
+      </nav>
+    </aside>
   );
 }
 
@@ -147,7 +315,6 @@ function Organisations() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [name, setName] = useState("");
   const user = useAuthStore((state) => state.user);
-  const { logout: handleLogout, isLoggingOut } = useLogout();
   const {
     organizations,
     activeOrganization,
@@ -172,10 +339,10 @@ function Organisations() {
     }
   });
 
-  const handleOpen = (organization: Organization) => {
+  const handleOpen = (organization: Organization, path = "/overview") => {
     setActiveOrganization(organization);
     queryClient.invalidateQueries({ queryKey: ["membership"] });
-    router.push("/overview");
+    router.push(path);
   };
 
   const handleCreate = (event: React.FormEvent<HTMLFormElement>) => {
@@ -193,14 +360,21 @@ function Organisations() {
     }
   }, [organizationsData, setOrganizations]);
 
-  // The org in the store is the one used last, so it leads the list.
+  // Last opened first (the org in the store), then orgs with unread
+  // conversations, then everything else by most recent message.
   const lastOpenedId = activeOrganization?._id;
   const sortedOrganizations = useMemo(
     () =>
-      [...organizations].sort(
-        (a, b) =>
-          Number(b._id === lastOpenedId) - Number(a._id === lastOpenedId)
-      ),
+      [...organizations].sort((a, b) => {
+        const lastOpened =
+          Number(b._id === lastOpenedId) - Number(a._id === lastOpenedId);
+        if (lastOpened) return lastOpened;
+        const unread =
+          Number((b.unreadConversationCount || 0) > 0) -
+          Number((a.unreadConversationCount || 0) > 0);
+        if (unread) return unread;
+        return lastMessageTime(b) - lastMessageTime(a);
+      }),
     [lastOpenedId, organizations]
   );
 
@@ -222,44 +396,7 @@ function Organisations() {
             height={42}
           />
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                className="flex cursor-pointer items-center gap-2 rounded-full p-1 pr-2 transition hover:bg-muted"
-              >
-                <span className="flex size-9 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
-                  {user?.name?.charAt(0)?.toUpperCase() || "W"}
-                </span>
-                <span className="hidden max-w-40 truncate text-sm font-medium sm:block">
-                  {user?.name}
-                </span>
-                <ChevronDown className="size-4 text-muted-foreground" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-60">
-              <DropdownMenuLabel className="font-normal">
-                <p className="truncate text-sm font-medium">{user?.name}</p>
-                <p className="truncate text-xs text-muted-foreground">
-                  {user?.email}
-                </p>
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem asChild>
-                <Link href="/profile">
-                  <UserRound className="size-4" />
-                  Profile
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={isLoggingOut}
-                onSelect={() => void handleLogout()}
-              >
-                <LogOut className="size-4" />
-                Log out
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <UserMenu />
         </div>
       </header>
 
@@ -280,15 +417,18 @@ function Organisations() {
               {addButton}
             </section>
 
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {sortedOrganizations.map((organization) => (
-                <OrganisationCard
-                  key={organization._id}
-                  organization={organization}
-                  isLastOpened={organization._id === lastOpenedId}
-                  onOpen={() => handleOpen(organization)}
-                />
-              ))}
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+              <div className="grid content-start gap-4 sm:grid-cols-2">
+                {sortedOrganizations.map((organization) => (
+                  <OrganisationCard
+                    key={organization._id}
+                    organization={organization}
+                    isLastOpened={organization._id === lastOpenedId}
+                    onOpen={(path) => handleOpen(organization, path)}
+                  />
+                ))}
+              </div>
+              <AccountCard />
             </div>
           </>
         ) : (

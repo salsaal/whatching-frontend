@@ -21,6 +21,7 @@ export interface OrganizationMetaConfig {
 export interface OrganizationUsage {
   aiTokensUsed: number;
   subscribersCount: number;
+  lastMessageAt?: string | null;
 }
 
 export interface OrganizationMessagingBilling {
@@ -75,6 +76,8 @@ export interface Organization {
   myRole?: "owner" | "admin" | "agent";
   /** From GET /my-organizations: active WhatsApp numbers in this org. */
   activePhoneNumberCount?: number;
+  /** From GET /my-organizations, after the backend deploy. */
+  unreadConversationCount?: number;
 }
 
 export interface IntegrationStatus {
