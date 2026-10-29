@@ -14,6 +14,7 @@ import {
   MasterSwitchCard,
   StatusPill
 } from "@/components/bot/MasterSwitchCard";
+import { HandoffMessageField } from "@/components/bot/HandoffMessageField";
 import { SettingRow } from "@/components/bot/SettingRow";
 import { SpamProtectionPresets } from "@/components/bot/SpamProtectionPresets";
 import { Button } from "@/components/ui/button";
@@ -134,6 +135,18 @@ function BotSettingsTab() {
             builtIns: BUILT_IN_OPT_IN_KEYWORDS,
             onSave: (next) => updateSettings({ optInKeywords: next })
           }}
+        />
+      </SettingRow>
+
+      <SettingRow
+        title="Handoff message"
+        description="Sent to the customer the moment a chat is handed to your team (Talk to team buttons, handoff blocks, or when they ask the AI for a person)."
+      >
+        <HandoffMessageField
+          platform="WhatsApp"
+          value={settings.handoffMessage}
+          disabled={!planAllowed}
+          onSave={(next) => updateSettings({ handoffMessage: next })}
         />
       </SettingRow>
     </div>

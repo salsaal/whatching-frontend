@@ -17,6 +17,7 @@ import {
   MasterSwitchCard,
   StatusPill
 } from "@/components/bot/MasterSwitchCard";
+import { HandoffMessageField } from "@/components/bot/HandoffMessageField";
 import { PausedNote, SettingRow } from "@/components/bot/SettingRow";
 import { SpamProtectionPresets } from "@/components/bot/SpamProtectionPresets";
 import { Button } from "@/components/ui/button";
@@ -216,6 +217,17 @@ export function InstagramSettingsTab({
             builtIns: BUILT_IN_OPT_OUT_KEYWORDS,
             onSave: (next) => updateSettings({ optOutKeywords: next })
           }}
+        />
+      </SettingRow>
+
+      <SettingRow
+        title="Handoff message"
+        description="Sent to the customer the moment a chat is handed to your team (Talk to team buttons, handoff blocks, or when they ask the AI for a person)."
+      >
+        <HandoffMessageField
+          platform="Instagram"
+          value={settings.handoffMessage}
+          onSave={(next) => updateSettings({ handoffMessage: next })}
         />
       </SettingRow>
 

@@ -143,6 +143,8 @@ export interface BotSettings {
   spamProtectionEnabled: boolean;
   spamFloodThreshold: number;
   spamFloodWindowSeconds: number;
+  /** Sent to the customer when a chat is handed to the team. */
+  handoffMessage?: string;
 }
 
 export type BotSettingsPatch = Partial<
@@ -157,6 +159,7 @@ export type BotSettingsPatch = Partial<
     | "spamProtectionEnabled"
     | "spamFloodThreshold"
     | "spamFloodWindowSeconds"
+    | "handoffMessage"
   >
 >;
 

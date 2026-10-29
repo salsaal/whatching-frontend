@@ -418,6 +418,8 @@ export interface InstagramAutomationSettings {
   spamProtectionEnabled: boolean;
   spamFloodThreshold: number;
   spamFloodWindowSeconds: number;
+  /** Sent to the customer when a chat is handed to the team. */
+  handoffMessage?: string;
 }
 
 export type InstagramAutomationSettingsPatch = Partial<
@@ -430,6 +432,7 @@ export type InstagramAutomationSettingsPatch = Partial<
     | "spamFloodWindowSeconds"
     | "greetingKeywords"
     | "optOutKeywords"
+    | "handoffMessage"
   >
 >;
 
