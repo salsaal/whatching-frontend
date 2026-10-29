@@ -1,11 +1,19 @@
 import { useMutation } from "@tanstack/react-query";
 import { AxiosError } from "axios";
-import { FlaskConical, SearchX } from "lucide-react";
+import { Search, SearchX } from "lucide-react";
 import { FormEvent, useState } from "react";
 
 import { testKnowledgeSearch } from "@/client-api/functions/bot";
 import { KnowledgeSearchResult } from "@/client-api/types/bot.type";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger
+} from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 
 const MIN_QUERY = 2;
@@ -66,7 +74,7 @@ function ResultCard({
 
 // Retrieval only: shows the chunks the AI would read for a question, so an
 // owner can spot gaps in the knowledge base without spending tokens.
-export function KnowledgeTestPanel() {
+function KnowledgeTest() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<KnowledgeSearchResult[] | null>(null);
   const [error, setError] = useState("");
@@ -100,17 +108,7 @@ export function KnowledgeTestPanel() {
   const topScore = Math.max(...(results || []).map((item) => item.score), 0);
 
   return (
-    <section className="space-y-3 rounded-lg bg-white p-4 shadow-xs">
-      <div className="flex items-center gap-2">
-        <FlaskConical className="size-4 text-primary" />
-        <h2 className="font-heading text-base font-semibold">
-          Test your knowledge
-        </h2>
-      </div>
-      <p className="text-xs text-muted-foreground">
-        Shows what the AI would read to answer. It doesn&apos;t send anything or
-        use AI tokens.
-      </p>
+    <div className="space-y-3">
       <form onSubmit={handleSubmit} className="space-y-2">
         <Textarea
           value={query}
@@ -155,6 +153,29 @@ export function KnowledgeTestPanel() {
           ))}
         </div>
       )}
-    </section>
+    </div>
+  );
+}
+
+export function KnowledgeTestButton() {
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline">
+          <Search className="size-4" />
+          Test
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Test your knowledge</DialogTitle>
+          <DialogDescription>
+            Shows what the AI would read to answer. It doesn&apos;t send
+            anything or use AI tokens.
+          </DialogDescription>
+        </DialogHeader>
+        <KnowledgeTest />
+      </DialogContent>
+    </Dialog>
   );
 }

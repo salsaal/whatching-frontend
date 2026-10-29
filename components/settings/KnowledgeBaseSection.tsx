@@ -1,4 +1,4 @@
-import { ChangeEvent, useRef, useState } from "react";
+import { ChangeEvent, ReactNode, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import {
@@ -79,7 +79,12 @@ const formatDate = (value?: string) =>
 const sourceIcon = (type: KnowledgeSource["type"]) =>
   type === "faq" ? HelpCircle : FileText;
 
-export function KnowledgeBaseSection() {
+export function KnowledgeBaseSection({
+  headerActions
+}: {
+  /** Extra buttons shown before "Add source" (e.g. the AI tab's Test). */
+  headerActions?: ReactNode;
+} = {}) {
   const activeOrganization = useOrganizationStore(
     (state) => state.activeOrganization
   );
@@ -281,10 +286,13 @@ export function KnowledgeBaseSection() {
             fallback answers.
           </p>
         </div>
-        <Button size="sm" onClick={() => setIsAddSourceOpen(true)}>
-          <Plus className="size-4" />
-          Add source
-        </Button>
+        <div className="flex shrink-0 gap-2">
+          {headerActions}
+          <Button size="sm" onClick={() => setIsAddSourceOpen(true)}>
+            <Plus className="size-4" />
+            Add source
+          </Button>
+        </div>
       </div>
 
       <div className="min-w-0 space-y-3">

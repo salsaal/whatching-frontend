@@ -6,16 +6,24 @@ import Link from "next/link";
 import { useEffect } from "react";
 
 import { listKnowledgeSources } from "@/client-api/functions/bot";
-import { AiUsageStrip } from "@/components/bot/AiUsageStrip";
+import { AiUsageCard } from "@/components/bot/AiUsageCard";
 import BotLayout from "@/components/bot/BotLayout";
 import { BotOffBanner } from "@/components/bot/BotOffBanner";
-import { KnowledgeTestPanel } from "@/components/bot/KnowledgeTestPanel";
+import { KnowledgeTestButton } from "@/components/bot/KnowledgeTestDialog";
+import { PausedNote } from "@/components/bot/SettingRow";
+import { AiUsageTopUp } from "@/components/settings/AiUsageTopUp";
 import { KnowledgeBaseSection } from "@/components/settings/KnowledgeBaseSection";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from "@/components/ui/tooltip";
 import { useBotSettings } from "@/hooks/useBotSettings";
 import { useCurrentMembership } from "@/hooks/useCurrentMembership";
 import { useLiveFlows } from "@/hooks/useLiveFlows";
+import { cn } from "@/lib/utils";
 import { useOrganizationStore } from "@/stores/organizationStore";
 
 function BotAiTab() {
@@ -37,6 +45,8 @@ function BotAiTab() {
     (source) => source.status === "ready" && !source.disabledAt
   ).length;
   const isAiEnabled = Boolean(settings?.isAiEnabled);
+  // AI replies need the bot on; the switch still saves while it's off.
+  const isPaused = Boolean(settings) && !settings?.isBotEnabled;
   // AI only replies inside a live flow, so with nothing live it never runs.
   const {
     isNothingLive,
@@ -76,7 +86,12 @@ function BotAiTab() {
             <Sparkles className="size-4" />
           </div>
           <div className="min-w-0 flex-1">
-            <h2 className="font-heading text-base font-semibold">AI replies</h2>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="font-heading text-base font-semibold">
+                AI replies
+              </h2>
+              {isPaused && <PausedNote label="Paused" />}
+            </div>
             <p className="mt-0.5 text-sm text-muted-foreground">
               When a message doesn&apos;t match anything in your live flow, the
               AI answers using your knowledge base.
@@ -88,14 +103,23 @@ function BotAiTab() {
               </p>
             )}
           </div>
-          <Switch
-            checked={isAiEnabled}
-            disabled={isLoading || isUpdating || !planAllowed}
-            title="Allow AI replies when no flow matches"
-            onCheckedChange={(checked) =>
-              updateSettings({ isAiEnabled: checked })
-            }
-          />
+          <Tooltip open={isPaused ? undefined : false}>
+            <TooltipTrigger asChild>
+              <Switch
+                checked={isAiEnabled}
+                disabled={isLoading || isUpdating || !planAllowed}
+                aria-label="AI replies"
+                className={cn(
+                  isPaused &&
+                    "opacity-50 saturate-0 data-[state=checked]:bg-slate-400"
+                )}
+                onCheckedChange={(checked) =>
+                  updateSettings({ isAiEnabled: checked })
+                }
+              />
+            </TooltipTrigger>
+            <TooltipContent>Saved, but paused while the bot is off.</TooltipContent>
+          </Tooltip>
         </div>
         {isAiEnabled && !isSourcesLoading && readyCount === 0 && (
           <div className="flex gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
@@ -105,16 +129,34 @@ function BotAiTab() {
         )}
       </section>
 
-      {isOwner && <AiUsageStrip />}
+      {isOwner && <AiUsageCard />}
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
+      <div
+        className={cn(
+          "grid gap-4 lg:items-start",
+          isOwner && "lg:grid-cols-[minmax(0,1fr)_360px]"
+        )}
+      >
         <section
           id="knowledge"
           className="scroll-mt-24 rounded-lg bg-white p-5 shadow-xs"
         >
-          <KnowledgeBaseSection />
+          <KnowledgeBaseSection headerActions={<KnowledgeTestButton />} />
         </section>
-        <KnowledgeTestPanel />
+        {isOwner && (
+          // Above the knowledge base on mobile, beside it on desktop.
+          <section className="order-first space-y-3 rounded-lg bg-white p-5 shadow-xs lg:order-none">
+            <div>
+              <h2 className="font-heading text-base font-semibold">
+                Top up AI tokens
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Buy extra tokens for AI replies.
+              </p>
+            </div>
+            <AiUsageTopUp />
+          </section>
+        )}
       </div>
     </div>
   );
