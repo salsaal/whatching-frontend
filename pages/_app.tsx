@@ -139,7 +139,7 @@ const pageMeta: Record<string, PageMeta> = {
       "Edit WhatsApp automation blocks, routing, follow-ups, media, locations, and publish checks."
   },
   "/bot/ai": {
-    title: "Bot AI | Whatching",
+    title: "AI Assistant | Whatching",
     description:
       "Turn AI replies on or off, manage and test the knowledge base the AI answers from, and track AI token usage."
   },

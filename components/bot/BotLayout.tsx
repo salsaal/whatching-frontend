@@ -11,7 +11,7 @@ export type BotTab = "settings" | "flows" | "ai";
 const tabs: Array<{ value: BotTab; label: string; href: string }> = [
   { value: "settings", label: "Settings", href: "/bot/settings" },
   { value: "flows", label: "Flows", href: "/bot/flows" },
-  { value: "ai", label: "AI", href: "/bot/ai" }
+  { value: "ai", label: "AI Assistant", href: "/bot/ai" }
 ];
 
 // Shell for every /bot tab. Each tab is a real link with its own URL, so
@@ -41,13 +41,21 @@ export default function BotLayout({
               </div>
             </div>
             <Tabs value={activeTab} className="mt-4">
-              <TabsList>
-                {tabs.map((tab) => (
-                  <TabsTrigger key={tab.value} value={tab.value} asChild>
-                    <Link href={tab.href}>{tab.label}</Link>
-                  </TabsTrigger>
-                ))}
-              </TabsList>
+              {/* Scrolls sideways on narrow screens rather than wrapping. */}
+              <div className="-mx-4 overflow-x-auto px-4">
+                <TabsList>
+                  {tabs.map((tab) => (
+                    <TabsTrigger
+                      key={tab.value}
+                      value={tab.value}
+                      className="min-w-28 shrink-0 px-4"
+                      asChild
+                    >
+                      <Link href={tab.href}>{tab.label}</Link>
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </div>
             </Tabs>
           </section>
           {children}
