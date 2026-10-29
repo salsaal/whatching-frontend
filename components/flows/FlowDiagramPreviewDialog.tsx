@@ -1,5 +1,6 @@
 import {
   Background,
+  ControlButton,
   Controls,
   Edge,
   Handle,
@@ -18,12 +19,13 @@ import {
 import {
   AlertTriangle,
   Eye,
+  Map as MapIcon,
   PauseCircle,
   Tags,
   UserRound,
   Workflow
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   BotAction,
@@ -88,6 +90,11 @@ const edgePalette = [
 ];
 const FADED_OPACITY = 0.25;
 const READABLE_ZOOM = 0.8;
+const OPENING_ZOOM = 0.9;
+// Room kept around the start block on open (the Start badge sits ~24px
+// above the block, so the top gets a little extra).
+const EDGE_PADDING = 48;
+const BADGE_ROOM = 24;
 
 const instagramMessageTypes = new Set<InstagramBlockType>([
   "send_text",
@@ -239,7 +246,9 @@ function FlowPreviewBody({
   nodes,
   edges
 }: Omit<FlowDiagramPreviewDialogProps, "open" | "onOpenChange">) {
-  const { fitView, getInternalNode } = useReactFlow();
+  const { fitView, getInternalNode, setViewport } = useReactFlow();
+  const canvasRef = useRef<HTMLDivElement | null>(null);
+  const [isMinimapVisible, setIsMinimapVisible] = useState(true);
   const [mode, setMode] = useState<Mode>("diagram");
   const [isLaidOut, setIsLaidOut] = useState(false);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
@@ -332,16 +341,33 @@ function FlowPreviewBody({
         );
         setIsLaidOut(true);
         requestAnimationFrame(() => {
-          if (startNodeId) {
-            fitView({
-              nodes: [{ id: startNodeId }],
-              minZoom: READABLE_ZOOM,
-              maxZoom: 0.9,
-              padding: 0.6
-            });
-          } else {
+          const start = startNodeId ? positions.get(startNodeId) : undefined;
+          const size = startNodeId ? sizes.get(startNodeId) : undefined;
+          const bounds = canvasRef.current?.getBoundingClientRect();
+          if (!start || !size || !bounds) {
             fitView({ padding: 0.2 });
+            return;
           }
+          // Pin the start block to the left edge (what follows reads to the
+          // right) at a readable zoom, shrinking only if it wouldn't fit.
+          const zoom = Math.max(
+            0.3,
+            Math.min(
+              OPENING_ZOOM,
+              (bounds.width - EDGE_PADDING * 2) / size.width,
+              (bounds.height - EDGE_PADDING * 2 - BADGE_ROOM) / size.height
+            )
+          );
+          const blockHeight = size.height * zoom;
+          const top =
+            blockHeight + EDGE_PADDING * 2 + BADGE_ROOM < bounds.height
+              ? (bounds.height - blockHeight + BADGE_ROOM) / 2
+              : EDGE_PADDING + BADGE_ROOM;
+          setViewport({
+            x: EDGE_PADDING - start.x * zoom,
+            y: top - start.y * zoom,
+            zoom
+          });
         });
       })
       .catch(() => {
@@ -359,6 +385,7 @@ function FlowPreviewBody({
     fitView,
     getInternalNode,
     isLaidOut,
+    setViewport,
     nodesInitialized,
     previewNodes,
     setPreviewNodes,
@@ -510,6 +537,7 @@ function FlowPreviewBody({
       )}
       {/* Both views stay mounted so switching back keeps the layout. */}
       <div
+        ref={canvasRef}
         className={cn(
           "min-h-0 flex-1 bg-slate-50",
           (mode !== "diagram" || nodes.length === 0) && "hidden"
@@ -540,12 +568,26 @@ function FlowPreviewBody({
           proOptions={{ hideAttribution: true }}
         >
           <Background gap={22} size={1} color="#cbd5e1" />
-          <Controls showInteractive={false} fitViewOptions={{ padding: 0.2 }} />
-          <MiniMap
-            pannable
-            zoomable
-            className="!h-28 !w-40 !rounded-lg !border !bg-white/90"
-          />
+          <Controls showInteractive={false} fitViewOptions={{ padding: 0.2 }}>
+            <ControlButton
+              onClick={() => setIsMinimapVisible((current) => !current)}
+              title={isMinimapVisible ? "Hide minimap" : "Show minimap"}
+              aria-label={isMinimapVisible ? "Hide minimap" : "Show minimap"}
+              aria-pressed={isMinimapVisible}
+            >
+              <MapIcon />
+            </ControlButton>
+          </Controls>
+          {isMinimapVisible && (
+            <MiniMap
+              position="bottom-right"
+              pannable
+              zoomable
+              style={{ width: 160, height: 110 }}
+              className="!m-3 !overflow-hidden !rounded-lg !border !bg-white/60 !shadow-sm backdrop-blur-sm"
+              maskColor="rgba(241, 245, 249, 0.55)"
+            />
+          )}
         </ReactFlow>
       </div>
       {mode === "try" && nodes.length > 0 && (

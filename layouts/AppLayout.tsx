@@ -11,12 +11,10 @@ import {
   Instagram,
   LayoutDashboard,
   Loader2,
-  LogOut,
   Menu,
   MessageCircle,
   Settings,
   Target,
-  UserRound,
   X,
   Zap
 } from "lucide-react";
@@ -30,16 +28,7 @@ import {
   getIntegrationStatus,
   getOrganization
 } from "@/client-api/functions/organizations";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle
-} from "@/components/ui/alert-dialog";
+import { UserAvatar, UserMenu } from "@/components/account/UserMenu";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
@@ -59,7 +48,7 @@ import {
 } from "@/lib/billing";
 import { cn } from "@/lib/utils";
 import { useCurrentMembership } from "@/hooks/useCurrentMembership";
-import { useLogout } from "@/hooks/useLogout";
+import { useAuthStore } from "@/stores/authStore";
 import { Organization, useOrganizationStore } from "@/stores/organizationStore";
 
 interface AppLayoutProps {
@@ -93,10 +82,9 @@ export default function AppLayout({
 }: AppLayoutProps) {
   const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isLogoutOpen, setIsLogoutOpen] = useState(false);
   const [planBannerDismissed, setPlanBannerDismissed] = useState(false);
   const [cancelBannerDismissed, setCancelBannerDismissed] = useState(false);
-  const { logout, isLoggingOut } = useLogout();
+  const user = useAuthStore((state) => state.user);
   const {
     activeOrganization,
     organizations,
@@ -274,66 +262,46 @@ export default function AppLayout({
     </nav>
   );
 
-  const handleLogout = () => {
-    setIsMobileMenuOpen(false);
-    void logout();
-  };
-  const renderAccountLinks = (mobile = false) => (
-    <div className={cn("space-y-1", mobile ? "px-0" : "px-3 pb-4")}>
-      <Link
-        href="/profile"
-        onClick={() => mobile && setIsMobileMenuOpen(false)}
-        className={cn(
-          "flex h-11 items-center gap-3 rounded-sm px-3 text-sm font-medium transition-colors",
-          router.pathname === "/profile"
-            ? mobile
-              ? "bg-primary text-primary-foreground shadow-xs"
-              : "bg-primary/10 text-primary shadow-xs"
-            : mobile
-              ? "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-              : "text-muted-foreground hover:bg-muted hover:text-foreground",
-          !mobile &&
-            "lg:justify-center lg:gap-0 lg:px-0 lg:group-hover/sidebar:justify-start lg:group-hover/sidebar:gap-3 lg:group-hover/sidebar:px-3"
-        )}
-      >
-        <UserRound className="size-5 shrink-0" />
-        <span
-          className={cn(
-            !mobile &&
-              "lg:w-0 lg:overflow-hidden lg:opacity-0 lg:transition-opacity lg:group-hover/sidebar:w-auto lg:group-hover/sidebar:opacity-100"
-          )}
-        >
-          Profile
-        </span>
-      </Link>
-      <button
-        type="button"
-        onClick={() => setIsLogoutOpen(true)}
-        className={cn(
-          "flex h-11 w-full cursor-pointer items-center gap-3 rounded-sm px-3 text-sm font-medium transition-colors",
-          mobile
-            ? "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-            : "text-muted-foreground hover:bg-muted hover:text-foreground",
-          !mobile &&
-            "lg:justify-center lg:gap-0 lg:px-0 lg:group-hover/sidebar:justify-start lg:group-hover/sidebar:gap-3 lg:group-hover/sidebar:px-3"
-        )}
-      >
-        <LogOut className="size-5 shrink-0" />
-        <span
-          className={cn(
-            !mobile &&
-              "lg:w-0 lg:overflow-hidden lg:opacity-0 lg:transition-opacity lg:group-hover/sidebar:w-auto lg:group-hover/sidebar:opacity-100"
-          )}
-        >
-          Logout
-        </span>
-      </button>
+  // The avatar menu replaces the old Profile / Logout links: collapsed it's
+  // just the avatar, and the name shows when the sidebar expands.
+  const renderAccountMenu = (mobile = false) => (
+    <div className={cn(mobile ? "px-0" : "px-3 pb-4")}>
+      <UserMenu
+        showSwitchOrganisation
+        side={mobile ? "top" : "right"}
+        align={mobile ? "start" : "end"}
+        trigger={
+          <span
+            className={cn(
+              "flex h-12 items-center gap-3 rounded-sm px-2 transition-colors hover:bg-muted",
+              !mobile &&
+                "lg:justify-center lg:gap-0 lg:px-0 lg:group-hover/sidebar:justify-start lg:group-hover/sidebar:gap-3 lg:group-hover/sidebar:px-2"
+            )}
+          >
+            <UserAvatar name={user?.name} />
+            <span
+              className={cn(
+                "min-w-0",
+                !mobile &&
+                  "lg:w-0 lg:overflow-hidden lg:opacity-0 lg:transition-opacity lg:group-hover/sidebar:w-auto lg:group-hover/sidebar:opacity-100"
+              )}
+            >
+              <span className="block truncate text-sm font-medium">
+                {user?.name}
+              </span>
+              <span className="block truncate text-xs text-muted-foreground">
+                {user?.email}
+              </span>
+            </span>
+          </span>
+        }
+      />
     </div>
   );
 
   return (
     <div className="min-h-screen bg-[#f7faf8] text-foreground">
-      <aside className="group/sidebar fixed inset-y-0 left-0 z-[130] hidden w-20 flex-col overflow-hidden bg-white shadow-xs transition-all duration-200 hover:w-64 lg:flex">
+      <aside className="group/sidebar fixed inset-y-0 left-0 z-40 hidden w-20 flex-col overflow-hidden bg-white shadow-xs transition-all duration-200 hover:w-64 lg:flex">
         <button
           type="button"
           onClick={() => router.push("/organisations")}
@@ -367,7 +335,7 @@ export default function AppLayout({
 
         <div className="flex min-h-0 flex-1 flex-col justify-between overflow-y-auto">
           {renderNavLinks()}
-          {renderAccountLinks()}
+          {renderAccountMenu()}
         </div>
       </aside>
 
@@ -559,7 +527,7 @@ export default function AppLayout({
             <div className="flex-1 overflow-y-auto p-4">
               {renderNavLinks(true)}
               <div className="mt-4 border-t pt-4">
-                {renderAccountLinks(true)}
+                {renderAccountMenu(true)}
               </div>
             </div>
             <div className="space-y-3 p-4 shadow-xs">
@@ -579,34 +547,6 @@ export default function AppLayout({
           </div>
         </DialogContent>
       </Dialog>
-
-      <AlertDialog open={isLogoutOpen} onOpenChange={setIsLogoutOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Log out?</AlertDialogTitle>
-            <AlertDialogDescription>
-              You will leave this workspace and need to sign in again before
-              managing conversations, flows, broadcasts, or settings.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-white hover:bg-destructive/90"
-              disabled={isLoggingOut}
-              onClick={(event) => {
-                // Keep the dialog open (with the button disabled) until the
-                // server-side revoke finishes and we navigate away.
-                event.preventDefault();
-                handleLogout();
-              }}
-            >
-              {isLoggingOut && <Loader2 className="size-4 animate-spin" />}
-              Log out
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }
