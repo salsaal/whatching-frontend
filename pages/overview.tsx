@@ -42,7 +42,7 @@ import {
 import { useCurrentMembership } from "@/hooks/useCurrentMembership";
 import AppLayout from "@/layouts/AppLayout";
 import WhatsAppNumbersPanel from "@/components/whatsapp/WhatsAppNumbersPanel";
-import { cn, formatCompactNumber } from "@/lib/utils";
+import { cn, formatCompactNumber, formatTokenCount } from "@/lib/utils";
 import { useOrganizationStore } from "@/stores/organizationStore";
 
 interface EmbeddedSignupSession {
@@ -477,16 +477,21 @@ export default function OverviewPage() {
         activeOrganization?.usage?.subscribersCount || 0
       ),
       icon: Users,
-      href: "/contacts"
+      href: can("contacts:view") ? "/contacts" : undefined
     },
     {
       label: "AI tokens used",
       value:
         isOwner && aiTokenUsage && typeof aiTokenIncludedLimit === "number"
-          ? `${formatCompactNumber(aiTokenUsage.used)} / ${formatCompactNumber(aiTokenIncludedLimit)}`
-          : formatCompactNumber(activeOrganization?.usage?.aiTokensUsed || 0),
+          ? `${formatTokenCount(aiTokenUsage.used)} of ${formatTokenCount(aiTokenIncludedLimit)}`
+          : formatTokenCount(activeOrganization?.usage?.aiTokensUsed || 0),
       icon: Bot,
-      href: isOwner ? "/bot/ai#usage" : undefined,
+      // The usage card on the AI tab is owner-only; others land on the tab.
+      href: isOwner
+        ? "/bot/ai#usage"
+        : can("flows:manage")
+          ? "/bot/ai"
+          : undefined,
       tooltip: isOwner
         ? "Tokens used this cycle out of your plan's included allowance."
         : undefined
@@ -498,6 +503,7 @@ export default function OverviewPage() {
           "en-IN"
         ) || "Not available",
       icon: Gauge,
+      href: can("conversations:view") ? "/analytics" : undefined,
       tooltip: "Business-initiated conversations in a rolling 24-hour period."
     },
     ...(canViewCampaigns
@@ -689,7 +695,7 @@ export default function OverviewPage() {
           {stats.map((stat) => {
             const Icon = stat.icon;
             const cardClassName = cn(
-              "rounded-lg border bg-white p-5 shadow-xs",
+              "h-full rounded-lg border bg-white p-5 shadow-xs",
               stat.href &&
                 "block transition hover:border-primary/40 hover:shadow-md"
             );
