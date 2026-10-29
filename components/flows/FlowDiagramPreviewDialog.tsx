@@ -1,6 +1,5 @@
 import {
   Background,
-  ConnectionLineType,
   Controls,
   Edge,
   Handle,
@@ -11,10 +10,20 @@ import {
   NodeTypes,
   Position,
   ReactFlow,
-  ReactFlowProvider
+  ReactFlowProvider,
+  useNodesInitialized,
+  useNodesState,
+  useReactFlow
 } from "@xyflow/react";
-import { Eye, PauseCircle, Tags, UserRound, Workflow } from "lucide-react";
-import { useMemo } from "react";
+import {
+  AlertTriangle,
+  Eye,
+  PauseCircle,
+  Tags,
+  UserRound,
+  Workflow
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   BotAction,
@@ -29,6 +38,14 @@ import {
   InstagramFlowBlockPreview,
   WhatsAppFlowBlockPreview
 } from "@/components/flows/FlowBlockPreview";
+import { FlowSimulator } from "@/components/flows/FlowSimulator";
+import {
+  FlowPlatform,
+  getDeadEnds,
+  getStartNodeId,
+  isSystemEntryNode,
+  layoutFlow
+} from "@/components/flows/flowGraph";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -37,23 +54,40 @@ import {
   DialogHeader,
   DialogTitle
 } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 
 type FlowDiagramPreviewDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
-  platform: "WhatsApp" | "Instagram";
+  platform: FlowPlatform;
   nodes: Node[];
   edges: Edge[];
 };
 
 interface MessagePreviewNodeData extends Record<string, unknown> {
-  platform: "WhatsApp" | "Instagram";
+  platform: FlowPlatform;
   sourceData: Record<string, unknown>;
+  isStart: boolean;
+  isUnreachable: boolean;
 }
 
 type MessagePreviewNode = Node<MessagePreviewNodeData, "messagePreview">;
-const previewEdgeStyle = { strokeWidth: 1.25, strokeDasharray: "4 5" };
+
+// Light, distinct strokes so lines from different blocks are easy to tell
+// apart; picked by the source block's position in the flow.
+const edgePalette = [
+  "#34d399",
+  "#38bdf8",
+  "#a78bfa",
+  "#fbbf24",
+  "#f472b6",
+  "#2dd4bf",
+  "#818cf8",
+  "#fb923c"
+];
+const FADED_OPACITY = 0.25;
+const READABLE_ZOOM = 0.8;
 
 const instagramMessageTypes = new Set<InstagramBlockType>([
   "send_text",
@@ -103,6 +137,19 @@ function MessagePreviewDiagramNode({ data }: NodeProps<MessagePreviewNode>) {
 
   return (
     <div className="nodrag nopan nowheel relative">
+      {data.isStart && (
+        <span className="absolute -top-6 left-0 rounded-full bg-emerald-600 px-2 py-0.5 text-[11px] font-semibold text-white shadow-xs">
+          Start
+        </span>
+      )}
+      {data.isUnreachable && (
+        <span
+          className="absolute -top-6 left-0 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 ring-1 ring-amber-200"
+          title="No button leads here. It can still start from a broadcast quick reply."
+        >
+          Unreachable
+        </span>
+      )}
       <Handle
         id="in"
         type="target"
@@ -184,107 +231,350 @@ const previewNodeTypes: NodeTypes = {
   messagePreview: MessagePreviewDiagramNode
 };
 
-export default function FlowDiagramPreviewDialog({
-  open,
-  onOpenChange,
+type Mode = "diagram" | "try";
+
+function FlowPreviewBody({
   title,
   platform,
   nodes,
   edges
-}: FlowDiagramPreviewDialogProps) {
-  const previewNodes = useMemo(
-    () =>
+}: Omit<FlowDiagramPreviewDialogProps, "open" | "onOpenChange">) {
+  const { fitView, getInternalNode } = useReactFlow();
+  const [mode, setMode] = useState<Mode>("diagram");
+  const [isLaidOut, setIsLaidOut] = useState(false);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [pinnedId, setPinnedId] = useState<string | null>(null);
+  const [problemIndex, setProblemIndex] = useState(-1);
+
+  const startNodeId = useMemo(() => getStartNodeId(nodes), [nodes]);
+  const incoming = useMemo(
+    () => new Set(edges.map((edge) => edge.target)),
+    [edges]
+  );
+  const deadEnds = useMemo(
+    () => getDeadEnds(nodes, edges, platform),
+    [edges, nodes, platform]
+  );
+  const deadEndCount = deadEnds.reduce(
+    (count, entry) => count + entry.options.length,
+    0
+  );
+
+  // A copy for the preview only: positions are replaced by the auto layout,
+  // the editor's nodes and saved data are never touched.
+  const [previewNodes, setPreviewNodes, onNodesChange] =
+    useNodesState<MessagePreviewNode>(
       nodes.map((node) => ({
         id: node.id,
         type: "messagePreview" as const,
         position: node.position,
         data: {
           platform,
-          sourceData: node.data as Record<string, unknown>
+          sourceData: node.data as Record<string, unknown>,
+          isStart: node.id === startNodeId,
+          isUnreachable:
+            node.id !== startNodeId &&
+            !incoming.has(node.id) &&
+            !isSystemEntryNode(node)
         },
-        selected: false,
         draggable: false,
         connectable: false,
-        deletable: false
-      })),
-    [nodes, platform]
-  );
-  const previewEdges = useMemo(
-    () =>
-      edges.map((edge) => ({
-        ...edge,
-        type: "smoothstep",
-        animated: false,
-        selectable: false,
-        markerEnd: {
-          type: MarkerType.ArrowClosed,
-          width: 16,
-          height: 16,
-          color: platform === "Instagram" ? "#db2777" : "#16a34a"
-        },
-        style: {
-          ...edge.style,
-          stroke: platform === "Instagram" ? "#db2777" : "#16a34a",
-          ...previewEdgeStyle
-        }
-      })),
-    [edges, platform]
+        deletable: false,
+        selectable: false
+      }))
+    );
+  const nodesInitialized = useNodesInitialized();
+
+  const focusNode = useCallback(
+    (nodeId: string) =>
+      fitView({
+        nodes: [{ id: nodeId }],
+        minZoom: READABLE_ZOOM,
+        maxZoom: 1,
+        padding: 0.4,
+        duration: 300
+      }),
+    [fitView]
   );
 
+  // Once every block has rendered (so sizes and option rows are real), lay
+  // the graph out and open on the start block at a readable zoom.
+  useEffect(() => {
+    if (!nodesInitialized || isLaidOut) return;
+    let cancelled = false;
+    const sizes = new Map<string, { width: number; height: number }>();
+    const handles = new Map<string, Array<{ id: string; y: number }>>();
+    previewNodes.forEach((node) => {
+      const internal = getInternalNode(node.id);
+      sizes.set(node.id, {
+        width: internal?.measured.width || 292,
+        height: internal?.measured.height || 160
+      });
+      handles.set(
+        node.id,
+        (internal?.internals.handleBounds?.source || [])
+          .filter((handle) => handle.id)
+          .map((handle) => ({
+            id: String(handle.id),
+            y: handle.y + handle.height / 2
+          }))
+      );
+    });
+
+    layoutFlow({ nodes: previewNodes, edges, sizes, handles })
+      .then((positions) => {
+        if (cancelled) return;
+        setPreviewNodes((current) =>
+          current.map((node) => ({
+            ...node,
+            position: positions.get(node.id) || node.position
+          }))
+        );
+        setIsLaidOut(true);
+        requestAnimationFrame(() => {
+          if (startNodeId) {
+            fitView({
+              nodes: [{ id: startNodeId }],
+              minZoom: READABLE_ZOOM,
+              maxZoom: 0.9,
+              padding: 0.6
+            });
+          } else {
+            fitView({ padding: 0.2 });
+          }
+        });
+      })
+      .catch(() => {
+        // Fall back to the editor's positions rather than an empty canvas.
+        if (!cancelled) {
+          setIsLaidOut(true);
+          fitView({ padding: 0.2, maxZoom: 0.9 });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    edges,
+    fitView,
+    getInternalNode,
+    isLaidOut,
+    nodesInitialized,
+    previewNodes,
+    setPreviewNodes,
+    startNodeId
+  ]);
+
+  const activeId = pinnedId || hoveredId;
+  const related = useMemo(() => {
+    if (!activeId) return null;
+    const nodeIds = new Set([activeId]);
+    const edgeIds = new Set<string>();
+    edges.forEach((edge) => {
+      if (edge.source === activeId || edge.target === activeId) {
+        edgeIds.add(edge.id);
+        nodeIds.add(edge.source);
+        nodeIds.add(edge.target);
+      }
+    });
+    return { nodeIds, edgeIds };
+  }, [activeId, edges]);
+
+  const displayNodes = useMemo(
+    () =>
+      previewNodes.map((node) => ({
+        ...node,
+        style: {
+          ...node.style,
+          opacity: related && !related.nodeIds.has(node.id) ? FADED_OPACITY : 1,
+          transition: "opacity 150ms"
+        }
+      })),
+    [previewNodes, related]
+  );
+
+  const colorBySource = useMemo(
+    () =>
+      new Map(
+        nodes.map((node, index) => [
+          node.id,
+          edgePalette[index % edgePalette.length]
+        ])
+      ),
+    [nodes]
+  );
+  const displayEdges = useMemo(
+    () =>
+      edges.map((edge) => {
+        const color = colorBySource.get(edge.source) || edgePalette[0];
+        const isRelated = related?.edgeIds.has(edge.id);
+        return {
+          ...edge,
+          type: "default",
+          animated: false,
+          selectable: false,
+          markerEnd: {
+            type: MarkerType.ArrowClosed,
+            width: 16,
+            height: 16,
+            color
+          },
+          style: {
+            stroke: color,
+            strokeWidth: isRelated ? 2.5 : 1.75,
+            opacity: related && !isRelated ? FADED_OPACITY : 1,
+            transition: "opacity 150ms"
+          }
+        };
+      }),
+    [colorBySource, edges, related]
+  );
+
+  const cycleProblems = () => {
+    if (!deadEnds.length) return;
+    const next = (problemIndex + 1) % deadEnds.length;
+    setProblemIndex(next);
+    setMode("diagram");
+    setPinnedId(deadEnds[next].nodeId);
+    focusNode(deadEnds[next].nodeId);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[86vh] max-h-[900px] flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(94vw,1400px)]">
-        <DialogHeader className="shrink-0 border-b bg-white px-5 py-4 pr-14 text-left">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="flex size-9 items-center justify-center rounded-lg bg-muted text-foreground">
-              <Workflow className="size-4" />
-            </span>
-            <div>
-              <DialogTitle>{title}</DialogTitle>
-              <DialogDescription className="mt-1">
-                Live message previews with each connection originating from its
-                button, reply, list row, or carousel item.
-              </DialogDescription>
-            </div>
-            <Badge variant="secondary" className="ml-auto mr-2">
+    <>
+      <DialogHeader className="shrink-0 border-b bg-white px-5 py-4 pr-14 text-left">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="flex size-9 items-center justify-center rounded-lg bg-muted text-foreground">
+            <Workflow className="size-4" />
+          </span>
+          <div>
+            <DialogTitle>{title}</DialogTitle>
+            <DialogDescription className="mt-1">
+              {mode === "diagram"
+                ? "Hover or click a block to trace its connections."
+                : "Tap buttons to walk through the flow like a customer."}
+            </DialogDescription>
+          </div>
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            {deadEndCount > 0 && (
+              <button
+                type="button"
+                onClick={cycleProblems}
+                className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800 ring-1 ring-amber-200 transition hover:bg-amber-100"
+                title="Show each block with an unconnected button"
+              >
+                <AlertTriangle className="size-3.5" />
+                {deadEndCount} button{deadEndCount === 1 ? " leads" : "s lead"}{" "}
+                nowhere
+              </button>
+            )}
+            <Badge variant="secondary">
               <Eye className="size-3" /> {nodes.length} blocks · {edges.length}{" "}
               connections
             </Badge>
-          </div>
-        </DialogHeader>
-
-        <div className="min-h-0 flex-1 bg-slate-50">
-          <ReactFlowProvider>
-            <ReactFlow
-              nodes={previewNodes}
-              edges={previewEdges}
-              nodeTypes={previewNodeTypes}
-              connectionLineType={ConnectionLineType.SmoothStep}
-              defaultEdgeOptions={{
-                type: "smoothstep",
-                style: previewEdgeStyle
-              }}
-              fitView
-              fitViewOptions={{ padding: 0.22, maxZoom: 0.9 }}
-              minZoom={0.15}
-              maxZoom={1.2}
-              nodesDraggable={false}
-              nodesConnectable={false}
-              elementsSelectable={false}
-              zoomOnDoubleClick={false}
-              deleteKeyCode={null}
-              proOptions={{ hideAttribution: true }}
+            <div
+              role="radiogroup"
+              aria-label="Preview mode"
+              className="inline-flex rounded-md bg-muted p-0.5"
             >
-              <Background gap={22} size={1} color="#cbd5e1" />
-              <Controls showInteractive={false} />
-              <MiniMap
-                pannable
-                zoomable
-                className="!h-28 !w-40 !rounded-lg !border !bg-white/90"
-              />
-            </ReactFlow>
-          </ReactFlowProvider>
+              {(
+                [
+                  ["diagram", "Diagram"],
+                  ["try", "Try it"]
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  role="radio"
+                  aria-checked={mode === value}
+                  onClick={() => setMode(value)}
+                  className={cn(
+                    "cursor-pointer rounded-sm px-3 py-1 text-xs font-medium transition",
+                    mode === value
+                      ? "bg-white text-foreground shadow-xs"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
+      </DialogHeader>
+
+      {nodes.length === 0 && (
+        <div className="flex min-h-0 flex-1 items-center justify-center bg-slate-50 text-sm text-muted-foreground">
+          Add a block to preview this flow.
+        </div>
+      )}
+      {/* Both views stay mounted so switching back keeps the layout. */}
+      <div
+        className={cn(
+          "min-h-0 flex-1 bg-slate-50",
+          (mode !== "diagram" || nodes.length === 0) && "hidden"
+        )}
+      >
+        <ReactFlow
+          className={cn(
+            "transition-opacity",
+            isLaidOut ? "opacity-100" : "opacity-0"
+          )}
+          nodes={displayNodes}
+          edges={displayEdges}
+          onNodesChange={onNodesChange}
+          nodeTypes={previewNodeTypes}
+          minZoom={0.3}
+          maxZoom={1.2}
+          nodesDraggable={false}
+          nodesConnectable={false}
+          elementsSelectable={false}
+          zoomOnDoubleClick={false}
+          deleteKeyCode={null}
+          onNodeMouseEnter={(_, node) => setHoveredId(node.id)}
+          onNodeMouseLeave={() => setHoveredId(null)}
+          onNodeClick={(_, node) =>
+            setPinnedId((current) => (current === node.id ? null : node.id))
+          }
+          onPaneClick={() => setPinnedId(null)}
+          proOptions={{ hideAttribution: true }}
+        >
+          <Background gap={22} size={1} color="#cbd5e1" />
+          <Controls showInteractive={false} fitViewOptions={{ padding: 0.2 }} />
+          <MiniMap
+            pannable
+            zoomable
+            className="!h-28 !w-40 !rounded-lg !border !bg-white/90"
+          />
+        </ReactFlow>
+      </div>
+      {mode === "try" && nodes.length > 0 && (
+        <div className="min-h-0 flex-1 bg-slate-100">
+          <FlowSimulator
+            platform={platform}
+            nodes={nodes}
+            edges={edges}
+            startNodeId={startNodeId}
+          />
+        </div>
+      )}
+    </>
+  );
+}
+
+export default function FlowDiagramPreviewDialog({
+  open,
+  onOpenChange,
+  ...props
+}: FlowDiagramPreviewDialogProps) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="flex h-[86vh] max-h-[900px] flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(94vw,1400px)]">
+        {open && (
+          <ReactFlowProvider>
+            <FlowPreviewBody {...props} />
+          </ReactFlowProvider>
+        )}
       </DialogContent>
     </Dialog>
   );

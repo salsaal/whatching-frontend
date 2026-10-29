@@ -16,6 +16,7 @@ import {
   Video
 } from "lucide-react";
 import { Handle, Position } from "@xyflow/react";
+import { createContext, KeyboardEvent, useContext } from "react";
 
 import {
   BotAction,
@@ -35,8 +36,45 @@ type PreviewShellProps = {
   platform: "WhatsApp" | "Instagram";
   onClose?: () => void;
   showClose?: boolean;
+  /** false drops the bordered card and title bar (chat simulator). */
+  chrome?: boolean;
   children: React.ReactNode;
 };
+
+/**
+ * Set by the flow simulator: makes buttons, list rows and replies tappable.
+ * routeId is the option's handle id (what edges leave from), or undefined
+ * when the option isn't wired to a next step.
+ */
+export type RouteClickHandler = (
+  routeId: string | undefined,
+  label: string
+) => void;
+export const RouteClickContext = createContext<RouteClickHandler | null>(null);
+
+// Props that turn an option element into a tappable one when a simulator
+// is listening; a no-op everywhere else.
+function useRouteOption() {
+  const onRoute = useContext(RouteClickContext);
+  return (routeId: string | undefined, label: string) =>
+    onRoute
+      ? {
+          role: "button" as const,
+          tabIndex: 0,
+          "data-route-option": true,
+          onClick: () => onRoute(routeId, label),
+          onKeyDown: (event: KeyboardEvent) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              onRoute(routeId, label);
+            }
+          }
+        }
+      : {};
+}
+
+const routeOptionClass =
+  "data-[route-option]:cursor-pointer data-[route-option]:hover:bg-sky-50 data-[route-option]:active:bg-sky-100";
 
 type LooseRecord = Record<string, unknown>;
 
@@ -61,9 +99,11 @@ function PreviewShell({
   platform,
   onClose,
   showClose = true,
+  chrome = true,
   children
 }: PreviewShellProps) {
   const instagram = platform === "Instagram";
+  if (!chrome) return <>{children}</>;
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-md">
       <div className="flex items-center justify-between border-b bg-white px-3 py-2">
@@ -178,13 +218,23 @@ function WhatsAppActions({
   actions: BotAction[];
   showRouteHandles?: boolean;
 }) {
+  const routeOption = useRouteOption();
   if (!actions.length) return null;
   return (
     <div className="mt-1 divide-y divide-slate-200 border-t border-slate-200">
       {actions.slice(0, 3).map((action, index) => (
         <div
           key={action.actionId || index}
-          className="relative flex min-h-9 items-center justify-center gap-1.5 px-2 text-center text-xs font-medium text-[#027eb5]"
+          {...(action.type !== "open_url"
+            ? routeOption(
+                action.type === "go_to_trigger" ? action.actionId : undefined,
+                stringValue(action.label, `Option ${index + 1}`)
+              )
+            : {})}
+          className={cn(
+            "relative flex min-h-9 items-center justify-center gap-1.5 px-2 text-center text-xs font-medium text-[#027eb5]",
+            routeOptionClass
+          )}
         >
           {action.type === "open_url" && <ExternalLink className="size-3" />}
           {stringValue(action.label, `Option ${index + 1}`)}
@@ -217,6 +267,7 @@ function WhatsAppListPreview({
   actions: BotAction[];
   showRouteHandles?: boolean;
 }) {
+  const routeOption = useRouteOption();
   const sections = Array.isArray(content.sections)
     ? (content.sections as Array<LooseRecord>)
     : [];
@@ -249,7 +300,19 @@ function WhatsAppListPreview({
                   return (
                     <div
                       key={rowIndex}
-                      className="relative flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-slate-50"
+                      {...routeOption(
+                        action?.type === "go_to_trigger"
+                          ? action.actionId
+                          : undefined,
+                        stringValue(
+                          row.title || row.label,
+                          `Option ${rowIndex + 1}`
+                        )
+                      )}
+                      className={cn(
+                        "relative flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-slate-50",
+                        routeOptionClass
+                      )}
                     >
                       <div className="min-w-0">
                         <p className="truncate text-xs font-medium text-slate-800">
@@ -298,6 +361,7 @@ function WhatsAppCarousel({
   showRouteHandles?: boolean;
   product?: boolean;
 }) {
+  const routeOption = useRouteOption();
   const cards = Array.isArray(content.cards)
     ? (content.cards as Array<LooseRecord>)
     : [];
@@ -371,7 +435,19 @@ function WhatsAppCarousel({
                     return (
                       <div
                         key={buttonIndex}
-                        className="relative py-1.5 text-center text-[11px] font-medium text-[#027eb5]"
+                        {...routeOption(
+                          action?.type === "go_to_trigger"
+                            ? action.actionId
+                            : undefined,
+                          stringValue(
+                            button.label || button.title,
+                            `Button ${buttonIndex + 1}`
+                          )
+                        )}
+                        className={cn(
+                          "relative py-1.5 text-center text-[11px] font-medium text-[#027eb5]",
+                          routeOptionClass
+                        )}
                       >
                         {stringValue(
                           button.label || button.title,
@@ -397,7 +473,18 @@ function WhatsAppCarousel({
                       item.label === String(card.title || "")
                   );
                   return action ? (
-                    <div className="relative border-t py-1.5 text-center text-[11px] font-medium text-[#027eb5]">
+                    <div
+                      {...routeOption(
+                        action.type === "go_to_trigger"
+                          ? action.actionId
+                          : undefined,
+                        action.label || "Select item"
+                      )}
+                      className={cn(
+                        "relative border-t py-1.5 text-center text-[11px] font-medium text-[#027eb5]",
+                        routeOptionClass
+                      )}
+                    >
                       {action.label || "Select item"}
                       {showRouteHandles && action.type === "go_to_trigger" && (
                         <RouteSourceHandle
@@ -422,7 +509,8 @@ export function WhatsAppFlowBlockPreview({
   actions,
   onClose,
   showClose = true,
-  showRouteHandles = false
+  showRouteHandles = false,
+  chrome = true
 }: {
   blockType: BotBlockType;
   content: BotCanvasNodeContent;
@@ -430,6 +518,7 @@ export function WhatsAppFlowBlockPreview({
   onClose?: () => void;
   showClose?: boolean;
   showRouteHandles?: boolean;
+  chrome?: boolean;
 }) {
   const body = stringValue(
     content.text || content.bodyText || content.message,
@@ -449,7 +538,12 @@ export function WhatsAppFlowBlockPreview({
     : [];
 
   return (
-    <PreviewShell platform="WhatsApp" onClose={onClose} showClose={showClose}>
+    <PreviewShell
+      platform="WhatsApp"
+      onClose={onClose}
+      showClose={showClose}
+      chrome={chrome}
+    >
       <div className="bg-[#efeae2] bg-[radial-gradient(circle_at_15%_25%,rgba(17,111,91,0.08)_0_1px,transparent_1.5px)] [background-size:18px_18px] p-3">
         {blockType === "list" ? (
           <>
@@ -663,13 +757,23 @@ function InstagramButtons({
   buttons: InstagramTemplateButton[];
   showRouteHandles?: boolean;
 }) {
+  const routeOption = useRouteOption();
   if (!buttons.length) return null;
   return (
     <div className="mt-1 space-y-1">
       {buttons.slice(0, 3).map((button, index) => (
         <div
           key={button.actionId || button.replyId || index}
-          className="relative rounded-xl bg-[#efefef] px-3 py-2 text-center text-xs font-semibold text-slate-900"
+          {...(button.type !== "web_url"
+            ? routeOption(
+                button.actionId || button.replyId || button.payload,
+                button.label || button.title || `Button ${index + 1}`
+              )
+            : {})}
+          className={cn(
+            "relative rounded-xl bg-[#efefef] px-3 py-2 text-center text-xs font-semibold text-slate-900",
+            routeOptionClass
+          )}
         >
           {button.type === "web_url" && (
             <ExternalLink className="mr-1 inline size-3" />
@@ -738,14 +842,17 @@ export function InstagramFlowBlockPreview({
   content,
   onClose,
   showClose = true,
-  showRouteHandles = false
+  showRouteHandles = false,
+  chrome = true
 }: {
   blockType: InstagramBlockType;
   content: InstagramCanvasContent;
   onClose?: () => void;
   showClose?: boolean;
   showRouteHandles?: boolean;
+  chrome?: boolean;
 }) {
+  const routeOption = useRouteOption();
   const text = stringValue(
     content.text,
     "Your Instagram message will appear here."
@@ -757,7 +864,12 @@ export function InstagramFlowBlockPreview({
   const cards = (content.cards as InstagramGenericCard[] | undefined) || [];
 
   return (
-    <PreviewShell platform="Instagram" onClose={onClose} showClose={showClose}>
+    <PreviewShell
+      platform="Instagram"
+      onClose={onClose}
+      showClose={showClose}
+      chrome={chrome}
+    >
       <div className="bg-white p-3">
         <div className="mb-3 flex items-center gap-2 border-b pb-2.5">
           <span className="flex size-7 items-center justify-center rounded-full bg-gradient-to-tr from-yellow-400 via-pink-500 to-purple-600 text-[10px] font-bold text-white">
@@ -799,7 +911,14 @@ export function InstagramFlowBlockPreview({
                   .map((reply, index) => (
                     <span
                       key={reply.replyId || index}
-                      className="relative rounded-full border border-[#3797f0] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#3797f0]"
+                      {...routeOption(
+                        reply.replyId || reply.payload,
+                        reply.label || reply.title || `Reply ${index + 1}`
+                      )}
+                      className={cn(
+                        "relative rounded-full border border-[#3797f0] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#3797f0]",
+                        routeOptionClass
+                      )}
                     >
                       {reply.label || reply.title || `Reply ${index + 1}`}
                       {showRouteHandles && (
