@@ -110,8 +110,7 @@ function BotAiTab() {
                 disabled={isLoading || isUpdating || !planAllowed}
                 aria-label="AI replies"
                 className={cn(
-                  isPaused &&
-                    "opacity-50 saturate-0 data-[state=checked]:bg-slate-400"
+                  isPaused && "data-[state=checked]:bg-slate-500"
                 )}
                 onCheckedChange={(checked) =>
                   updateSettings({ isAiEnabled: checked })
