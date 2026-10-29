@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
-import { CreditCard, Loader2, RefreshCw } from "lucide-react";
+import { CreditCard, ExternalLink, Loader2, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -93,9 +93,14 @@ export function PaymentBlockedCallout({
           <div className="flex flex-wrap gap-2">
             {paymentSetupUrl && (
               <Button size="sm" asChild>
-                <a href={paymentSetupUrl} target="_blank" rel="noreferrer">
+                <a
+                  href={paymentSetupUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
                   <CreditCard className="size-4" />
                   Add payment method
+                  <ExternalLink className="size-3.5 opacity-80" />
                 </a>
               </Button>
             )}

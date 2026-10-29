@@ -767,7 +767,7 @@ function BroadcastsPageContent() {
                 <a
                   href={paymentMethodUrl}
                   target="_blank"
-                  rel="noreferrer"
+                  rel="noopener noreferrer"
                   className="flex gap-2 items-center"
                 >
                   {readiness?.status === "ready" ? (
@@ -827,7 +827,7 @@ function BroadcastsPageContent() {
                     <a
                       href={paymentMethodUrl}
                       target="_blank"
-                      rel="noreferrer"
+                      rel="noopener noreferrer"
                       className="flex gap-2 items-center"
                     >
                       <CreditCard className="size-4" />

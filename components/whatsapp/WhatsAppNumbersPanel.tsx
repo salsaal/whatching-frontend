@@ -37,6 +37,9 @@ import { cn } from "@/lib/utils";
 import { useOrganizationStore } from "@/stores/organizationStore";
 import { useCurrentMembership } from "@/hooks/useCurrentMembership";
 
+// The backend's name for a flow nobody has named yet.
+const DEFAULT_FLOW_NAME = "Untitled Bot Canvas";
+
 const errorMessage = (error: AxiosError<{ message?: string }>) =>
   error.response?.data?.message || "WhatsApp number action failed.";
 
@@ -313,11 +316,16 @@ export default function WhatsAppNumbersPanel({
                 {showFlow ? (
                   <p className="mt-2 text-xs text-muted-foreground">
                     Flow:{" "}
+                    {/* Straight to the editor, where the flow can be renamed. */}
                     <Link
-                      href="/bot/flows"
+                      href={flow ? `/bot/flows/${flow._id}` : "/bot/flows"}
                       className="font-medium text-foreground hover:text-primary hover:underline"
                     >
-                      {flow?.name || "None"}
+                      {!flow
+                        ? "None"
+                        : flow.name === DEFAULT_FLOW_NAME
+                          ? "Untitled flow"
+                          : flow.name}
                     </Link>
                   </p>
                 ) : null}

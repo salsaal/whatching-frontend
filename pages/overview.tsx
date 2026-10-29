@@ -952,7 +952,7 @@ export default function OverviewPage() {
                     <a
                       href={effectivePaymentMethodUrl}
                       target="_blank"
-                      rel="noreferrer"
+                      rel="noopener noreferrer"
                       className="flex gap-2 items-center"
                     >
                       <CreditCard className="size-4" />
@@ -1030,7 +1030,7 @@ export default function OverviewPage() {
                 <a
                   href={effectivePaymentMethodUrl}
                   target="_blank"
-                  rel="noreferrer"
+                  rel="noopener noreferrer"
                   className="flex gap-2 items-center"
                 >
                   <CreditCard className="size-4" />
