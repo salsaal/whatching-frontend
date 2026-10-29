@@ -102,6 +102,11 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import AppLayout from "@/layouts/AppLayout";
+import {
+  draftSignature,
+  pickDraftToLoad,
+  shouldReplaceWithStarter
+} from "@/lib/flowStarter";
 import { cn } from "@/lib/utils";
 import {
   BuilderNode,
@@ -867,28 +872,6 @@ const defaultCanvasEdges = (): Edge[] => [
   }
 ];
 
-const isBackendDefaultCanvas = (nodes: BuilderNode[], edges: Edge[]) =>
-  nodes.length <= 3 &&
-  edges.length === 0 &&
-  nodes.some(
-    (node) =>
-      node.data.triggerKey === "DEFAULT" && node.data.blockType === "text"
-  ) &&
-  nodes.some(
-    (node) =>
-      node.data.triggerKey === "OPT_IN" && node.data.blockType === "text"
-  ) &&
-  nodes.some(
-    (node) =>
-      node.data.triggerKey === "OPT_OUT" && node.data.blockType === "text"
-  );
-
-const isLegacyButtonStarterCanvas = (nodes: BuilderNode[]) =>
-  nodes.some(
-    (node) =>
-      node.data.triggerKey === "DEFAULT" && node.data.blockType === "buttons"
-  );
-
 const getSelectedMediaId = (
   node: BuilderNode | null,
   target: MediaPickerTarget
@@ -994,11 +977,6 @@ const writeCachedDraft = (
   const key = draftCacheKey(orgId, canvasId);
   if (!key) return;
   window.localStorage.setItem(key, JSON.stringify(draft));
-};
-
-const getDraftTime = (draft?: BotCanvasDraftState | null) => {
-  const value = draft?.updatedAt ? Date.parse(draft.updatedAt) : 0;
-  return Number.isFinite(value) ? value : 0;
 };
 
 const getBackendValidation = (data: unknown) => {
@@ -1210,6 +1188,8 @@ function FlowsBuilder() {
   });
   const hydratedRef = useRef(false);
   const latestDraftRef = useRef<BotCanvasDraftState | null>(null);
+  const baselineSignatureRef = useRef<string | null>(null);
+  const isDirtyRef = useRef(false);
   const isSaveOrPublishInFlightRef = useRef(false);
 
   const queryClient = useQueryClient();
@@ -1415,19 +1395,14 @@ function FlowsBuilder() {
     if (!draftData || hydratedRef.current) return;
     const backendDraft = getDraftStateFromResponse(draftData);
     const cachedDraft = readCachedDraft(activeOrganization?._id, canvasId);
-    const draft =
-      getDraftTime(cachedDraft) > getDraftTime(backendDraft)
-        ? cachedDraft
-        : backendDraft;
+    const draft = pickDraftToLoad(backendDraft, cachedDraft);
     const loadedNodes = draft?.nodes?.length
       ? ensureUniqueNodeTriggers(
           ensureRequiredNodes(draft.nodes.map(toReactNode))
         )
       : defaultCanvasNodes();
     const loadedEdges = canvasEdgesToFlow(draft?.edges, loadedNodes);
-    const useStarter =
-      isBackendDefaultCanvas(loadedNodes, loadedEdges) ||
-      isLegacyButtonStarterCanvas(loadedNodes);
+    const useStarter = shouldReplaceWithStarter(loadedNodes, loadedEdges);
     const nextNodes = decorateAutomaticFollowUps(
       applyDefaultMarker(
         useStarter ? defaultCanvasNodes() : loadedNodes,
@@ -1440,6 +1415,10 @@ function FlowsBuilder() {
     setNodes(nextNodes);
     setEdges(nextEdges);
     setSelectedNodeId(nextNodes[0]?.id || null);
+    // Whatever just loaded (including a starter swap) is the baseline;
+    // nothing is saved or cached until the user changes it.
+    baselineSignatureRef.current = null;
+    isDirtyRef.current = false;
     hydratedRef.current = true;
   }, [activeOrganization?._id, canvasId, draftData, setEdges, setNodes]);
 
@@ -1460,6 +1439,18 @@ function FlowsBuilder() {
   useEffect(() => {
     if (isPublishedMode || !hydratedRef.current || !nodes.length) return;
     const draft = buildDraftState();
+    const signature = draftSignature(draft);
+    // The first pass after hydration records what was loaded. Opening a
+    // flow must never save it back (that rewrote real drafts and bumped
+    // updatedAt), so only a real change marks the draft dirty.
+    if (baselineSignatureRef.current === null) {
+      baselineSignatureRef.current = signature;
+      return;
+    }
+    if (!isDirtyRef.current && signature === baselineSignatureRef.current) {
+      return;
+    }
+    isDirtyRef.current = true;
     latestDraftRef.current = draft;
     writeCachedDraft(activeOrganization?._id, canvasId, draft);
   }, [
@@ -1493,6 +1484,9 @@ function FlowsBuilder() {
 
   useEffect(() => {
     if (isPublishedMode || !hydratedRef.current || !nodes.length) return;
+    // isDirtyRef is set by the effect above, which runs first in the same
+    // commit, so an unchanged draft never schedules a save.
+    if (!isDirtyRef.current) return;
     const timer = window.setTimeout(async () => {
       setSaveState("saving");
       try {
@@ -4354,8 +4348,13 @@ function Field({
 }
 
 function FlowsPageContent() {
+  const router = useRouter();
+  // Remount per flow: the builder hydrates once, so reusing it across a
+  // /bot/flows/A -> /bot/flows/B navigation could save A's blocks into B.
+  const canvasKey =
+    typeof router.query.canvasId === "string" ? router.query.canvasId : "";
   return (
-    <ReactFlowProvider>
+    <ReactFlowProvider key={canvasKey}>
       <FlowsBuilder />
     </ReactFlowProvider>
   );
