@@ -14,7 +14,6 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency } from "@/lib/billing";
 import { loadRazorpayCheckout } from "@/lib/razorpayCheckout";
-import { formatCompactNumber } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
 import { useOrganizationStore } from "@/stores/organizationStore";
 
@@ -95,7 +94,7 @@ export function AiUsageTopUp() {
           key: res.data.key,
           order_id: res.data.orderId,
           name: "Whatching",
-          description: `${res.data.label} AI token top-up`,
+          description: `${res.data.label} top-up`,
           prefill: {
             name: res.data.prefill?.name || user?.name,
             email: res.data.prefill?.email || user?.email,
@@ -188,12 +187,8 @@ export function AiUsageTopUp() {
               <Zap className="size-4" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium">
-                {pkg.label}{" "}
-                <span className="font-normal text-muted-foreground">
-                  ({formatCompactNumber(pkg.tokens)} tokens)
-                </span>
-              </p>
+              {/* The label already names the amount ("1M AI tokens"). */}
+              <p className="text-sm font-medium">{pkg.label}</p>
               <p className="text-xs text-muted-foreground">
                 {formatCurrency(pkg.amountPaise / 100)} incl. GST
               </p>
