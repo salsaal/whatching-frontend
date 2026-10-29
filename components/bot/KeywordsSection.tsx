@@ -85,6 +85,7 @@ function Chip({
 function KeywordList({
   title,
   description,
+  example,
   extrasLabel,
   list,
   readOnly,
@@ -93,6 +94,7 @@ function KeywordList({
 }: {
   title: string;
   description: string;
+  example: string;
   extrasLabel?: string;
   list: KeywordListProps;
   readOnly?: boolean;
@@ -145,11 +147,14 @@ function KeywordList({
     : [];
 
   return (
-    <div className="space-y-3 rounded-lg border p-4">
+    <div className="space-y-3 py-4 first:pt-0 last:pb-0">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-medium">{title}</p>
           <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            e.g. {example}
+          </p>
         </div>
         <span className="shrink-0 text-xs text-muted-foreground">
           {extras.length}/{MAX_KEYWORDS}
@@ -263,14 +268,16 @@ export function KeywordsSection({
   );
 
   return (
-    <div className="space-y-3">
-      <p className="text-xs text-muted-foreground">
+    <div>
+      <p className="mb-4 text-xs text-muted-foreground">
         A message must be exactly this word (case doesn&apos;t matter).
       </p>
+      <div className="divide-y">
       {greeting && (
         <KeywordList
-          title="Menu / greeting keywords"
-          description="Messages that start the default flow, e.g. HI, HELLO, MENU. This list replaces the defaults."
+          title="Menu keywords"
+          description="Start your main menu flow. This list replaces the defaults."
+          example="HI, HELLO, MENU"
           list={greeting}
           readOnly={readOnly}
           emptyWarning="Nothing will start the main menu flow from a keyword."
@@ -284,7 +291,8 @@ export function KeywordsSection({
       {optOut && (
         <KeywordList
           title="Opt-out keywords"
-          description="Messages that unsubscribe a contact from broadcasts."
+          description="Stop broadcasts to the contact who sends one."
+          example="BAND KARO, NAHI CHAHIYE"
           extrasLabel="Additional opt-out words"
           list={optOut}
           readOnly={readOnly}
@@ -302,12 +310,14 @@ export function KeywordsSection({
       {optIn && (
         <KeywordList
           title="Opt-in keywords"
-          description="Messages that subscribe a contact back to broadcasts."
+          description="Resume broadcasts for a contact who opted out."
+          example="HAAN, CHALU KARO"
           extrasLabel="Additional opt-in words"
           list={optIn}
           readOnly={readOnly}
         />
       )}
+      </div>
     </div>
   );
 }
