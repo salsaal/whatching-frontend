@@ -104,16 +104,22 @@ function BotAiTab() {
             )}
           </div>
           <Tooltip open={isPaused ? undefined : false}>
+            {/* The trigger sets its own data-state, which would clobber the
+                switch's checked/unchecked styling, so it wraps a span. */}
             <TooltipTrigger asChild>
-              <Switch
-                checked={isAiEnabled}
-                disabled={isLoading || isUpdating || !planAllowed}
-                aria-label="AI replies"
-                className={cn(isPaused && "data-[state=checked]:bg-slate-500")}
-                onCheckedChange={(checked) =>
-                  updateSettings({ isAiEnabled: checked })
-                }
-              />
+              <span className="inline-flex">
+                <Switch
+                  checked={isAiEnabled}
+                  disabled={isLoading || isUpdating || !planAllowed}
+                  aria-label="AI replies"
+                  className={cn(
+                    isPaused && "data-[state=checked]:bg-slate-500"
+                  )}
+                  onCheckedChange={(checked) =>
+                    updateSettings({ isAiEnabled: checked })
+                  }
+                />
+              </span>
             </TooltipTrigger>
             <TooltipContent>
               Saved, but paused while the bot is off.
