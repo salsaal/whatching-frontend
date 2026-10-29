@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  AlertTriangle,
   CalendarClock,
   CalendarIcon,
   Clock,
@@ -15,6 +16,7 @@ import {
   XCircle
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/router";
 import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
 import { AxiosError } from "axios";
@@ -30,7 +32,6 @@ import {
   startBroadcast
 } from "@/client-api/functions/broadcasts";
 import {
-  NO_PUBLISHED_FLOW_MESSAGE,
   getBotCanvasTriggers,
   isNoPublishedFlowError
 } from "@/client-api/functions/bot";
@@ -48,9 +49,15 @@ import {
 import { Subscriber } from "@/client-api/types/subscribers.type";
 import {
   ALL_WHATSAPP_NUMBERS,
-  WhatsAppNumberSwitcher,
+  isUsableWhatsAppNumber,
   useWhatsAppNumberContext
 } from "@/components/whatsapp/WhatsAppNumberSwitcher";
+import { isPaymentBlocked } from "@/components/whatsapp/PaymentBlockedCallout";
+import {
+  BroadcastTemplatePreview,
+  PreviewValue
+} from "@/components/broadcasts/BroadcastTemplatePreview";
+import { BroadcastSenderSelect } from "@/components/broadcasts/BroadcastSenderSelect";
 import { getButtonsComponent } from "@/components/templates/templateUtils";
 import {
   AlertDialog,
@@ -83,10 +90,18 @@ import {
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue
 } from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from "@/components/ui/tooltip";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { QueryErrorState } from "@/components/shared/QueryErrorState";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -98,11 +113,9 @@ import {
 } from "@/lib/broadcastRetryPreference";
 import {
   BroadcastVariableMapping,
-  BroadcastVariableSource,
   buildBroadcastComponents,
   defaultVariableMapping,
   getTemplateBodyExample,
-  getTemplateBodyText,
   getTemplateBodyVariables,
   subscriberFieldOptions
 } from "@/lib/broadcastComponents";
@@ -110,6 +123,19 @@ import { cn } from "@/lib/utils";
 import { useOrganizationStore } from "@/stores/organizationStore";
 import { PermissionGate } from "@/components/common/NoAccess";
 import { useCurrentMembership } from "@/hooks/useCurrentMembership";
+import { useLiveFlows } from "@/hooks/useLiveFlows";
+
+const MAIN_MENU_ROUTE = "__main_menu__";
+// Grouping the block dropdown by type only helps once the list is long.
+const GROUP_TRIGGERS_AFTER = 8;
+
+const blockTypeLabel = (type: string) =>
+  type.replace(/[_-]+/g, " ").replace(/^\w/, (letter) => letter.toUpperCase());
+
+// A variable is unmapped while it has nothing to send: empty fixed text, or
+// a field source with no field picked.
+const isVariableUnmapped = (mapping: BroadcastVariableMapping) =>
+  mapping.source === "literal" ? !mapping.literal.trim() : !mapping.path.trim();
 
 const formatDate = (date?: string | null) =>
   date
@@ -172,7 +198,12 @@ function BroadcastsPageContent() {
   const [scheduleDate, setScheduleDate] = useState<Date | undefined>();
   const [scheduleTime, setScheduleTime] = useState("09:00");
   const [broadcastName, setBroadcastName] = useState("");
-  const { selectedPhoneNumberId, effectiveNumber } = useWhatsAppNumberContext();
+  const {
+    selectedPhoneNumberId,
+    effectiveNumber,
+    numbers: whatsappNumbers
+  } = useWhatsAppNumberContext();
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [senderPhoneNumberId, setSenderPhoneNumberId] = useState("");
   const [templateId, setTemplateId] = useState("");
   const [quickReplyRoutes, setQuickReplyRoutes] = useState<
@@ -384,24 +415,6 @@ function BroadcastsPageContent() {
     () => getTemplateBodyVariables(selectedTemplate),
     [selectedTemplate]
   );
-  const bodyText = getTemplateBodyText(selectedTemplate);
-  const personalizedBodyText = useMemo(
-    () =>
-      bodyText.replace(/{{(\d+)}}/g, (placeholder, key: string) => {
-        const mapping = variableMappings[key] || defaultVariableMapping(key);
-        if (mapping.source === "literal") {
-          return mapping.literal.trim() || placeholder;
-        }
-        return (
-          mapping.fallback.trim() ||
-          subscriberFieldOptions.find((option) => option.value === mapping.path)
-            ?.label ||
-          mapping.path ||
-          placeholder
-        );
-      }),
-    [bodyText, variableMappings]
-  );
   const quickReplyButtons = useMemo(
     () =>
       getButtonsComponent(selectedTemplate?.components || [])
@@ -413,25 +426,89 @@ function BroadcastsPageContent() {
     () => new Set(senderTriggersData?.data?.triggerKeys || []),
     [senderTriggersData?.data?.triggerKeys]
   );
+  // "Main menu" is what the backend runs when no block is picked; sending
+  // its key explicitly keeps every quick reply routed.
+  const defaultTriggerKey =
+    senderTriggersData?.data?.defaultTriggerKey || "DEFAULT";
+  const blockTriggers = useMemo(
+    () =>
+      (senderTriggersData?.data?.triggers || []).filter(
+        (trigger) => trigger.triggerKey !== defaultTriggerKey
+      ),
+    [defaultTriggerKey, senderTriggersData?.data?.triggers]
+  );
   const selectedQuickReplyRoutes = useMemo(
     () =>
-      quickReplyButtons.map(({ button, index }) => ({
-        index,
-        label: button.text || `Quick reply ${index + 1}`,
-        triggerKey: quickReplyRoutes[index] || ""
-      })),
-    [quickReplyButtons, quickReplyRoutes]
+      quickReplyButtons.map(({ button, index }) => {
+        const picked = quickReplyRoutes[index];
+        return {
+          index,
+          label: button.text || `Quick reply ${index + 1}`,
+          triggerKey:
+            picked && senderTriggerKeys.has(picked) ? picked : defaultTriggerKey
+        };
+      }),
+    [defaultTriggerKey, quickReplyButtons, quickReplyRoutes, senderTriggerKeys]
   );
+  const senderNumbers = useMemo(
+    () => whatsappNumbers.filter(isUsableWhatsAppNumber),
+    [whatsappNumbers]
+  );
+  const senderNumber = senderNumbers.find(
+    (number) => number.phoneNumberId === senderPhoneNumberId
+  );
+  const { effectiveCanvasFor } = useLiveFlows();
+  const senderFlowName = senderNumber
+    ? effectiveCanvasFor(senderNumber)?.name
+    : undefined;
+  const hasNoLiveFlow = isNoPublishedFlowError(senderTriggersError);
+  const unmappedVariables = bodyVariables.filter((key) =>
+    isVariableUnmapped(variableMappings[key] || defaultVariableMapping(key))
+  );
+  const previewValues = useMemo(
+    () =>
+      Object.fromEntries(
+        bodyVariables.map((key) => {
+          const mapping = variableMappings[key] || defaultVariableMapping(key);
+          const sample = getTemplateBodyExample(selectedTemplate, key);
+          const fieldLabel = subscriberFieldOptions.find(
+            (option) => option.value === mapping.path
+          )?.label;
+          const value: PreviewValue = isVariableUnmapped(mapping)
+            ? { text: sample || `{{${key}}}`, isPlaceholder: true }
+            : mapping.source === "literal"
+              ? { text: mapping.literal.trim(), isPlaceholder: false }
+              : {
+                  text: sample || `[${fieldLabel || mapping.path}]`,
+                  isPlaceholder: false
+                };
+          return [key, value];
+        })
+      ),
+    [bodyVariables, selectedTemplate, variableMappings]
+  );
+  const createBlockedReason = unmappedVariables.length
+    ? "Map every template variable first."
+    : quickReplyButtons.length && hasNoLiveFlow
+      ? "Quick replies need a live flow on this number. Set one in Bot → Flows."
+      : "";
+  const isLoadingTriggers =
+    quickReplyButtons.length > 0 &&
+    Boolean(senderPhoneNumberId) &&
+    !senderTriggersData &&
+    !senderTriggersError;
 
+  // Default to the header's number, skipping one Meta can't send from.
   useEffect(() => {
-    if (
-      isCreateOpen &&
-      !senderPhoneNumberId &&
-      effectiveNumber?.phoneNumberId
-    ) {
-      setSenderPhoneNumberId(effectiveNumber.phoneNumberId);
+    if (!isCreateOpen || senderPhoneNumberId) return;
+    const preferred =
+      effectiveNumber && !isPaymentBlocked(effectiveNumber)
+        ? effectiveNumber
+        : senderNumbers.find((number) => !isPaymentBlocked(number));
+    if (preferred?.phoneNumberId) {
+      setSenderPhoneNumberId(preferred.phoneNumberId);
     }
-  }, [effectiveNumber?.phoneNumberId, isCreateOpen, senderPhoneNumberId]);
+  }, [effectiveNumber, isCreateOpen, senderNumbers, senderPhoneNumberId]);
 
   useEffect(() => {
     if (!selectedTemplate) {
@@ -613,28 +690,8 @@ function BroadcastsPageContent() {
       toast.error("Select the WhatsApp sender number");
       return;
     }
-    if (
-      quickReplyButtons.length &&
-      senderTriggersData?.data &&
-      !senderTriggersData.data.triggers.length
-    ) {
-      toast.error(
-        "No flow triggers are available for the selected sender number"
-      );
-      return;
-    }
-    if (
-      quickReplyButtons.length &&
-      isNoPublishedFlowError(senderTriggersError)
-    ) {
-      toast.error(NO_PUBLISHED_FLOW_MESSAGE);
-      return;
-    }
-    const missingQuickReplyRoute = selectedQuickReplyRoutes.find(
-      (route) => !route.triggerKey || !senderTriggerKeys.has(route.triggerKey)
-    );
-    if (missingQuickReplyRoute) {
-      toast.error("Assign every quick reply to a broadcast trigger");
+    if (createBlockedReason) {
+      toast.error(createBlockedReason);
       return;
     }
 
@@ -949,7 +1006,7 @@ function BroadcastsPageContent() {
       </div>
 
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-        <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden sm:max-w-4xl">
+        <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden sm:max-w-5xl">
           <DialogHeader>
             <DialogTitle>Create broadcast draft</DialogTitle>
           </DialogHeader>
@@ -957,8 +1014,46 @@ function BroadcastsPageContent() {
             onSubmit={handleCreate}
             className="flex min-h-0 flex-1 flex-col gap-4"
           >
-            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overflow-x-hidden pr-1">
-              <div className="grid gap-4 sm:grid-cols-3">
+            {/* Desktop: form scrolls on the left, preview stays put on the
+                right. Mobile: one scrolling column, preview behind a toggle. */}
+            <div className="grid min-h-0 flex-1 gap-5 overflow-x-hidden overflow-y-auto pr-1 lg:grid-cols-[minmax(0,1fr)_340px] lg:grid-rows-[minmax(0,1fr)] lg:overflow-hidden lg:pr-0">
+              <aside className="order-first min-w-0 lg:order-last lg:overflow-y-auto">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full lg:hidden"
+                  onClick={() => setIsPreviewOpen((current) => !current)}
+                >
+                  <Eye className="size-4" />
+                  {isPreviewOpen ? "Hide preview" : "Preview"}
+                </Button>
+                <div
+                  className={cn(
+                    "mt-3 space-y-2 lg:mt-0 lg:block",
+                    !isPreviewOpen && "hidden"
+                  )}
+                >
+                  {selectedTemplate && (
+                    <p className="truncate text-xs text-muted-foreground">
+                      <span className="font-medium text-foreground">
+                        {selectedTemplate.name}
+                      </span>{" "}
+                      · {selectedTemplate.language} ·{" "}
+                      {selectedTemplate.category} ·{" "}
+                      {bodyVariables.length
+                        ? `${bodyVariables.length} variable${bodyVariables.length > 1 ? "s" : ""}`
+                        : "No variables"}
+                    </p>
+                  )}
+                  <BroadcastTemplatePreview
+                    template={selectedTemplate}
+                    values={previewValues}
+                  />
+                </div>
+              </aside>
+
+              <div className="min-w-0 space-y-5 lg:overflow-y-auto lg:pr-1">
                 <div className="space-y-2">
                   <Label>Name</Label>
                   <Input
@@ -993,492 +1088,516 @@ function BroadcastsPageContent() {
                 </div>
                 <div className="space-y-2">
                   <Label>WhatsApp sender</Label>
-                  <WhatsAppNumberSwitcher
-                    includeAll={false}
+                  <BroadcastSenderSelect
+                    numbers={senderNumbers}
                     value={senderPhoneNumberId}
-                    onValueChange={setSenderPhoneNumberId}
-                    className="h-11 w-full"
+                    onValueChange={(value) => {
+                      setSenderPhoneNumberId(value);
+                      // Blocks belong to the sender's flow, so start over.
+                      setQuickReplyRoutes({});
+                    }}
                   />
                 </div>
-              </div>
 
-              {selectedTemplate && (
-                <div className="rounded-lg border bg-muted/30 p-4">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <p className="text-sm font-semibold">
-                        {selectedTemplate.name}
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {selectedTemplate.language} ·{" "}
-                        {selectedTemplate.category}
-                      </p>
+                {selectedTemplate &&
+                  quickReplyButtons.length > 0 &&
+                  (hasNoLiveFlow ? (
+                    <div className="flex gap-2.5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+                      <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
+                      <div className="space-y-1">
+                        <p>
+                          Quick replies need a live flow on this number. Without
+                          one, Meta delivers the buttons but nothing happens
+                          when customers tap them.
+                        </p>
+                        <Link
+                          href="/bot/flows"
+                          className="font-medium text-amber-900 underline-offset-2 hover:underline"
+                        >
+                          Set a flow →
+                        </Link>
+                      </div>
                     </div>
-                    <span className="rounded-sm bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
-                      {bodyVariables.length
-                        ? `${bodyVariables.length} variable${bodyVariables.length > 1 ? "s" : ""}`
-                        : "No body variables"}
-                    </span>
-                  </div>
-                  {bodyText && (
-                    <div className="mt-3 rounded-md bg-white p-3 text-sm leading-6 text-muted-foreground shadow-xs">
-                      {personalizedBodyText}
-                    </div>
-                  )}
-                  {quickReplyButtons.length > 0 && (
-                    <div className="mt-4 border-t pt-4">
-                      <div className="mb-3">
+                  ) : (
+                    <section className="space-y-3 rounded-lg border p-4">
+                      <div>
                         <p className="text-sm font-semibold">
                           Quick reply triggers
                         </p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          Choose the flow trigger for each quick reply in this
-                          broadcast. Triggers come from the selected sender
-                          number, with the organisation fallback used when no
-                          number-specific flow is assigned.
+                        <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                          When someone taps a button, the bot starts the flow
+                          block you choose.
+                          {senderNumber && (
+                            <>
+                              {" "}
+                              This uses the flow live on{" "}
+                              {senderNumber.displayPhoneNumber ||
+                                senderNumber.phoneNumberId}
+                              {senderFlowName ? `: ${senderFlowName}` : ""}.
+                            </>
+                          )}
                         </p>
                       </div>
                       <div className="space-y-2">
                         {quickReplyButtons.map(({ button, index }) => {
-                          const selectedTriggerKey =
-                            quickReplyRoutes[index] || "";
-                          const selectedTriggerMissing =
-                            selectedTriggerKey &&
-                            !senderTriggerKeys.has(selectedTriggerKey);
+                          const picked = quickReplyRoutes[index];
+                          const value =
+                            picked && senderTriggerKeys.has(picked)
+                              ? picked
+                              : MAIN_MENU_ROUTE;
+                          const groups = blockTriggers.reduce<
+                            Record<string, typeof blockTriggers>
+                          >((acc, trigger) => {
+                            const type = String(trigger.blockType || "other");
+                            (acc[type] ||= []).push(trigger);
+                            return acc;
+                          }, {});
 
                           return (
                             <div
                               key={`${button.text}-${index}`}
-                              className="grid gap-2 rounded-md bg-muted/40 p-3 sm:grid-cols-[minmax(0,1fr)_minmax(220px,0.9fr)]"
+                              className="grid gap-2 rounded-md bg-muted/40 p-3 sm:grid-cols-[minmax(0,1fr)_minmax(220px,1fr)] sm:items-center"
                             >
-                              <div>
-                                <Label>
-                                  {button.text || `Quick reply ${index + 1}`}
-                                </Label>
-                                <p className="mt-1 text-xs text-muted-foreground">
-                                  Button {index + 1}
-                                </p>
-                              </div>
+                              <p className="truncate text-sm font-medium">
+                                {button.text || `Quick reply ${index + 1}`}
+                              </p>
                               <Select
-                                value={selectedTriggerKey}
-                                onValueChange={(value) =>
+                                value={value}
+                                disabled={
+                                  !senderPhoneNumberId || isLoadingTriggers
+                                }
+                                onValueChange={(next) =>
                                   setQuickReplyRoutes((current) => ({
                                     ...current,
-                                    [index]: value
+                                    [index]:
+                                      next === MAIN_MENU_ROUTE ? "" : next
                                   }))
                                 }
-                                disabled={!senderPhoneNumberId}
                               >
-                                <SelectTrigger
-                                  className={cn(
-                                    "w-full bg-white",
-                                    selectedTriggerMissing &&
-                                      "ring-2 ring-amber-400"
-                                  )}
-                                >
-                                  <SelectValue
-                                    placeholder={
-                                      isNoPublishedFlowError(
-                                        senderTriggersError
-                                      )
-                                        ? NO_PUBLISHED_FLOW_MESSAGE
-                                        : senderTriggersData
-                                          ? "Choose flow trigger"
-                                          : "Select sender first"
-                                    }
-                                  />
+                                <SelectTrigger className="w-full bg-white">
+                                  <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {selectedTriggerMissing && (
-                                    <SelectItem
-                                      value={selectedTriggerKey}
-                                      disabled
-                                    >
-                                      {selectedTriggerKey} (unavailable)
-                                    </SelectItem>
+                                  <SelectItem value={MAIN_MENU_ROUTE}>
+                                    Main menu (default)
+                                  </SelectItem>
+                                  {blockTriggers.length > 0 && (
+                                    <SelectSeparator />
                                   )}
-                                  {(
-                                    senderTriggersData?.data?.triggers || []
-                                  ).map((trigger) => (
-                                    <SelectItem
-                                      key={trigger.triggerKey}
-                                      value={trigger.triggerKey}
-                                    >
-                                      {trigger.name} · {trigger.triggerKey}
-                                    </SelectItem>
-                                  ))}
+                                  {blockTriggers.length > GROUP_TRIGGERS_AFTER
+                                    ? Object.entries(groups).map(
+                                        ([type, items]) => (
+                                          <SelectGroup key={type}>
+                                            <SelectLabel>
+                                              {blockTypeLabel(type)}
+                                            </SelectLabel>
+                                            {items.map((trigger) => (
+                                              <SelectItem
+                                                key={trigger.triggerKey}
+                                                value={trigger.triggerKey}
+                                              >
+                                                {trigger.name}
+                                              </SelectItem>
+                                            ))}
+                                          </SelectGroup>
+                                        )
+                                      )
+                                    : blockTriggers.map((trigger) => (
+                                        <SelectItem
+                                          key={trigger.triggerKey}
+                                          value={trigger.triggerKey}
+                                        >
+                                          {trigger.name}
+                                          <span className="ml-2 rounded-sm bg-muted px-1.5 text-[11px] text-muted-foreground">
+                                            {blockTypeLabel(
+                                              String(trigger.blockType || "")
+                                            )}
+                                          </span>
+                                        </SelectItem>
+                                      ))}
                                 </SelectContent>
                               </Select>
                             </div>
                           );
                         })}
                       </div>
+                    </section>
+                  ))}
+
+                {selectedTemplate && bodyVariables.length > 0 && (
+                  <section className="space-y-3 rounded-lg border p-4">
+                    <div>
+                      <p className="text-sm font-semibold">
+                        Template variables
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Fill each placeholder from a subscriber field or fixed
+                        text.
+                        {unmappedVariables.length > 0 && (
+                          <span className="ml-1 font-medium text-amber-700">
+                            {unmappedVariables.length} not mapped yet.
+                          </span>
+                        )}
+                      </p>
                     </div>
-                  )}
+                    <div className="space-y-2">
+                      {bodyVariables.map((key) => {
+                        const mapping =
+                          variableMappings[key] || defaultVariableMapping(key);
+                        const sample = getTemplateBodyExample(
+                          selectedTemplate,
+                          key
+                        );
+                        const isFixed = mapping.source === "literal";
+                        const isUnmapped = isVariableUnmapped(mapping);
+                        const updateMapping = (
+                          patch: Partial<BroadcastVariableMapping>
+                        ) =>
+                          setVariableMappings((current) => ({
+                            ...current,
+                            [key]: { ...mapping, ...patch }
+                          }));
 
-                  {bodyVariables.length > 0 && (
-                    <div className="mt-4 border-t pt-4">
-                      <div className="mb-3">
-                        <p className="text-sm font-semibold">
-                          Template variables
-                        </p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          Map each WhatsApp placeholder to subscriber data or a
-                          fixed value. The number of fields here must match the
-                          template.
-                        </p>
-                      </div>
-                      <div className="space-y-3">
-                        {bodyVariables.map((key) => {
-                          const mapping =
-                            variableMappings[key] ||
-                            defaultVariableMapping(key);
-                          const sample = getTemplateBodyExample(
-                            selectedTemplate,
-                            key
-                          );
-
-                          return (
-                            <div
-                              key={key}
-                              className="rounded-md bg-muted/40 p-3"
-                            >
-                              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                                <Label>{`{{${key}}}`}</Label>
-                                {sample && (
-                                  <span className="text-xs text-muted-foreground">
-                                    Sample: {sample}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="grid gap-2 lg:grid-cols-[180px_1fr_1fr]">
-                                <Select
-                                  value={mapping.source}
-                                  onValueChange={(value) =>
-                                    setVariableMappings((current) => ({
-                                      ...current,
-                                      [key]: {
-                                        ...mapping,
-                                        source:
-                                          value as BroadcastVariableSource,
-                                        path:
-                                          value === "subscriber_field"
-                                            ? "firstName"
-                                            : ""
+                        return (
+                          <div
+                            key={key}
+                            className={cn(
+                              "space-y-2 rounded-md bg-muted/40 p-3",
+                              isUnmapped && "bg-amber-50 ring-1 ring-amber-300"
+                            )}
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <span className="font-mono text-sm font-medium">{`{{${key}}}`}</span>
+                              {isUnmapped && (
+                                <span className="text-xs font-medium text-amber-700">
+                                  Not mapped
+                                </span>
+                              )}
+                              <div
+                                role="radiogroup"
+                                aria-label={`Source for {{${key}}}`}
+                                className="ml-auto inline-flex rounded-md bg-white p-0.5 shadow-xs"
+                              >
+                                {(
+                                  [
+                                    ["subscriber_field", "Subscriber field"],
+                                    ["literal", "Fixed text"]
+                                  ] as const
+                                ).map(([source, label]) => {
+                                  const isActive =
+                                    source === "literal" ? isFixed : !isFixed;
+                                  return (
+                                    <button
+                                      key={source}
+                                      type="button"
+                                      role="radio"
+                                      aria-checked={isActive}
+                                      className={cn(
+                                        "cursor-pointer rounded-sm px-2.5 py-1 text-xs font-medium transition",
+                                        isActive
+                                          ? "bg-primary text-primary-foreground"
+                                          : "text-muted-foreground hover:text-foreground"
+                                      )}
+                                      onClick={() =>
+                                        updateMapping(
+                                          source === "literal"
+                                            ? { source: "literal" }
+                                            : {
+                                                source: "subscriber_field",
+                                                path:
+                                                  !isFixed && mapping.path
+                                                    ? mapping.path
+                                                    : "firstName"
+                                              }
+                                        )
                                       }
-                                    }))
+                                    >
+                                      {label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                            {isFixed ? (
+                              <Input
+                                value={mapping.literal}
+                                className="bg-white"
+                                placeholder={
+                                  sample ? `Sample: ${sample}` : "Type the text"
+                                }
+                                onChange={(event) =>
+                                  updateMapping({ literal: event.target.value })
+                                }
+                              />
+                            ) : (
+                              <div className="grid gap-2 sm:grid-cols-2">
+                                <Select
+                                  value={mapping.path || undefined}
+                                  onValueChange={(value) =>
+                                    updateMapping({ path: value })
                                   }
                                 >
-                                  <SelectTrigger className="w-full">
-                                    <SelectValue />
+                                  <SelectTrigger className="w-full bg-white">
+                                    <SelectValue
+                                      placeholder={
+                                        sample
+                                          ? `Sample: ${sample}`
+                                          : "Choose a field"
+                                      }
+                                    />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    <SelectItem value="subscriber_field">
-                                      Subscriber field
-                                    </SelectItem>
-                                    <SelectItem value="metadata_field">
-                                      Metadata field
-                                    </SelectItem>
-                                    <SelectItem value="literal">
-                                      Fixed value
-                                    </SelectItem>
+                                    {subscriberFieldOptions.map((option) => (
+                                      <SelectItem
+                                        key={option.value}
+                                        value={option.value}
+                                      >
+                                        {option.label}
+                                      </SelectItem>
+                                    ))}
                                   </SelectContent>
                                 </Select>
-
-                                {mapping.source === "subscriber_field" ? (
-                                  <Select
-                                    value={mapping.path || "firstName"}
-                                    onValueChange={(value) =>
-                                      setVariableMappings((current) => ({
-                                        ...current,
-                                        [key]: { ...mapping, path: value }
-                                      }))
-                                    }
-                                  >
-                                    <SelectTrigger className="w-full">
-                                      <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {subscriberFieldOptions.map((option) => (
-                                        <SelectItem
-                                          key={option.value}
-                                          value={option.value}
-                                        >
-                                          {option.label}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                ) : (
-                                  <Input
-                                    value={
-                                      mapping.source === "literal"
-                                        ? mapping.literal
-                                        : mapping.path
-                                    }
-                                    placeholder={
-                                      mapping.source === "literal"
-                                        ? "Fixed text"
-                                        : "metadata.path"
-                                    }
-                                    onChange={(event) =>
-                                      setVariableMappings((current) => ({
-                                        ...current,
-                                        [key]: {
-                                          ...mapping,
-                                          ...(mapping.source === "literal"
-                                            ? { literal: event.target.value }
-                                            : { path: event.target.value })
-                                        }
-                                      }))
-                                    }
-                                  />
-                                )}
-
                                 <Input
                                   value={mapping.fallback}
-                                  placeholder="Fallback optional"
-                                  disabled={mapping.source === "literal"}
+                                  className="bg-white"
+                                  placeholder="If empty, send… (optional)"
                                   onChange={(event) =>
-                                    setVariableMappings((current) => ({
-                                      ...current,
-                                      [key]: {
-                                        ...mapping,
-                                        fallback: event.target.value
-                                      }
-                                    }))
+                                    updateMapping({
+                                      fallback: event.target.value
+                                    })
                                   }
                                 />
                               </div>
-                            </div>
-                          );
-                        })}
-                      </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
-                  )}
-                </div>
-              )}
+                  </section>
+                )}
 
-              <div>
-                <Label>Audience</Label>
-                <div className="mt-2 grid gap-2 sm:grid-cols-4">
-                  {(["all", "tags", "specific", "campaign"] as const).map(
-                    (mode) => (
+                <div>
+                  <Label>Audience</Label>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-4">
+                    {(["all", "tags", "specific", "campaign"] as const).map(
+                      (mode) => (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() => setAudienceMode(mode)}
+                          className={cn(
+                            "rounded-md border bg-white p-3 text-left text-sm font-medium capitalize shadow-xs transition hover:border-primary/30",
+                            audienceMode === mode &&
+                              "border-primary/40 bg-primary/10 text-primary"
+                          )}
+                        >
+                          {mode}
+                        </button>
+                      )
+                    )}
+                  </div>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    {!isAudienceSelectionReady ? (
+                      audienceMode === "tags" ? (
+                        "Select at least one tag to see how many subscribers will receive this broadcast."
+                      ) : audienceMode === "campaign" ? (
+                        "Select at least one campaign to see how many subscribers will receive this broadcast."
+                      ) : (
+                        "Select at least one subscriber to see the recipient count."
+                      )
+                    ) : isAudienceCountLoading &&
+                      audienceCount === undefined ? (
+                      "Counting matching subscribers..."
+                    ) : (
+                      <>
+                        <span className="font-heading font-semibold text-foreground">
+                          {(audienceCount ?? 0).toLocaleString("en-IN")}
+                        </span>{" "}
+                        subscriber{audienceCount === 1 ? "" : "s"} will receive
+                        this broadcast
+                        {isAudienceCountLoading ? " (updating...)" : ""}
+                      </>
+                    )}
+                  </p>
+                </div>
+
+                {audienceMode === "tags" && (
+                  <div className="flex flex-wrap gap-2">
+                    {tags.map((tag) => (
                       <button
-                        key={mode}
+                        key={tag}
                         type="button"
-                        onClick={() => setAudienceMode(mode)}
+                        onClick={() =>
+                          setSelectedTags((current) =>
+                            current.includes(tag)
+                              ? current.filter((item) => item !== tag)
+                              : [...current, tag]
+                          )
+                        }
                         className={cn(
-                          "rounded-md border bg-white p-3 text-left text-sm font-medium capitalize shadow-xs transition hover:border-primary/30",
-                          audienceMode === mode &&
-                            "border-primary/40 bg-primary/10 text-primary"
+                          "rounded-sm bg-muted px-3 py-2 text-sm",
+                          selectedTags.includes(tag) &&
+                            "bg-primary/10 text-primary"
                         )}
                       >
-                        {mode}
+                        {tag}
                       </button>
-                    )
-                  )}
-                </div>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  {!isAudienceSelectionReady ? (
-                    audienceMode === "tags" ? (
-                      "Select at least one tag to see how many subscribers will receive this broadcast."
-                    ) : audienceMode === "campaign" ? (
-                      "Select at least one campaign to see how many subscribers will receive this broadcast."
-                    ) : (
-                      "Select at least one subscriber to see the recipient count."
-                    )
-                  ) : isAudienceCountLoading && audienceCount === undefined ? (
-                    "Counting matching subscribers..."
-                  ) : (
-                    <>
-                      <span className="font-heading font-semibold text-foreground">
-                        {(audienceCount ?? 0).toLocaleString("en-IN")}
-                      </span>{" "}
-                      subscriber{audienceCount === 1 ? "" : "s"} will receive
-                      this broadcast
-                      {isAudienceCountLoading ? " (updating...)" : ""}
-                    </>
-                  )}
-                </p>
-              </div>
-
-              {audienceMode === "tags" && (
-                <div className="flex flex-wrap gap-2">
-                  {tags.map((tag) => (
-                    <button
-                      key={tag}
-                      type="button"
-                      onClick={() =>
-                        setSelectedTags((current) =>
-                          current.includes(tag)
-                            ? current.filter((item) => item !== tag)
-                            : [...current, tag]
-                        )
-                      }
-                      className={cn(
-                        "rounded-sm bg-muted px-3 py-2 text-sm",
-                        selectedTags.includes(tag) &&
-                          "bg-primary/10 text-primary"
-                      )}
-                    >
-                      {tag}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {audienceMode === "campaign" && (
-                <div className="rounded-sm border p-3">
-                  {campaigns.length ? (
-                    <div className="flex flex-col gap-2">
-                      {campaigns.map((campaign) => (
-                        <label
-                          key={campaign.sourceId}
-                          className="flex items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-muted"
-                        >
-                          <span className="flex items-center gap-2">
-                            <Checkbox
-                              checked={selectedCampaignSourceIds.includes(
-                                campaign.sourceId
-                              )}
-                              onCheckedChange={() =>
-                                setSelectedCampaignSourceIds((current) =>
-                                  current.includes(campaign.sourceId)
-                                    ? current.filter(
-                                        (item) => item !== campaign.sourceId
-                                      )
-                                    : [...current, campaign.sourceId]
-                                )
-                              }
-                            />
-                            {campaign.label}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            {campaign.subscriberCount} contacts
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="p-2 text-sm text-muted-foreground">
-                      No campaigns found.
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {audienceMode === "specific" && (
-                <div className="rounded-sm border p-3">
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <div className="relative flex-1">
-                      <Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
-                      <Input
-                        value={subscriberSearch}
-                        onChange={(event) =>
-                          setSubscriberSearch(event.target.value)
-                        }
-                        placeholder="Search subscriber name or phone"
-                        className="pl-9"
-                      />
-                    </div>
-                    <Badge variant="outline">
-                      {selectedSubscriberIds.length} selected
-                    </Badge>
+                    ))}
                   </div>
-                  <div className="max-h-64 space-y-1 overflow-y-auto pr-1">
-                    {subscribers.length ? (
-                      subscribers.map((subscriber) => (
-                        <label
-                          key={subscriber._id}
-                          className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm hover:bg-muted/60"
-                        >
-                          <Checkbox
-                            checked={selectedSubscriberIds.includes(
-                              subscriber._id
-                            )}
-                            onCheckedChange={(checked) =>
-                              setSelectedSubscriberIds((current) =>
-                                checked
-                                  ? [...current, subscriber._id]
-                                  : current.filter(
-                                      (item) => item !== subscriber._id
-                                    )
-                              )
-                            }
-                          />
-                          <span className="min-w-0">
-                            <span className="block truncate font-medium">
-                              {[subscriber.firstName, subscriber.lastName]
-                                .filter(Boolean)
-                                .join(" ") || subscriber.phoneNumber}
+                )}
+
+                {audienceMode === "campaign" && (
+                  <div className="rounded-sm border p-3">
+                    {campaigns.length ? (
+                      <div className="flex flex-col gap-2">
+                        {campaigns.map((campaign) => (
+                          <label
+                            key={campaign.sourceId}
+                            className="flex items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-muted"
+                          >
+                            <span className="flex items-center gap-2">
+                              <Checkbox
+                                checked={selectedCampaignSourceIds.includes(
+                                  campaign.sourceId
+                                )}
+                                onCheckedChange={() =>
+                                  setSelectedCampaignSourceIds((current) =>
+                                    current.includes(campaign.sourceId)
+                                      ? current.filter(
+                                          (item) => item !== campaign.sourceId
+                                        )
+                                      : [...current, campaign.sourceId]
+                                  )
+                                }
+                              />
+                              {campaign.label}
                             </span>
-                            <span className="block truncate text-xs text-muted-foreground">
-                              {subscriber.phoneNumber}
+                            <span className="text-xs text-muted-foreground">
+                              {campaign.subscriberCount} contacts
                             </span>
-                          </span>
-                        </label>
-                      ))
-                    ) : (
-                      <div className="py-6 text-center text-sm text-muted-foreground">
-                        No eligible subscribers found.
-                      </div>
-                    )}
-                    <div ref={subscriberLoadMoreRef} className="h-px" />
-                    {isFetchingMoreSubscribers && (
-                      <div className="space-y-2 p-2">
-                        {Array.from({ length: 3 }).map((_, index) => (
-                          <Skeleton key={index} className="h-12" />
+                          </label>
                         ))}
                       </div>
-                    )}
-                    {!hasMoreSubscribers && subscribers.length > 0 && (
-                      <p className="py-2 text-center text-xs text-muted-foreground">
-                        All eligible subscribers are loaded.
+                    ) : (
+                      <p className="p-2 text-sm text-muted-foreground">
+                        No campaigns found.
                       </p>
                     )}
                   </div>
-                </div>
-              )}
+                )}
 
-              <div className="flex items-start justify-between gap-4 rounded-lg border bg-muted/20 p-4">
-                <div>
-                  <Label htmlFor="broadcast-limit-retry">
-                    Retry after a Meta messaging-limit pause
-                  </Label>
-                  <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">
-                    If Meta pauses this campaign because the business messaging
-                    limit was reached, automatically grant consent to retry the
-                    unfinished recipients after the backend recovery period.
-                    This does not retry recipients that failed for other
-                    reasons.
-                  </p>
-                </div>
-                <Switch
-                  id="broadcast-limit-retry"
-                  checked={retryOnMessagingLimit}
-                  onCheckedChange={setRetryOnMessagingLimit}
-                />
-              </div>
+                {audienceMode === "specific" && (
+                  <div className="rounded-sm border p-3">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <div className="relative flex-1">
+                        <Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
+                        <Input
+                          value={subscriberSearch}
+                          onChange={(event) =>
+                            setSubscriberSearch(event.target.value)
+                          }
+                          placeholder="Search subscriber name or phone"
+                          className="pl-9"
+                        />
+                      </div>
+                      <Badge variant="outline">
+                        {selectedSubscriberIds.length} selected
+                      </Badge>
+                    </div>
+                    <div className="max-h-64 space-y-1 overflow-y-auto pr-1">
+                      {subscribers.length ? (
+                        subscribers.map((subscriber) => (
+                          <label
+                            key={subscriber._id}
+                            className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm hover:bg-muted/60"
+                          >
+                            <Checkbox
+                              checked={selectedSubscriberIds.includes(
+                                subscriber._id
+                              )}
+                              onCheckedChange={(checked) =>
+                                setSelectedSubscriberIds((current) =>
+                                  checked
+                                    ? [...current, subscriber._id]
+                                    : current.filter(
+                                        (item) => item !== subscriber._id
+                                      )
+                                )
+                              }
+                            />
+                            <span className="min-w-0">
+                              <span className="block truncate font-medium">
+                                {[subscriber.firstName, subscriber.lastName]
+                                  .filter(Boolean)
+                                  .join(" ") || subscriber.phoneNumber}
+                              </span>
+                              <span className="block truncate text-xs text-muted-foreground">
+                                {subscriber.phoneNumber}
+                              </span>
+                            </span>
+                          </label>
+                        ))
+                      ) : (
+                        <div className="py-6 text-center text-sm text-muted-foreground">
+                          No eligible subscribers found.
+                        </div>
+                      )}
+                      <div ref={subscriberLoadMoreRef} className="h-px" />
+                      {isFetchingMoreSubscribers && (
+                        <div className="space-y-2 p-2">
+                          {Array.from({ length: 3 }).map((_, index) => (
+                            <Skeleton key={index} className="h-12" />
+                          ))}
+                        </div>
+                      )}
+                      {!hasMoreSubscribers && subscribers.length > 0 && (
+                        <p className="py-2 text-center text-xs text-muted-foreground">
+                          All eligible subscribers are loaded.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
 
-              <div className="flex items-start justify-between gap-4 rounded-lg border bg-muted/20 p-4">
-                <div>
-                  <Label htmlFor="broadcast-engagement-retry">
-                    Retry recipients throttled by Meta&apos;s engagement limit
-                  </Label>
-                  <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">
-                    If Meta declines to deliver to a specific recipient to
-                    protect them from marketing fatigue (error 131049),
-                    automatically retry just that recipient once, about 24 hours
-                    later. This never pauses the rest of the campaign -- it only
-                    affects the throttled recipient.
-                  </p>
+                <div className="flex items-start justify-between gap-4 rounded-lg border bg-muted/20 p-4">
+                  <div>
+                    <Label htmlFor="broadcast-limit-retry">
+                      Retry after a Meta messaging-limit pause
+                    </Label>
+                    <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">
+                      If Meta pauses this campaign because the business
+                      messaging limit was reached, automatically grant consent
+                      to retry the unfinished recipients after the backend
+                      recovery period. This does not retry recipients that
+                      failed for other reasons.
+                    </p>
+                  </div>
+                  <Switch
+                    id="broadcast-limit-retry"
+                    checked={retryOnMessagingLimit}
+                    onCheckedChange={setRetryOnMessagingLimit}
+                  />
                 </div>
-                <Switch
-                  id="broadcast-engagement-retry"
-                  checked={retryOnRecipientEngagementLimit}
-                  onCheckedChange={setRetryOnRecipientEngagementLimit}
-                />
+
+                <div className="flex items-start justify-between gap-4 rounded-lg border bg-muted/20 p-4">
+                  <div>
+                    <Label htmlFor="broadcast-engagement-retry">
+                      Retry recipients throttled by Meta&apos;s engagement limit
+                    </Label>
+                    <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">
+                      If Meta declines to deliver to a specific recipient to
+                      protect them from marketing fatigue (error 131049),
+                      automatically retry just that recipient once, about 24
+                      hours later. This never pauses the rest of the campaign --
+                      it only affects the throttled recipient.
+                    </p>
+                  </div>
+                  <Switch
+                    id="broadcast-engagement-retry"
+                    checked={retryOnRecipientEngagementLimit}
+                    onCheckedChange={setRetryOnRecipientEngagementLimit}
+                  />
+                </div>
               </div>
             </div>
 
@@ -1490,9 +1609,27 @@ function BroadcastsPageContent() {
               >
                 Cancel
               </Button>
-              <Button type="submit" isLoading={isCreating}>
-                Create draft
-              </Button>
+              {createBlockedReason ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    {/* Disabled buttons swallow hover, so the span carries it. */}
+                    <span tabIndex={0} className="inline-flex">
+                      <Button type="submit" disabled>
+                        Create draft
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>{createBlockedReason}</TooltipContent>
+                </Tooltip>
+              ) : (
+                <Button
+                  type="submit"
+                  isLoading={isCreating}
+                  disabled={isLoadingTriggers}
+                >
+                  Create draft
+                </Button>
+              )}
             </DialogFooter>
           </form>
         </DialogContent>
