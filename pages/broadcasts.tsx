@@ -72,24 +72,20 @@ import { useOrganizationStore } from "@/stores/organizationStore";
 
 const PAGE_SIZE = 30;
 
-// Single-status tabs filter on the server; tabs that span several statuses
-// (the backend takes one) filter the loaded pages instead.
-const statusTabs: Array<{
-  value: string;
-  label: string;
-  server?: string;
-  statuses?: string[];
-}> = [
+// Every tab filters on the server; the backend takes a comma-separated
+// list for tabs that span several statuses.
+const statusTabs: Array<{ value: string; label: string; server?: string }> = [
   { value: "all", label: "All" },
   { value: "draft", label: "Drafts", server: "draft" },
   { value: "scheduled", label: "Scheduled", server: "scheduled" },
+  // A broadcast paused at the messaging limit is still mid-send.
   {
     value: "sending",
     label: "Sending",
-    statuses: ["processing", "in_progress", "paused_limit"]
+    server: "in_progress,processing,paused_limit"
   },
   { value: "completed", label: "Completed", server: "completed" },
-  { value: "ended", label: "Failed/Canceled", statuses: ["failed", "canceled"] }
+  { value: "ended", label: "Failed/Canceled", server: "failed,canceled" }
 ];
 
 const whenText = (broadcast: Broadcast) => {
@@ -237,13 +233,8 @@ function BroadcastsPageContent() {
     data?.pages
       .flatMap((page) => page.data.broadcasts || [])
       .forEach((broadcast) => unique.set(broadcast._id, broadcast));
-    const all = Array.from(unique.values());
-    return activeTab.statuses
-      ? all.filter((broadcast) =>
-          activeTab.statuses?.includes(broadcast.status)
-        )
-      : all;
-  }, [activeTab.statuses, data?.pages]);
+    return Array.from(unique.values());
+  }, [data?.pages]);
   const { consent, isConsenting } = useAutoConsentRetry(broadcasts);
 
   useEffect(() => {

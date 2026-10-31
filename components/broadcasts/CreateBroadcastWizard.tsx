@@ -77,7 +77,8 @@ import { useCurrentMembership } from "@/hooks/useCurrentMembership";
 import { useLiveFlows } from "@/hooks/useLiveFlows";
 import {
   describeAudience,
-  hasAudienceSelection
+  hasAudienceSelection,
+  warningText
 } from "@/lib/broadcastAudience";
 import { setBroadcastRetryPreference } from "@/lib/broadcastRetryPreference";
 import { formatCount } from "@/lib/displayFormat";
@@ -259,8 +260,10 @@ export function CreateBroadcastWizard({
   }, [audience]);
   const isAudienceReady = hasAudienceSelection(audience);
   const { data: countData, isFetching: isCounting } = useQuery({
-    queryKey: ["broadcast-audience-count", debouncedAudience],
-    queryFn: () => previewBroadcastAudienceCount(debouncedAudience),
+    // With the sender, the backend also returns its messaging-limit warning.
+    queryKey: ["broadcast-audience-count", debouncedAudience, senderId],
+    queryFn: () =>
+      previewBroadcastAudienceCount(debouncedAudience, senderId || undefined),
     enabled: open && hasAudienceSelection(debouncedAudience),
     placeholderData: (previous) => previous
   });
@@ -347,7 +350,9 @@ export function CreateBroadcastWizard({
   const missingSlots = slots.filter(
     (slot) => !isMappingComplete(mappings[slot.id])
   );
-  const limitCount = sender?.messagingLimitCount;
+  const audienceWarnings = isAudienceReady
+    ? (countData?.data?.warnings || []).map(warningText).filter(Boolean)
+    : [];
 
   // ---------- step validity ----------
   const stepProblem = (index: number): string => {
@@ -845,17 +850,15 @@ export function CreateBroadcastWizard({
                   </div>
                 </div>
 
-                {typeof limitCount === "number" &&
-                  typeof audienceCount === "number" &&
-                  audienceCount > limitCount && (
-                    <div className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                      <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-                      Your number can message {formatCount(limitCount)} people
-                      per 24h; this broadcast targets{" "}
-                      {formatCount(audienceCount)} — it will pause and resume
-                      automatically.
-                    </div>
-                  )}
+                {audienceWarnings.map((warning) => (
+                  <div
+                    key={warning}
+                    className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"
+                  >
+                    <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                    {warning}
+                  </div>
+                ))}
               </>
             )}
 

@@ -307,15 +307,25 @@ function TemplatesPageContent() {
           }
         });
       },
-      onError: async (error: AxiosError<{ message?: string }>, template) => {
+      onError: async (
+        error: AxiosError<{
+          message?: string;
+          details?: { broadcastId?: string } | null;
+        }>,
+        template
+      ) => {
         const message =
           error.response?.data?.message || "Couldn't delete this template.";
         // 409: a scheduled or running broadcast still uses it. Explain in
-        // the dialog (which stays open) and link to that broadcast.
+        // the dialog (which stays open) and link to that broadcast -- the
+        // backend names it; the search is only a fallback.
         if (error.response?.status === 409) {
+          const broadcastId = error.response.data?.details?.broadcastId;
           setDeleteError({
             message,
-            broadcastHref: await findActiveBroadcastHref(template)
+            broadcastHref: broadcastId
+              ? `/broadcasts/${broadcastId}`
+              : await findActiveBroadcastHref(template)
           });
           return;
         }

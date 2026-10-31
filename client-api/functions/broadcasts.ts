@@ -43,12 +43,24 @@ export const createBroadcast = async (
 };
 
 export const previewBroadcastAudienceCount = async (
-  audience: BroadcastAudience
-): Promise<ApiResponse<{ count: number }>> => {
-  const res = await api.post<ApiResponse<{ count: number }>>(
-    BROADCAST_ENDPOINTS.AUDIENCE_COUNT,
-    { audience }
-  );
+  audience: BroadcastAudience,
+  phoneNumberId?: string
+): Promise<
+  ApiResponse<{
+    count: number;
+    /** Messaging-limit warnings for this sender, as at draft creation. */
+    warnings?: Array<string | { code?: string; message?: string }>;
+  }>
+> => {
+  const res = await api.post<
+    ApiResponse<{
+      count: number;
+      warnings?: Array<string | { code?: string; message?: string }>;
+    }>
+  >(BROADCAST_ENDPOINTS.AUDIENCE_COUNT, {
+    audience,
+    ...(phoneNumberId ? { phoneNumberId } : {})
+  });
   return res.data;
 };
 
