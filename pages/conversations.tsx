@@ -42,6 +42,7 @@ import {
   useQueryClient
 } from "@tanstack/react-query";
 import { io, Socket } from "socket.io-client";
+import { useRouter } from "next/router";
 import { toast } from "sonner";
 
 import {
@@ -67,6 +68,16 @@ import {
   updateSubscriber
 } from "@/client-api/functions/subscribers";
 import { getAllTemplates } from "@/client-api/functions/templates";
+import { VariableMappingRows } from "@/components/broadcasts/VariableMappingRows";
+import { TemplatePickerList } from "@/components/templates/TemplatePickerList";
+import { WhatsAppPreview } from "@/components/whatsapp/WhatsAppPreview";
+import {
+  defaultMappingForSlot,
+  getTemplateVariableSlots,
+  isMappingComplete,
+  resolveSlotValue,
+  VariableMapping
+} from "@/lib/templateVariables";
 import { getMediaById } from "@/client-api/functions/media";
 import {
   ChatMessage,
@@ -1110,6 +1121,16 @@ function ConversationsPageContent() {
   const { numbers, selectedPhoneNumberId } = useWhatsAppNumberContext();
   const token = useAuthStore((state) => state.token);
   const [search, setSearch] = useState("");
+  // Deep link from elsewhere (e.g. a broadcast recipient): ?search=<phone>
+  // prefills the search, and the first match opens.
+  const searchRouter = useRouter();
+  const linkedSearch =
+    typeof searchRouter.query.search === "string"
+      ? searchRouter.query.search
+      : "";
+  useEffect(() => {
+    if (linkedSearch) setSearch(linkedSearch);
+  }, [linkedSearch]);
   const [status, setStatus] = useState<ConversationStatus | "all">("all");
   const [channel, setChannel] = useState<ConversationChannel | "all">("all");
   const [mode, setMode] = useState<ConversationMode | "all">("all");
@@ -1145,8 +1166,10 @@ function ConversationsPageContent() {
   );
   const [templateMediaPickerOpen, setTemplateMediaPickerOpen] = useState(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
-  const [templateVariables, setTemplateVariables] = useState<
-    Record<string, string>
+  // One mapping per template variable (body, header text, link and
+  // copy-code buttons), resolved against the recipient when sending.
+  const [templateMappings, setTemplateMappings] = useState<
+    Record<string, VariableMapping>
   >({});
   const [templateButtonPayloads, setTemplateButtonPayloads] = useState<
     Record<string, string>
@@ -1236,11 +1259,14 @@ function ConversationsPageContent() {
   });
 
   const { data: templatesData, isLoading: isTemplatesLoading } = useQuery({
-    queryKey: ["conversation-templates", activeOrganization?._id],
+    // Same org-scoped key as the Templates page, refetched on open so a
+    // just-approved template shows up.
+    queryKey: ["templates", activeOrganization?._id],
     queryFn: getAllTemplates,
     enabled:
       Boolean(activeOrganization?._id && isTemplateModalOpen) &&
-      can("templates:view")
+      can("templates:view"),
+    refetchOnMount: "always"
   });
   const {
     data: contactsData,
@@ -1753,7 +1779,7 @@ function ConversationsPageContent() {
       onSuccess: async () => {
         setIsTemplateModalOpen(false);
         setSelectedTemplateId("");
-        setTemplateVariables({});
+        setTemplateMappings({});
         setTemplateButtonPayloads({});
         setTemplateHeaderMedia(null);
         setSelectedContactId("");
@@ -1791,19 +1817,6 @@ function ConversationsPageContent() {
   const selectedTemplate =
     approvedTemplates.find((template) => template._id === selectedTemplateId) ||
     null;
-  const selectedTemplateBody = getTemplateComponent(selectedTemplate, "BODY");
-  const selectedTemplateFooter = getTemplateComponent(
-    selectedTemplate,
-    "FOOTER"
-  );
-  const selectedTemplateButtons = getTemplateComponent(
-    selectedTemplate,
-    "BUTTONS"
-  )?.buttons;
-  const selectedTemplateVariables = useMemo(
-    () => extractTemplateVariables(selectedTemplate),
-    [selectedTemplate]
-  );
   const selectedTemplateQuickReplies = useMemo(
     () => getTemplateQuickReplyButtons(selectedTemplate),
     [selectedTemplate]
@@ -1829,15 +1842,6 @@ function ConversationsPageContent() {
   });
   const effectiveTemplateHeaderMedia =
     templateHeaderMedia || linkedTemplateMediaData?.data.media || null;
-  const personalizedTemplateBody = useMemo(
-    () =>
-      (selectedTemplateBody?.text || "").replace(
-        /{{(\d+)}}/g,
-        (placeholder, key: string) =>
-          templateVariables[key]?.trim() || placeholder
-      ),
-    [selectedTemplateBody?.text, templateVariables]
-  );
   const messages = useMemo(() => {
     const uniqueMessages = new Map<string, ChatMessage>();
     messagesData?.pages
@@ -1892,6 +1896,34 @@ function ConversationsPageContent() {
   const templateTriggerKeys = useMemo(
     () => new Set(templateTriggersData?.data?.triggerKeys || []),
     [templateTriggersData?.data?.triggerKeys]
+  );
+  const templateSlots = useMemo(
+    () => getTemplateVariableSlots(selectedTemplate?.components || []),
+    [selectedTemplate?.components]
+  );
+  // Start each variable from its default whenever the template changes.
+  useEffect(() => {
+    setTemplateMappings(
+      Object.fromEntries(
+        templateSlots.map((slot) => [slot.id, defaultMappingForSlot(slot)])
+      )
+    );
+  }, [templateSlots]);
+  const templateRecipientContact =
+    templateMode === "contact"
+      ? selectedContact
+      : contextData?.data.subscriber ||
+        contextConversation?.subscriberId ||
+        null;
+  const templateSlotTexts = Object.fromEntries(
+    templateSlots.map((slot) => [
+      slot.id,
+      resolveSlotValue(
+        slot,
+        templateMappings[slot.id],
+        templateRecipientContact
+      ).text
+    ])
   );
   const replyWindow = contextConversation?.replyWindow;
   const canReply = Boolean(hasReplyAccess && replyWindow?.isOpen && selectedId);
@@ -1991,7 +2023,7 @@ function ConversationsPageContent() {
 
   const handleTemplateChange = (templateId: string) => {
     setSelectedTemplateId(templateId);
-    setTemplateVariables({});
+    setTemplateMappings({});
     setTemplateButtonPayloads({});
     setTemplateHeaderMedia(null);
   };
@@ -2023,11 +2055,11 @@ function ConversationsPageContent() {
       );
       return;
     }
-    const missingVariable = selectedTemplateVariables.find(
-      (variable) => !templateVariables[variable.key]?.trim()
+    const missingSlot = templateSlots.find(
+      (slot) => !isMappingComplete(templateMappings[slot.id])
     );
-    if (missingVariable) {
-      toast.error(`Fill ${missingVariable.label} before sending.`);
+    if (missingSlot) {
+      toast.error(`Fill ${missingSlot.label} before sending.`);
       return;
     }
 
@@ -2064,12 +2096,43 @@ function ConversationsPageContent() {
       templateName: selectedTemplate.name,
       languageCode: selectedTemplate.language || "en_US",
       phoneNumberId: templateSenderPhoneNumberId,
-      components: buildTemplateComponents({
-        template: selectedTemplate,
-        variables: templateVariables,
-        buttonPayloads: {},
-        headerMedia: effectiveTemplateHeaderMedia
-      }),
+      components: [
+        ...buildTemplateComponents({
+          template: selectedTemplate,
+          variables: Object.fromEntries(
+            templateSlots
+              .filter((slot) => slot.scope === "body")
+              .map((slot) => [slot.key, templateSlotTexts[slot.id]])
+          ),
+          buttonPayloads: {},
+          headerMedia: effectiveTemplateHeaderMedia
+        }),
+        ...templateSlots
+          .filter((slot) => slot.scope !== "body")
+          .map((slot) =>
+            slot.scope === "header"
+              ? {
+                  type: "header",
+                  parameters: [
+                    { type: "text", text: templateSlotTexts[slot.id] }
+                  ]
+                }
+              : {
+                  type: "button",
+                  sub_type: slot.buttonSubType,
+                  index: String(slot.buttonIndex),
+                  parameters:
+                    slot.buttonSubType === "copy_code"
+                      ? [
+                          {
+                            type: "coupon_code",
+                            coupon_code: templateSlotTexts[slot.id]
+                          }
+                        ]
+                      : [{ type: "text", text: templateSlotTexts[slot.id] }]
+                }
+          )
+      ],
       ...(quickReplyRoutes.length ? { quickReplyRoutes } : {})
     });
   };
@@ -2404,7 +2467,7 @@ function ConversationsPageContent() {
               onClick={() => {
                 setTemplateMode("contact");
                 setSelectedTemplateId("");
-                setTemplateVariables({});
+                setTemplateMappings({});
                 setTemplateButtonPayloads({});
                 setTemplateHeaderMedia(null);
                 setIsTemplateModalOpen(true);
@@ -3104,33 +3167,13 @@ function ConversationsPageContent() {
             )}
             <div className="space-y-2">
               <Label>Template</Label>
-              <Select
-                value={selectedTemplateId}
-                onValueChange={handleTemplateChange}
-                disabled={isTemplatesLoading || isSendingTemplate}
-              >
-                <SelectTrigger>
-                  <SelectValue
-                    placeholder={
-                      isTemplatesLoading
-                        ? "Loading templates..."
-                        : "Select an approved template"
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {approvedTemplates.map((template) => (
-                    <SelectItem key={template._id} value={template._id}>
-                      {template.name} · {template.language}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {!isTemplatesLoading && !approvedTemplates.length && (
-                <p className="text-sm text-muted-foreground">
-                  No approved templates found. Sync or create templates first.
-                </p>
-              )}
+              <TemplatePickerList
+                templates={approvedTemplates}
+                selectedId={selectedTemplate?.templateId}
+                isLoading={isTemplatesLoading}
+                onSelect={(template) => handleTemplateChange(template._id)}
+                emptyText="No approved templates found. Sync or create templates first."
+              />
             </div>
 
             {selectedTemplate && (
@@ -3225,55 +3268,35 @@ function ConversationsPageContent() {
                       ) : null}
                     </div>
                   )}
-                  <div className="space-y-2 rounded-lg bg-white p-3 text-sm">
-                    <p className="whitespace-pre-wrap font-medium">
-                      {personalizedTemplateBody || "No body text configured."}
-                    </p>
-                    {selectedTemplateFooter?.text && (
-                      <p className="border-t pt-2 text-xs text-muted-foreground">
-                        {selectedTemplateFooter.text}
-                      </p>
-                    )}
-                    {selectedTemplateButtons?.length ? (
-                      <div className="flex flex-wrap gap-2 pt-2">
-                        {selectedTemplateButtons.map((button, index) => (
-                          <span
-                            key={`${button.text}-${index}`}
-                            className="rounded-full border bg-muted px-3 py-1 text-xs font-medium"
-                          >
-                            {button.text} · {button.type.toLowerCase()}
-                          </span>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
+                  <WhatsAppPreview
+                    components={selectedTemplate.components}
+                    variableValues={templateSlotTexts}
+                    mediaUrl={effectiveTemplateHeaderMedia?.cloudinaryUrl}
+                    mediaName={effectiveTemplateHeaderMedia?.name}
+                  />
 
-                  {selectedTemplateVariables.length ? (
+                  {templateSlots.length ? (
                     <div className="mt-4 space-y-3 border-t pt-4">
                       <div>
-                        <Label>Body variables</Label>
+                        <Label>Variables</Label>
                         <p className="text-sm text-muted-foreground">
-                          These values fill the template placeholders in order.
+                          Contact fields are filled from{" "}
+                          {templateRecipientContact?.firstName ||
+                            "this contact"}
+                          ; fixed text is sent as typed.
                         </p>
                       </div>
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        {selectedTemplateVariables.map((variable) => (
-                          <div key={variable.key} className="space-y-2">
-                            <Label>{variable.label}</Label>
-                            <Input
-                              value={templateVariables[variable.key] || ""}
-                              disabled={isSendingTemplate}
-                              placeholder={`Value for ${variable.label}`}
-                              onChange={(event) =>
-                                setTemplateVariables((current) => ({
-                                  ...current,
-                                  [variable.key]: event.target.value
-                                }))
-                              }
-                            />
-                          </div>
-                        ))}
-                      </div>
+                      <VariableMappingRows
+                        slots={templateSlots}
+                        mappings={templateMappings}
+                        showMissing
+                        onChange={(slotId, mapping) =>
+                          setTemplateMappings((current) => ({
+                            ...current,
+                            [slotId]: mapping
+                          }))
+                        }
+                      />
                     </div>
                   ) : null}
 
@@ -3350,7 +3373,12 @@ function ConversationsPageContent() {
             )}
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="items-center">
+            {(templateMode === "contact" || !replyWindow?.isOpen) && (
+              <p className="mr-auto text-xs text-muted-foreground">
+                Template · outside the 24-hour window
+              </p>
+            )}
             <Button
               type="button"
               variant="outline"
