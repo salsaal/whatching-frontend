@@ -95,6 +95,8 @@ export interface MessageTemplate {
   allowCategoryChange?: boolean;
   defaultMediaId?: string;
   quickReplyRoutes?: TemplateQuickReplyRoute[];
+  /** Meta's quality rating: "GREEN" / "YELLOW" / "RED", or { score }. */
+  qualityScore?: string | { score?: string } | null;
 }
 
 export interface TemplatesResponse {

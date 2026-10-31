@@ -70,6 +70,11 @@ export interface Broadcast {
     name: string;
     email: string;
   };
+  startedBy?: {
+    _id: string;
+    name: string;
+    email: string;
+  } | null;
   phoneNumberId?: string;
   wabaId?: string;
   whatsappPhoneNumberId?: string;
@@ -103,7 +108,10 @@ export interface BroadcastResponse {
   data: {
     broadcast: Broadcast;
     estimatedRecipients?: number | null;
-    warnings?: string[];
+    /** Strings or { code, message } objects, depending on the endpoint. */
+    warnings?: Array<string | { code?: string; message?: string }>;
+    /** Why recipients failed, were skipped or are waiting, grouped. */
+    failureReasons?: BroadcastFailureReason[];
     recipients?: Array<{
       _id: string;
       phoneNumber: string;
@@ -146,6 +154,13 @@ export interface BroadcastResponse {
   };
 }
 
+export interface BroadcastFailureReason {
+  status: "failed" | "skipped" | "deferred" | string;
+  errorCode: string | null;
+  count: number;
+  sampleMessage: string | null;
+}
+
 export type BroadcastRecipient = NonNullable<
   BroadcastResponse["data"]["recipients"]
 >[number];
@@ -186,7 +201,7 @@ export interface StartBroadcastResponse {
     scheduledAt: string | null;
     scheduledTimezone: string | null;
     scheduledLocalTime: string | null;
-    warnings: string[];
+    warnings: Array<string | { code?: string; message?: string }>;
   };
 }
 
