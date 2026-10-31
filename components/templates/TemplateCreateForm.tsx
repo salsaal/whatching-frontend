@@ -1,20 +1,22 @@
 "use client";
 
 import {
+  AlertTriangle,
   ArrowLeft,
-  FilePlus2,
-  LinkIcon,
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  Eye,
+  ImageIcon,
   MapPin,
-  Phone,
-  Plus,
-  Reply,
-  Trash2,
-  Variable
+  Moon,
+  Sun,
+  X
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { parseAsString, useQueryState } from "nuqs";
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import { toast } from "sonner";
@@ -33,12 +35,8 @@ import { MediaAsset } from "@/client-api/types/media.type";
 import {
   CreateTemplatePayload,
   MessageTemplate,
-  TemplateButton,
-  TemplateButtonType,
   TemplateCategory,
-  TemplateComponent,
-  TemplateCreationType,
-  TemplateHeaderFormat
+  TemplateCreationType
 } from "@/client-api/types/templates.type";
 import MediaPickerDialog from "@/components/media/MediaPickerDialog";
 import LocationPickerDialog, {
@@ -55,50 +53,63 @@ import {
   AlertDialogTitle
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { Combobox } from "@/components/ui/combobox";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from "@/components/ui/tooltip";
+import { WhatsAppPreview } from "@/components/whatsapp/WhatsAppPreview";
+import { formatFileSize, formatRelative } from "@/lib/displayFormat";
+import { templateCategoryPresentation } from "@/lib/statusPresentation";
 import { cn } from "@/lib/utils";
 import { useOrganizationStore } from "@/stores/organizationStore";
 import { useTemplateStore } from "@/stores/templateStore";
-import TemplatePreview from "./TemplatePreview";
+import { BodyEditor } from "./editor/BodyEditor";
+import { ButtonsEditor } from "./editor/ButtonsEditor";
 import {
-  applyVariableExamples,
-  buildButtonsComponent,
-  extractVariables,
+  CategoryCards,
+  ReadOnlyField,
+  Segmented
+} from "./editor/EditorControls";
+import {
+  buildChecklist,
+  ButtonDraft,
+  buttonsFromTemplate,
+  CarouselCardDraft,
+  composeTemplateComponents,
+  EditorSection,
+  HeaderChoice,
+  inferTemplateType,
+  isValidTemplateName,
+  MAX_CAROUSEL_CARD_BUTTONS,
+  MAX_FOOTER,
+  MAX_HEADER_TEXT,
+  MEDIA_HEADERS,
+  sanitizeTemplateName,
+  variableKeys
+} from "./editor/templateDraft";
+import {
   getBodyComponent,
   getButtonsComponent,
   getFooterComponent,
   getHeaderComponent,
-  getTemplateType,
   groupTemplateButtons,
   mapDraftToTemplate
 } from "./templateUtils";
 import { useCurrentMembership } from "@/hooks/useCurrentMembership";
 
-type HeaderFormatOption = "NONE" | TemplateHeaderFormat;
-
-interface CarouselCardState {
-  mediaId: string;
-  mediaName: string;
-  mediaUrl: string;
-}
-
-const MAX_TOTAL_BUTTONS = 10;
-const MAX_URL_BUTTONS = 2;
-const MAX_PHONE_BUTTONS = 1;
-// Each carousel card carries at most 2 buttons; anything beyond that used to
-// be silently dropped at submit time.
-const MAX_CAROUSEL_CARD_BUTTONS = 2;
-
 const DEFAULT_FOOTER_TEXT = "Reply STOP to opt out";
+
+type Format = "standard" | "carousel" | "lto";
 
 // Meta rejects free-text footers for authentication templates and
 // limited-time offers, and location/carousel templates have no footer slot.
@@ -111,6 +122,18 @@ const templateSupportsFooter = (
   templateType !== "CAROUSEL" &&
   templateType !== "LIMITED_TIME_OFFER";
 
+const footerHiddenReason = (
+  templateType: TemplateCreationType,
+  category: string
+) =>
+  category === "AUTHENTICATION"
+    ? "Meta doesn't allow a custom footer on authentication templates."
+    : templateType === "LIMITED_TIME_OFFER"
+      ? "Meta doesn't allow a custom footer on limited-time offers."
+      : templateType === "CAROUSEL"
+        ? "Carousel templates have no footer."
+        : "Location templates have no footer.";
+
 // These types are distinct Meta template structures, not just a different
 // header -- an edit can't move a submitted template into or out of them.
 const STRUCTURAL_TEMPLATE_TYPES: TemplateCreationType[] = [
@@ -121,148 +144,154 @@ const STRUCTURAL_TEMPLATE_TYPES: TemplateCreationType[] = [
 const isStructuralTemplateType = (type: TemplateCreationType) =>
   STRUCTURAL_TEMPLATE_TYPES.includes(type);
 
-const categories: TemplateCategory[] = [
-  "MARKETING",
-  "UTILITY",
-  "AUTHENTICATION"
-];
+const formatOf = (type: TemplateCreationType): Format =>
+  type === "CAROUSEL"
+    ? "carousel"
+    : type === "LIMITED_TIME_OFFER"
+      ? "lto"
+      : "standard";
 
-const languages = [
-  { label: "English", value: "en" },
-  { label: "English (US)", value: "en_US" },
-  { label: "Hindi", value: "hi" },
-  { label: "Arabic", value: "ar" },
-  { label: "Spanish", value: "es" }
-];
-
-const MEDIA_HEADER_FORMATS: string[] = ["IMAGE", "VIDEO", "DOCUMENT"];
-
-const templateTypes: Array<{
-  label: string;
-  value: TemplateCreationType;
-  description: string;
-}> = [
-  {
-    label: "Text",
-    value: "TEXT",
-    description: "Body-only or body with a text header."
-  },
-  {
-    label: "Image",
-    value: "IMAGE",
-    description: "Marketing template with an image header."
-  },
-  {
-    label: "Video",
-    value: "VIDEO",
-    description: "Marketing template with a video header."
-  },
-  {
-    label: "Document",
-    value: "DOCUMENT",
-    description: "Marketing template with a document header."
-  },
-  {
-    label: "Location",
-    value: "LOCATION",
-    description: "Location header preview for place-based messages."
-  },
-  {
-    label: "Limited-time offer",
-    value: "LIMITED_TIME_OFFER",
-    description: "Offer banner with optional expiration display."
-  },
-  {
-    label: "Carousel",
-    value: "CAROUSEL",
-    description: "Media card carousel preview with repeated card structure."
-  }
-];
-
-const headerFormats: HeaderFormatOption[] = [
-  "NONE",
-  "TEXT",
-  "IMAGE",
-  "VIDEO",
-  "DOCUMENT",
-  "LOCATION"
-];
-
-const buttonTypeOptions: Array<{
-  label: string;
-  value: TemplateButtonType;
-  icon: React.ElementType;
-}> = [
-  { label: "Website URL", value: "URL", icon: LinkIcon },
-  { label: "Phone number", value: "PHONE_NUMBER", icon: Phone },
-  { label: "Quick reply", value: "QUICK_REPLY", icon: Reply }
-];
-
-const sanitizeTemplateName = (value: string) =>
-  value
-    .toLowerCase()
-    .replace(/\s+/g, "_")
-    .replace(/[^a-z0-9_]/g, "");
-
-const createEmptyButton = (type: TemplateButtonType): TemplateButton => ({
-  type,
-  text: "",
-  ...(type === "URL" ? { url: "" } : {}),
-  ...(type === "PHONE_NUMBER" ? { phone_number: "" } : {})
-});
-
-const countButtons = (buttons: TemplateButton[]) => ({
-  total: buttons.length,
-  urls: buttons.filter((button) => button.type === "URL").length,
-  phones: buttons.filter((button) => button.type === "PHONE_NUMBER").length,
-  quickReplies: buttons.filter((button) => button.type === "QUICK_REPLY").length
-});
-
-const getHeaderFormatForTemplateType = (
-  templateType: TemplateCreationType,
-  currentHeaderFormat: HeaderFormatOption
-): HeaderFormatOption => {
-  if (["IMAGE", "VIDEO", "DOCUMENT", "LOCATION"].includes(templateType)) {
-    return templateType as TemplateHeaderFormat;
-  }
-
-  if (templateType === "TEXT") {
-    return currentHeaderFormat === "TEXT" ? "TEXT" : "NONE";
-  }
-
-  return "NONE";
+const typeLabels: Record<string, string> = {
+  TEXT: "Text",
+  IMAGE: "Image",
+  VIDEO: "Video",
+  DOCUMENT: "Document",
+  LOCATION: "Location",
+  LIMITED_TIME_OFFER: "Limited-time offer",
+  CAROUSEL: "Carousel"
 };
 
-interface TemplateCreateFormProps {
-  initialTemplate?: MessageTemplate | null;
-  editKind?: "draft" | "meta";
-}
+const languages = [
+  { label: "English (US)", value: "en_US" },
+  { label: "English", value: "en" },
+  { label: "English (UK)", value: "en_GB" },
+  { label: "Hindi", value: "hi" },
+  { label: "Bengali", value: "bn" },
+  { label: "Gujarati", value: "gu" },
+  { label: "Kannada", value: "kn" },
+  { label: "Malayalam", value: "ml" },
+  { label: "Marathi", value: "mr" },
+  { label: "Punjabi", value: "pa" },
+  { label: "Tamil", value: "ta" },
+  { label: "Telugu", value: "te" },
+  { label: "Urdu", value: "ur" },
+  { label: "Arabic", value: "ar" },
+  { label: "Spanish", value: "es" },
+  { label: "French", value: "fr" },
+  { label: "German", value: "de" },
+  { label: "Indonesian", value: "id" },
+  { label: "Portuguese (BR)", value: "pt_BR" }
+];
+const languageLabel = (value: string) =>
+  languages.find((item) => item.value === value)?.label || value;
 
-function FieldBlock({
+const SECTIONS: Array<{ id: EditorSection; label: string }> = [
+  { id: "basics", label: "Basics" },
+  { id: "content", label: "Content" },
+  { id: "buttons", label: "Buttons" },
+  { id: "review", label: "Review" }
+];
+
+// Backend errors land next to the section they're about, as well as on top.
+const sectionForError = (message: string): EditorSection | null => {
+  if (/header|image|video|document|media|carousel/i.test(message))
+    return "content";
+  if (/button|url|phone|link/i.test(message)) return "buttons";
+  if (/name|language|category/i.test(message)) return "basics";
+  if (/body|variable|footer/i.test(message)) return "content";
+  return null;
+};
+
+function Section({
+  id,
+  number,
   title,
-  description,
+  complete,
+  error,
   children
 }: {
+  id: EditorSection;
+  number: number;
   title: string;
-  description?: string;
-  children: React.ReactNode;
+  complete: boolean;
+  error?: string;
+  children: ReactNode;
 }) {
+  const [isOpen, setIsOpen] = useState(true);
   return (
-    <section className="rounded-lg bg-white p-5 shadow-xs">
-      <div className="mb-4">
-        <h2 className="font-heading text-xl font-semibold">{title}</h2>
-        {description && (
-          <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+    <section
+      id={`section-${id}`}
+      className="scroll-mt-24 rounded-lg bg-white shadow-xs"
+    >
+      <button
+        type="button"
+        onClick={() => setIsOpen((current) => !current)}
+        className="flex w-full items-center gap-3 p-5 text-left md:pointer-events-none"
+        aria-expanded={isOpen}
+      >
+        <span
+          className={cn(
+            "flex size-7 shrink-0 items-center justify-center rounded-full text-sm font-semibold",
+            complete
+              ? "bg-primary text-primary-foreground"
+              : "bg-muted text-muted-foreground"
+          )}
+        >
+          {complete ? <Check className="size-4" /> : number}
+        </span>
+        <h2 className="flex-1 font-heading text-lg font-semibold">{title}</h2>
+        <ChevronDown
+          className={cn(
+            "size-4 text-muted-foreground transition md:hidden",
+            isOpen && "rotate-180"
+          )}
+        />
+      </button>
+      <div className={cn("space-y-5 px-5 pb-5", !isOpen && "hidden md:block")}>
+        {error && (
+          <p
+            role="alert"
+            className="flex gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive"
+          >
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+            {error}
+          </p>
         )}
+        {children}
       </div>
-      {children}
     </section>
   );
 }
 
+function Field({
+  label,
+  hint,
+  children
+}: {
+  label: string;
+  hint?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      {children}
+      {hint && <div className="text-xs text-muted-foreground">{hint}</div>}
+    </div>
+  );
+}
+
+interface TemplateCreateFormProps {
+  initialTemplate?: MessageTemplate | null;
+  editKind?: "draft" | "meta";
+  /** Prefill a new template from this one (Duplicate). */
+  duplicateOf?: MessageTemplate | null;
+}
+
 export default function TemplateCreateForm({
   initialTemplate,
-  editKind
+  editKind,
+  duplicateOf
 }: TemplateCreateFormProps) {
   const { can } = useCurrentMembership();
   const router = useRouter();
@@ -282,8 +311,9 @@ export default function TemplateCreateForm({
   const [name, setName] = useState("");
   const [templateType, setTemplateType] =
     useState<TemplateCreationType>("TEXT");
-  const [headerFormat, setHeaderFormat] = useState<HeaderFormatOption>("NONE");
+  const [headerFormat, setHeaderFormat] = useState<HeaderChoice>("NONE");
   const [headerText, setHeaderText] = useState("");
+  const [headerSample, setHeaderSample] = useState("");
   const [headerExampleUrl, setHeaderExampleUrl] = useState("");
   const [isLocationPickerOpen, setIsLocationPickerOpen] = useState(false);
   const [pickedLocation, setPickedLocation] = useState<PickedLocation | null>(
@@ -298,7 +328,7 @@ export default function TemplateCreateForm({
   );
   const [offerText, setOfferText] = useState("Limited-time offer");
   const [carouselCardCount, setCarouselCardCount] = useState(2);
-  const [carouselCards, setCarouselCards] = useState<CarouselCardState[]>([
+  const [carouselCards, setCarouselCards] = useState<CarouselCardDraft[]>([
     { mediaId: "", mediaName: "", mediaUrl: "" },
     { mediaId: "", mediaName: "", mediaUrl: "" }
   ]);
@@ -306,10 +336,21 @@ export default function TemplateCreateForm({
     "Hi {{1}}, thanks for connecting with us. We have an update for you."
   );
   const [bodyExamples, setBodyExamples] = useState<Record<string, string>>({
-    "1": "John"
+    "1": "Priya"
   });
   const [footerText, setFooterText] = useState(DEFAULT_FOOTER_TEXT);
-  const [buttons, setButtons] = useState<TemplateButton[]>([]);
+  const [buttons, setButtons] = useState<ButtonDraft[]>([]);
+  const [isTypeChangeConfirmOpen, setIsTypeChangeConfirmOpen] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [wallpaper, setWallpaper] = useState<"light" | "dark">("light");
+  const [formError, setFormError] = useState<{
+    message: string;
+    section: EditorSection | null;
+  } | null>(null);
+  const [submitted, setSubmitted] = useState<null | "review" | "edit">(null);
+  const [draftSavedAt, setDraftSavedAt] = useState<string | null>(
+    editKind === "draft" ? initialTemplate?.updatedAt || null : null
+  );
 
   const { data: selectedMediaData } = useQuery({
     queryKey: ["media", selectedMediaId],
@@ -317,48 +358,26 @@ export default function TemplateCreateForm({
     enabled: Boolean(selectedMediaId) && can("media:view")
   });
 
-  const variables = useMemo(() => extractVariables(bodyText), [bodyText]);
-  const previewBody = useMemo(
-    () => applyVariableExamples(bodyText, bodyExamples),
-    [bodyExamples, bodyText]
-  );
-
-  const visibleButtonEntries = useMemo(
-    () => buttons.map((button, index) => ({ button, index })),
-    [buttons]
-  );
-  const buttonCounts = useMemo(() => countButtons(buttons), [buttons]);
-  const maxTotalButtons =
-    templateType === "CAROUSEL" ? MAX_CAROUSEL_CARD_BUTTONS : MAX_TOTAL_BUTTONS;
-  const totalButtonsLeft = maxTotalButtons - buttonCounts.total;
-  const urlButtonsLeft = MAX_URL_BUTTONS - buttonCounts.urls;
-  const phoneButtonsLeft = MAX_PHONE_BUTTONS - buttonCounts.phones;
-  const quickReplyButtonsLeft = totalButtonsLeft;
   const supportsFooter = templateSupportsFooter(templateType, category);
-  const supportsHeaderSelector =
-    templateType === "TEXT" || templateType === "LIMITED_TIME_OFFER";
+  const format = formatOf(templateType);
   const isEditing = Boolean(initialTemplate);
   // What the template was when the page opened, to catch accidental type
   // changes (and keep its stored header when no new file is picked).
   const loadedTemplateType = initialTemplate
-    ? (getTemplateType(initialTemplate) as TemplateCreationType)
+    ? inferTemplateType(initialTemplate)
     : null;
   // Only reusable while the type is unchanged: an image handle can't serve
   // as a video example.
   const existingHeaderHandle =
     loadedTemplateType &&
     loadedTemplateType === templateType &&
-    MEDIA_HEADER_FORMATS.includes(loadedTemplateType)
+    MEDIA_HEADERS.includes(loadedTemplateType as HeaderChoice)
       ? headerExampleUrl.trim()
       : "";
-  const [isTypeChangeConfirmOpen, setIsTypeChangeConfirmOpen] = useState(false);
   const isDraftEdit = editKind === "draft";
   // A draft was never submitted to Meta, so it's still freely editable in
-  // every way (structure included). Only an already-submitted template is
-  // subject to Meta's real edit restrictions: name/category/language/type
-  // and button structure (add/remove/retype) can't change post-creation,
-  // but content -- body/header/footer text and existing button labels/
-  // values -- can, as long as it isn't mid-review.
+  // every way. Only an already-submitted template is subject to Meta's
+  // edit restrictions (name, language, category, structure).
   const isMetaTemplateEdit = isEditing && !isDraftEdit;
   // Meta only lets a submitted template change category once it's been
   // rejected or paused -- never while approved.
@@ -370,7 +389,6 @@ export default function TemplateCreateForm({
     initialTemplate?.status?.toUpperCase() === "PENDING" ||
     initialTemplate?.status?.toLowerCase() === "pending_review";
   const canEditFields = !isPendingEdit;
-  const pageTitle = isEditing ? "Edit template" : "Create template";
   const templatesQueryKey = useMemo(
     () => ["templates", activeOrgId] as const,
     [activeOrgId]
@@ -381,7 +399,6 @@ export default function TemplateCreateForm({
   );
   const refreshTemplateListCaches = useCallback(async () => {
     if (!activeOrgId) return;
-
     await Promise.all([
       queryClient.fetchQuery({
         queryKey: templatesQueryKey,
@@ -394,28 +411,44 @@ export default function TemplateCreateForm({
     ]);
   }, [activeOrgId, queryClient, templateDraftsQueryKey, templatesQueryKey]);
 
+  // Load an existing template (edit) or a source to copy (duplicate).
+  const source = initialTemplate || duplicateOf || null;
   useEffect(() => {
-    if (!initialTemplate) return;
-
-    const header = getHeaderComponent(initialTemplate.components);
-    const body = getBodyComponent(initialTemplate.components);
-    const footer = getFooterComponent(initialTemplate.components);
-    const buttonsComponent = getButtonsComponent(initialTemplate.components);
-    const inferredType = getTemplateType(
-      initialTemplate
-    ) as TemplateCreationType;
+    if (!source) return;
+    const header = getHeaderComponent(source.components);
+    const body = getBodyComponent(source.components);
+    const footer = getFooterComponent(source.components);
+    const carousel = source.components.find(
+      (component) => component.type === "CAROUSEL"
+    );
+    const offer = source.components.find(
+      (component) => component.type === "LIMITED_TIME_OFFER"
+    );
+    const inferredType = inferTemplateType(source);
     const bodyTextValue = body?.text || "";
+    // Carousel buttons live on each card; take them from the first.
+    const sourceButtons = carousel?.cards?.[0]
+      ? getButtonsComponent(carousel.cards[0].components)?.buttons
+      : getButtonsComponent(source.components)?.buttons;
 
-    setName(initialTemplate.name);
-    setCategory(initialTemplate.category);
-    setLanguage(initialTemplate.language);
+    setName(
+      duplicateOf && !initialTemplate ? `${source.name}_copy` : source.name
+    );
+    setCategory(source.category);
+    setLanguage(source.language);
     setTemplateType(inferredType);
     setHeaderFormat(header?.format || "NONE");
     setHeaderText(header?.text || "");
+    const headerTextSample = (
+      header?.example as { header_text?: unknown } | undefined
+    )?.header_text;
+    setHeaderSample(
+      Array.isArray(headerTextSample) ? String(headerTextSample[0] ?? "") : ""
+    );
     setHeaderExampleUrl(header?.example?.header_handle?.[0] || "");
-    setSelectedMediaId(header?.mediaId || initialTemplate.defaultMediaId || "");
+    setSelectedMediaId(header?.mediaId || source.defaultMediaId || "");
     setSelectedMediaName(
-      header?.mediaId || initialTemplate.defaultMediaId ? "Linked media" : ""
+      header?.mediaId || source.defaultMediaId ? "Linked media" : ""
     );
     const headerHandle = header?.example?.header_handle?.[0] || "";
     setSelectedMediaUrl(/^https?:\/\//i.test(headerHandle) ? headerHandle : "");
@@ -424,34 +457,18 @@ export default function TemplateCreateForm({
     // template. The user can still clear it before saving.
     setFooterText(
       footer?.text ||
-        (templateSupportsFooter(inferredType, initialTemplate.category)
+        (templateSupportsFooter(inferredType, source.category)
           ? DEFAULT_FOOTER_TEXT
           : "")
     );
-    setButtons(
-      groupTemplateButtons(
-        (buttonsComponent?.buttons || []).map((button) =>
-          button.type === "QUICK_REPLY"
-            ? {
-                ...button,
-                triggerKey: undefined,
-                flowTriggerKey: undefined,
-                payload: undefined
-              }
-            : button
-        )
-      )
-    );
-
-    const carousel = initialTemplate.components.find(
-      (component) => component.type === "CAROUSEL"
-    );
+    setButtons(groupTemplateButtons(buttonsFromTemplate(sourceButtons || [])));
+    if (offer?.limited_time_offer?.text)
+      setOfferText(offer.limited_time_offer.text);
     if (carousel?.cards?.length) {
       setCarouselCardCount(carousel.cards.length);
       setCarouselCards(
         carousel.cards.map((card) => {
           const cardHeader = getHeaderComponent(card.components);
-
           return {
             mediaId: cardHeader?.mediaId || "",
             mediaName: cardHeader?.mediaId ? "Linked image" : "",
@@ -460,17 +477,21 @@ export default function TemplateCreateForm({
         })
       );
     }
-
     const examples = body?.example?.body_text;
     const sampleValues = Array.isArray(examples?.[0])
       ? examples?.[0]
       : examples;
     const nextExamples: Record<string, string> = {};
-    extractVariables(bodyTextValue).forEach((variable, index) => {
-      nextExamples[variable] = String(sampleValues?.[index] || "");
+    variableKeys(bodyTextValue).forEach((variable, index) => {
+      nextExamples[variable] = String(
+        (sampleValues as unknown[] | undefined)?.[Number(variable) - 1] ??
+          (sampleValues as unknown[] | undefined)?.[index] ??
+          ""
+      );
     });
     setBodyExamples(nextExamples);
-  }, [initialTemplate, setCategory, setLanguage]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [source]);
 
   useEffect(() => {
     const media = selectedMediaData?.data.media;
@@ -479,11 +500,22 @@ export default function TemplateCreateForm({
     setSelectedMediaUrl(media.cloudinaryUrl);
   }, [selectedMediaData?.data.media, selectedMediaId]);
 
+  useEffect(() => {
+    setCarouselCards((current) =>
+      Array.from({ length: carouselCardCount }).map(
+        (_item, index) =>
+          current[index] || { mediaId: "", mediaName: "", mediaUrl: "" }
+      )
+    );
+  }, [carouselCardCount]);
+
   const handleMutationError = (
     error: AxiosError<{ message?: string }>,
     fallback: string
   ) => {
-    toast.error(error.response?.data?.message || fallback);
+    const message = error.response?.data?.message || fallback;
+    setFormError({ message, section: sectionForError(message) });
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const { mutate, isPending } = useMutation({
@@ -491,9 +523,8 @@ export default function TemplateCreateForm({
     meta: { showToast: false },
     onSuccess: async (data) => {
       addTemplate(data.data.template);
-      toast.success("Template submitted for review");
+      setSubmitted("review");
       await refreshTemplateListCaches();
-      router.push("/templates");
     },
     onError: (error: AxiosError<{ message?: string }>) =>
       handleMutationError(error, "Template could not be submitted.")
@@ -504,9 +535,13 @@ export default function TemplateCreateForm({
     meta: { showToast: false },
     onSuccess: async (data) => {
       upsertTemplate(mapDraftToTemplate(data.data.draft));
-      toast.success("Template saved as draft");
+      toast.success("Draft saved.");
       await refreshTemplateListCaches();
-      router.push("/templates");
+      // Continue on the saved draft so later saves update it.
+      router.replace({
+        pathname: `/templates/${data.data.draft._id}`,
+        query: { source: "draft" }
+      });
     },
     onError: (error: AxiosError<{ message?: string }>) =>
       handleMutationError(error, "Draft could not be saved.")
@@ -517,7 +552,7 @@ export default function TemplateCreateForm({
     meta: { showToast: false },
     onSuccess: (data) => {
       upsertTemplate(mapDraftToTemplate(data.data.draft));
-      toast.success("Draft saved");
+      setDraftSavedAt(new Date().toISOString());
     },
     onError: (error: AxiosError<{ message?: string }>) =>
       handleMutationError(error, "Draft could not be saved.")
@@ -533,9 +568,8 @@ export default function TemplateCreateForm({
       } else {
         upsertTemplate(mapDraftToTemplate(data.data.draft));
       }
-      toast.success("Draft submitted for review");
+      setSubmitted("review");
       await refreshTemplateListCaches();
-      router.push("/templates");
     },
     onError: (error: AxiosError<{ message?: string }>) =>
       handleMutationError(error, "Draft could not be submitted for review.")
@@ -546,298 +580,90 @@ export default function TemplateCreateForm({
     meta: { showToast: false },
     onSuccess: async (data) => {
       upsertTemplate(data.data.template);
-      toast.success("Template edit submitted. Status is now pending.");
+      setSubmitted("edit");
       await refreshTemplateListCaches();
-      router.push("/templates");
     },
     onError: (error: AxiosError<{ message?: string }>) =>
       handleMutationError(error, "Template edit could not be submitted.")
   });
 
-  useEffect(() => {
-    setCarouselCards((current) =>
-      Array.from({ length: carouselCardCount }).map(
-        (_item, index) =>
-          current[index] || { mediaId: "", mediaName: "", mediaUrl: "" }
-      )
-    );
-  }, [carouselCardCount]);
-
-  const addVariable = () => {
-    const next = variables.length + 1;
-    const key = String(next);
-
-    setBodyText((value) => `${value} {{${key}}}`);
-    setBodyExamples((value) => ({ ...value, [key]: "" }));
+  const editorState = {
+    name: sanitizeTemplateName(name),
+    templateType,
+    headerFormat,
+    headerText,
+    headerSample,
+    headerExampleUrl,
+    selectedMediaId,
+    existingHeaderHandle,
+    offerText,
+    carouselCards,
+    bodyText,
+    bodyExamples,
+    footerText,
+    supportsFooter,
+    buttons
   };
-
-  const addButton = (type: TemplateButtonType) => {
-    const counts = countButtons(buttons);
-
-    // Meta allows up to 10 total template buttons. If more than 3 are used,
-    // WhatsApp collapses the extra buttons behind "See all options".
-    if (counts.total >= maxTotalButtons) {
-      toast.error(
-        templateType === "CAROUSEL"
-          ? "Carousel cards support up to 2 buttons"
-          : "You can add up to 10 buttons in total"
-      );
-      return;
-    }
-
-    // Meta button type limits: max 2 URL buttons and max 1 phone button.
-    if (type === "URL" && counts.urls >= MAX_URL_BUTTONS) {
-      toast.error("You can add up to 2 website buttons");
-      return;
-    }
-
-    if (type === "PHONE_NUMBER" && counts.phones >= MAX_PHONE_BUTTONS) {
-      toast.error("You can add only 1 phone number button");
-      return;
-    }
-
-    setButtons((value) =>
-      groupTemplateButtons([...value, createEmptyButton(type)])
-    );
-  };
-
-  const updateButton = (
-    index: number,
-    field: keyof TemplateButton,
-    value: string
-  ) => {
-    setButtons((current) =>
-      current.map((button, buttonIndex) =>
-        buttonIndex === index ? { ...button, [field]: value } : button
-      )
-    );
-  };
-
-  const updateButtonType = (index: number, type: TemplateButtonType) => {
-    const nextButtons = buttons.map((button, buttonIndex) =>
-      buttonIndex === index ? createEmptyButton(type) : button
-    );
-    const nextCounts = countButtons(nextButtons);
-
-    if (nextCounts.total > maxTotalButtons) {
-      toast.error(
-        templateType === "CAROUSEL"
-          ? "Carousel cards support up to 2 buttons"
-          : "You can add up to 10 buttons in total"
-      );
-      return;
-    }
-
-    if (nextCounts.urls > MAX_URL_BUTTONS) {
-      toast.error("You can add up to 2 website buttons");
-      return;
-    }
-
-    if (nextCounts.phones > MAX_PHONE_BUTTONS) {
-      toast.error("You can add only 1 phone number button");
-      return;
-    }
-
-    setButtons(groupTemplateButtons(nextButtons));
-  };
-
-  const removeButton = (index: number) => {
-    setButtons((current) =>
-      current.filter((_button, buttonIndex) => buttonIndex !== index)
-    );
-  };
+  const checklist = buildChecklist(editorState);
+  const missing = checklist.filter((item) => !item.ok);
+  const sectionComplete = (section: EditorSection) =>
+    section === "review"
+      ? missing.length === 0
+      : checklist
+          .filter((item) => item.section === section)
+          .every((item) => item.ok);
+  const previewComponents = composeTemplateComponents(editorState, {
+    forPreview: true
+  });
+  const previewValues: Record<string, string> = headerSample
+    ? { "header:1": headerSample }
+    : {};
 
   const buildPayload = (): CreateTemplatePayload | null => {
-    const cleanName = sanitizeTemplateName(name);
-
-    if (!cleanName) {
-      toast.error("Template name is required");
-      return null;
-    }
-
-    if (!bodyText.trim()) {
-      toast.error("Template body is required");
-      return null;
-    }
-
-    if (headerFormat === "LOCATION" && !headerExampleUrl.trim()) {
-      toast.error("Choose a sample location for the template header");
-      return null;
-    }
-
-    const buttonLabels = buttons
-      .map((button) => button.text.trim().toLowerCase())
-      .filter(Boolean);
-    const hasDuplicateLabels =
-      new Set(buttonLabels).size !== buttonLabels.length;
-
-    if (hasDuplicateLabels) {
-      toast.error("Button labels must be unique");
-      return null;
-    }
-
-    if (!templateTypes.some((item) => item.value === templateType)) {
-      toast.error("Choose a template type.");
-      return null;
-    }
-
-    // A media template must keep its media: a picked file, or (when
-    // editing) the header handle Meta already has. Never send a media type
-    // without one; Meta would re-review it as a different template.
-    const mediaHeaderFormat = MEDIA_HEADER_FORMATS.includes(templateType)
-      ? templateType
-      : MEDIA_HEADER_FORMATS.includes(headerFormat)
-        ? headerFormat
-        : null;
-    if (mediaHeaderFormat && !selectedMediaId && !existingHeaderHandle) {
-      toast.error(
-        `Choose ${mediaHeaderFormat === "IMAGE" ? "an image" : mediaHeaderFormat === "VIDEO" ? "a video" : "a document"} for the header`
-      );
-      return null;
-    }
-
-    if (
-      templateType === "CAROUSEL" &&
-      carouselCards.some((card) => !card.mediaId)
-    ) {
-      toast.error("Select an image for every carousel card");
-      return null;
-    }
-
-    const components = [];
-
-    if (templateType === "LIMITED_TIME_OFFER") {
-      components.push({
-        type: "LIMITED_TIME_OFFER" as const,
-        limited_time_offer: {
-          text: offerText.trim() || "Limited-time offer",
-          has_expiration: true
-        }
+    if (missing.length) {
+      setFormError({
+        message: missing[0].problem || missing[0].label,
+        section: missing[0].section
       });
+      return null;
     }
-
-    if (templateType === "CAROUSEL") {
-      components.push({
-        type: "CAROUSEL" as const,
-        cards: carouselCards.map((card) => {
-          const cardComponents: TemplateComponent[] = [
-            {
-              type: "HEADER" as const,
-              format: "IMAGE" as const,
-              mediaId: card.mediaId
-            },
-            {
-              type: "BODY" as const,
-              text: bodyText.trim()
-            }
-          ];
-
-          const cardButtons = buildButtonsComponent(
-            buttons
-              .filter((button) => button.text.trim())
-              .slice(0, 2)
-              .map((button) => ({
-                ...button,
-                text: button.text.trim(),
-                ...(button.type === "URL" ? { url: button.url?.trim() } : {}),
-                ...(button.type === "PHONE_NUMBER"
-                  ? { phone_number: button.phone_number?.trim() }
-                  : {})
-              }))
-          );
-
-          if (cardButtons) {
-            cardComponents.push(cardButtons);
-          }
-
-          return {
-            components: cardComponents
-          };
-        })
-      });
-    }
-
-    if (headerFormat !== "NONE" && templateType !== "CAROUSEL") {
-      components.push({
-        type: "HEADER" as const,
-        format: headerFormat,
-        ...(headerFormat === "TEXT"
-          ? { text: headerText.trim() }
-          : MEDIA_HEADER_FORMATS.includes(headerFormat)
-            ? selectedMediaId
-              ? { mediaId: selectedMediaId }
-              : { example: { header_handle: [existingHeaderHandle] } }
-            : headerExampleUrl.trim()
-              ? { example: { header_handle: [headerExampleUrl.trim()] } }
-              : {})
-      });
-    }
-
-    components.push({
-      type: "BODY" as const,
-      text: bodyText.trim(),
-      ...(variables.length
-        ? {
-            example: {
-              body_text: [variables.map((key) => bodyExamples[key] || "Sample")]
-            }
-          }
-        : {})
-    });
-
-    if (supportsFooter && footerText.trim()) {
-      components.push({
-        type: "FOOTER" as const,
-        text: footerText.trim()
-      });
-    }
-
-    const buttonsComponent = buildButtonsComponent(
-      buttons
-        .filter((button) => button.text.trim())
-        .map((button) => ({
-          ...button,
-          text: button.text.trim(),
-          ...(button.type === "URL" ? { url: button.url?.trim() } : {}),
-          ...(button.type === "PHONE_NUMBER"
-            ? { phone_number: button.phone_number?.trim() }
-            : {})
-        }))
-    );
-
-    if (buttonsComponent) {
-      components.push(buttonsComponent);
-    }
-
     return {
-      name: cleanName,
+      name: sanitizeTemplateName(name),
       language,
       category: category as TemplateCategory,
       allowCategoryChange: true,
-      components
+      components: composeTemplateComponents(editorState)
     };
   };
 
   const handleSaveDraft = () => {
-    const payload = buildPayload();
-    if (!payload) return;
-
-    if (isDraftEdit && initialTemplate?.draftId) {
-      patchDraft({
-        draftId: initialTemplate.draftId,
-        payload: {
-          name: payload.name,
-          components: payload.components,
-          phoneNumberId: payload.phoneNumberId
-        }
+    setFormError(null);
+    const payload = {
+      name: sanitizeTemplateName(name),
+      language,
+      category: category as TemplateCategory,
+      allowCategoryChange: true,
+      components: composeTemplateComponents(editorState)
+    };
+    if (!payload.name) {
+      setFormError({
+        message: "Give the template a name before saving.",
+        section: "basics"
       });
       return;
     }
-
+    if (isDraftEdit && initialTemplate?.draftId) {
+      patchDraft({
+        draftId: initialTemplate.draftId,
+        payload: { name: payload.name, components: payload.components }
+      });
+      return;
+    }
     saveDraft(payload);
   };
 
   const handleSubmitForReview = (confirmedTypeChange = false) => {
+    setFormError(null);
     const payload = buildPayload();
     if (!payload) return;
 
@@ -859,8 +685,7 @@ export default function TemplateCreateForm({
           ...(category.toUpperCase() !==
           (initialTemplate.category || "").toUpperCase()
             ? { category: category as TemplateCategory }
-            : {}),
-          phoneNumberId: payload.phoneNumberId
+            : {})
         }
       });
       return;
@@ -870,18 +695,11 @@ export default function TemplateCreateForm({
       patchDraft(
         {
           draftId: initialTemplate.draftId,
-          payload: {
-            name: payload.name,
-            components: payload.components,
-            phoneNumberId: payload.phoneNumberId
-          }
+          payload: { name: payload.name, components: payload.components }
         },
         {
           onSuccess: () =>
-            submitDraft({
-              draftId: initialTemplate.draftId as string,
-              phoneNumberId: payload.phoneNumberId
-            })
+            submitDraft({ draftId: initialTemplate.draftId as string })
         }
       );
       return;
@@ -890,730 +708,756 @@ export default function TemplateCreateForm({
     mutate(payload);
   };
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    handleSubmitForReview();
+  // ---------- header / format changes ----------
+  const clearMedia = () => {
+    setSelectedMediaId("");
+    setSelectedMediaName("");
+    setSelectedMediaUrl("");
+  };
+  const restoreFooterIfAllowed = (nextType: TemplateCreationType) => {
+    // Switching back to a type that allows a footer restores the default
+    // for new templates rather than leaving a blank footer behind.
+    if (
+      !isEditing &&
+      templateSupportsFooter(nextType, category) &&
+      !footerText.trim()
+    ) {
+      setFooterText(DEFAULT_FOOTER_TEXT);
+    }
+  };
+  const changeFormat = (next: Format) => {
+    if (isMetaTemplateEdit) return;
+    if (next === "carousel") {
+      setTemplateType("CAROUSEL");
+      setHeaderFormat("NONE");
+      clearMedia();
+      if (buttons.length > MAX_CAROUSEL_CARD_BUTTONS) {
+        setButtons((current) => current.slice(0, MAX_CAROUSEL_CARD_BUTTONS));
+        toast.info(
+          "Carousel cards support up to 2 buttons, so the extra buttons were removed."
+        );
+      }
+      setButtons((current) =>
+        current.filter((button) => button.type !== "COPY_CODE")
+      );
+    } else if (next === "lto") {
+      setTemplateType("LIMITED_TIME_OFFER");
+      if (headerFormat === "LOCATION") setHeaderFormat("NONE");
+    } else {
+      const nextType: TemplateCreationType = [
+        "IMAGE",
+        "VIDEO",
+        "DOCUMENT"
+      ].includes(headerFormat)
+        ? (headerFormat as TemplateCreationType)
+        : "TEXT";
+      setTemplateType(nextType);
+      restoreFooterIfAllowed(nextType);
+    }
+  };
+  const changeHeader = (next: HeaderChoice) => {
+    if (format === "standard") {
+      const nextType: TemplateCreationType =
+        next === "NONE" || next === "TEXT"
+          ? "TEXT"
+          : (next as TemplateCreationType);
+      // A submitted template can switch between Text/Image/Video/Document
+      // headers, never into or out of Location.
+      if (
+        isMetaTemplateEdit &&
+        (isStructuralTemplateType(templateType) ||
+          isStructuralTemplateType(nextType))
+      ) {
+        return;
+      }
+      setTemplateType(nextType);
+      restoreFooterIfAllowed(nextType);
+    }
+    setHeaderFormat(next);
+    if (!MEDIA_HEADERS.includes(next)) clearMedia();
   };
 
-  const typeLabel = (value: string) =>
-    templateTypes.find((item) => item.value === value)?.label || value;
+  const baseHeaderOptions: Array<{
+    value: HeaderChoice;
+    label: string;
+    disabled?: boolean;
+  }> = [
+    { value: "NONE", label: "None" },
+    { value: "TEXT", label: "Text" },
+    { value: "IMAGE", label: "Image" },
+    { value: "VIDEO", label: "Video" },
+    { value: "DOCUMENT", label: "Document" },
+    ...(format === "standard"
+      ? [
+          {
+            value: "LOCATION" as HeaderChoice,
+            label: "Location",
+            disabled: isMetaTemplateEdit && templateType !== "LOCATION"
+          }
+        ]
+      : [])
+  ];
+  const headerOptions = baseHeaderOptions.map((option) =>
+    isMetaTemplateEdit &&
+    templateType === "LOCATION" &&
+    option.value !== "LOCATION"
+      ? { ...option, disabled: true }
+      : option
+  );
+
+  const categoryOptions =
+    category.toUpperCase() === "AUTHENTICATION"
+      ? ["MARKETING", "UTILITY", "AUTHENTICATION"]
+      : ["MARKETING", "UTILITY"];
+  const nameIsValid = isValidTemplateName(sanitizeTemplateName(name));
+  const isBusy =
+    isPending || isSubmittingDraft || isPatchingDraft || isPatchingApproved;
+  const sectionError = (section: EditorSection) =>
+    formError?.section === section ? formError.message : undefined;
+
+  const preview = (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-medium text-muted-foreground">Preview</p>
+        <Segmented
+          ariaLabel="Preview wallpaper"
+          value={wallpaper}
+          onChange={setWallpaper}
+          options={[
+            { value: "light", label: "", icon: Sun },
+            { value: "dark", label: "", icon: Moon }
+          ]}
+          className="p-0.5 [&_button]:px-2 [&_button]:py-1"
+        />
+      </div>
+      <WhatsAppPreview
+        components={previewComponents}
+        variableValues={previewValues}
+        mediaUrl={selectedMediaUrl}
+        mediaName={selectedMediaName}
+        cardMediaUrls={carouselCards.map((card) => card.mediaUrl)}
+        wallpaper={wallpaper}
+      />
+    </div>
+  );
+
+  const checklistCard = (
+    <div className="rounded-lg bg-white p-4 shadow-xs">
+      <p className="text-sm font-semibold">Before you send</p>
+      <ul className="mt-2 space-y-1.5">
+        {checklist.map((item) => (
+          <li key={item.id}>
+            <a
+              href={`#section-${item.section}`}
+              className="flex items-start gap-2 text-sm hover:underline"
+            >
+              {item.ok ? (
+                <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600" />
+              ) : (
+                <X className="mt-0.5 size-4 shrink-0 text-red-500" />
+              )}
+              <span className={cn(!item.ok && "text-foreground")}>
+                {item.label}
+              </span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+
+  if (submitted) {
+    return (
+      <div className="mx-auto max-w-xl rounded-lg bg-white p-8 text-center shadow-xs">
+        <span className="mx-auto flex size-14 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+          <CheckCircle2 className="size-8" />
+        </span>
+        <h1 className="mt-4 font-heading text-2xl font-semibold">
+          {submitted === "edit"
+            ? "Changes sent to Meta"
+            : "Sent to Meta for review"}
+        </h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Usually minutes to a few hours. It shows as In review on your
+          templates list until Meta decides.
+        </p>
+        <div className="mt-6 flex flex-col justify-center gap-2 sm:flex-row">
+          <Button asChild variant="outline">
+            <Link href="/templates">Back to templates</Link>
+          </Button>
+          <Button
+            onClick={() =>
+              router.push({
+                pathname: "/templates/create",
+                query: { fresh: Date.now() }
+              })
+            }
+          >
+            Create another
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  const submitLabel = isMetaTemplateEdit ? "Save changes" : "Send for review";
+  const submitButton = (
+    <Button
+      type="submit"
+      isLoading={isBusy}
+      disabled={!canEditFields || missing.length > 0}
+    >
+      {submitLabel}
+    </Button>
+  );
 
   return (
     <form
-      onSubmit={handleSubmit}
-      className="grid gap-6 xl:grid-cols-[1fr_380px]"
+      onSubmit={(event) => {
+        event.preventDefault();
+        handleSubmitForReview();
+      }}
+      className="pb-24"
     >
-      <div className="space-y-5">
-        <section className="rounded-lg bg-white p-5 shadow-xs">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <Button variant="ghost" asChild className="-ml-3 mb-2">
-                <Link href="/templates">
-                  <ArrowLeft className="size-4" />
-                  Back
-                </Link>
-              </Button>
-              <p className="text-sm font-medium text-primary">Templates</p>
-              <h1 className="mt-1 font-heading text-3xl font-semibold">
-                {pageTitle}
-              </h1>
-            </div>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              {!isEditing || isDraftEdit ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  isLoading={isSavingDraft || isPatchingDraft}
-                  disabled={!canEditFields}
-                  onClick={handleSaveDraft}
-                >
-                  Save as draft
-                </Button>
-              ) : null}
-              <Button
-                type="submit"
-                isLoading={
-                  isPending ||
-                  isSubmittingDraft ||
-                  isPatchingDraft ||
-                  isPatchingApproved
-                }
-                disabled={!canEditFields}
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <Link
+            href="/templates"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="size-4" />
+            Templates
+          </Link>
+          <h1 className="mt-2 font-heading text-2xl font-semibold">
+            {isEditing
+              ? "Edit template"
+              : duplicateOf
+                ? "Duplicate template"
+                : "Create template"}
+          </h1>
+        </div>
+        <ol className="flex gap-1.5 overflow-x-auto">
+          {SECTIONS.map((section, index) => (
+            <li key={section.id}>
+              <a
+                href={`#section-${section.id}`}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium whitespace-nowrap",
+                  sectionComplete(section.id)
+                    ? "bg-primary/10 text-primary"
+                    : "bg-muted text-muted-foreground"
+                )}
               >
-                <FilePlus2 className="size-4" />
-                {isEditing && !isDraftEdit ? "Save changes" : "Send for review"}
-              </Button>
-            </div>
-          </div>
-        </section>
+                {sectionComplete(section.id) ? (
+                  <Check className="size-3" />
+                ) : (
+                  `${index + 1}`
+                )}
+                {section.label}
+              </a>
+            </li>
+          ))}
+        </ol>
+      </div>
 
-        {isPendingEdit && (
-          <div className="rounded-lg bg-amber-50 p-4 text-sm text-amber-800 shadow-xs">
-            Pending templates cannot be edited while Meta is reviewing them.
-          </div>
-        )}
-
-        {isMetaTemplateEdit && !isPendingEdit && (
-          <div className="rounded-lg bg-muted/60 p-4 text-sm text-muted-foreground shadow-xs">
-            {isCategoryEditableStatus
-              ? "Name and language can't change after submission. Category, buttons, header, body and footer can be edited."
-              : "Name, language, and category can't change after submission. Buttons, header, body, and footer can be edited. Meta re-reviews every edit, and an approved template can be edited once per 24 hours (10 times per 30 days)."}
-          </div>
-        )}
-
-        <FieldBlock
-          title="Template Basics"
-          description="Name, category, and language are submitted to Meta for review."
+      {formError && (
+        <div
+          role="alert"
+          className="mb-4 flex gap-2 rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive"
         >
-          <div className="grid gap-4 lg:grid-cols-2">
-            <div>
-              <Label>Template category</Label>
-              <Select
-                value={category}
-                onValueChange={(value) => {
-                  if (!value) return;
-                  setCategory(value);
-                }}
-                disabled={isCategoryLocked || !canEditFields}
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+          <p className="flex-1">{formError.message}</p>
+          <button
+            type="button"
+            aria-label="Dismiss"
+            onClick={() => setFormError(null)}
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+      )}
+
+      {isPendingEdit && (
+        <div className="mb-4 rounded-lg bg-amber-50 p-4 text-sm text-amber-800 shadow-xs">
+          Templates can&apos;t be edited while Meta is reviewing them.
+        </div>
+      )}
+      {isMetaTemplateEdit && !isPendingEdit && (
+        <div className="mb-4 rounded-lg bg-muted/60 p-4 text-sm text-muted-foreground shadow-xs">
+          {isCategoryEditableStatus
+            ? "Name and language can't change after submission. Category, buttons, header, body and footer can be edited."
+            : "Name, language and category can't change after submission. Buttons, header, body and footer can be edited."}{" "}
+          Meta re-reviews every edit. Approved templates can be edited once
+          every 24 hours.
+        </div>
+      )}
+
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,720px)_360px] lg:justify-center">
+        <div className="min-w-0 space-y-4">
+          <Section
+            id="basics"
+            number={1}
+            title="Basics"
+            complete={sectionComplete("basics")}
+            error={sectionError("basics")}
+          >
+            {isCategoryLocked ? (
+              <ReadOnlyField
+                label="Category"
+                value={templateCategoryPresentation(category).label}
+              />
+            ) : (
+              <Field
+                label="Category"
+                hint="Meta may change the category during review."
               >
-                <SelectTrigger className="mt-2 h-11 w-full border-0 bg-muted/70 shadow-none">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {categories.map((item) => (
-                    <SelectItem key={item} value={item}>
-                      {item}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label>Template language</Label>
-              <Select
-                value={language}
-                onValueChange={(value) => {
-                  if (!value) return;
-                  setLanguage(value);
-                }}
-                disabled={isMetaTemplateEdit || !canEditFields}
-              >
-                <SelectTrigger className="mt-2 h-11 w-full border-0 bg-muted/70 shadow-none">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {languages.map((item) => (
-                    <SelectItem key={item.value} value={item.value}>
-                      {item.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="mt-4">
-            <Label>Template name</Label>
-            <Input
-              value={name}
-              onChange={(event) =>
-                setName(sanitizeTemplateName(event.target.value))
-              }
-              disabled={isMetaTemplateEdit || !canEditFields}
-              placeholder="seasonal_promo_blast"
-              className="mt-2 h-11 border-0 bg-muted/70 shadow-none"
-            />
-            <p className="mt-2 text-xs text-muted-foreground">
-              Use lowercase letters, numbers, and underscores only.
-            </p>
-          </div>
-
-          <div className="mt-4">
-            <Label>Template type</Label>
-            <Select
-              value={templateType}
-              onValueChange={(value) => {
-                // See components/ui/select.tsx: "" is a mount-time reset,
-                // never a choice, and treating it as one wiped the header.
-                if (!value) return;
-                const nextType = value as TemplateCreationType;
-                // A submitted template can switch between header types (Text,
-                // Image, Video, Document) but never into or out of a
-                // structurally different type.
-                if (
-                  isMetaTemplateEdit &&
-                  (isStructuralTemplateType(templateType) ||
-                    isStructuralTemplateType(nextType))
-                ) {
-                  return;
-                }
-
-                setTemplateType(nextType);
-                if (
-                  nextType === "CAROUSEL" &&
-                  buttons.length > MAX_CAROUSEL_CARD_BUTTONS
-                ) {
-                  setButtons((current) =>
-                    current.slice(0, MAX_CAROUSEL_CARD_BUTTONS)
-                  );
-                  toast.info(
-                    "Carousel cards support up to 2 buttons, so the extra buttons were removed."
-                  );
-                }
-                setHeaderFormat(
-                  getHeaderFormatForTemplateType(nextType, headerFormat)
-                );
-
-                // The footer is simply hidden (and never sent) for types that
-                // don't allow one; switching back to a type that does
-                // restores the default for new templates rather than leaving
-                // a blank footer behind.
-                if (
-                  !isEditing &&
-                  templateSupportsFooter(nextType, category) &&
-                  !footerText.trim()
-                ) {
-                  setFooterText(DEFAULT_FOOTER_TEXT);
-                }
-
-                if (!["IMAGE", "VIDEO", "DOCUMENT"].includes(nextType)) {
-                  setSelectedMediaId("");
-                  setSelectedMediaName("");
-                  setSelectedMediaUrl("");
-                }
-              }}
-              disabled={
-                !canEditFields ||
-                (isMetaTemplateEdit && isStructuralTemplateType(templateType))
-              }
-            >
-              <SelectTrigger className="mt-2 h-11 w-full border-0 bg-muted/70 shadow-none">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {templateTypes.map((item) => (
-                  <SelectItem
-                    key={item.value}
-                    value={item.value}
-                    disabled={
-                      isMetaTemplateEdit && isStructuralTemplateType(item.value)
-                    }
-                  >
-                    {item.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="mt-2 text-xs text-muted-foreground">
-              {
-                templateTypes.find((item) => item.value === templateType)
-                  ?.description
-              }
-            </p>
-          </div>
-
-          <p className="mt-4 rounded-sm bg-muted/60 p-3 text-xs text-muted-foreground">
-            Category changes are allowed automatically when submitting so Meta
-            can classify the template correctly during review.
-          </p>
-        </FieldBlock>
-
-        <FieldBlock
-          title="Template Header"
-          description="Add an optional text or media header."
-        >
-          {supportsHeaderSelector ? (
-            <Select
-              value={headerFormat}
-              onValueChange={(value) => {
-                if (!value) return;
-                setHeaderFormat(value as HeaderFormatOption);
-              }}
-              disabled={!canEditFields}
-            >
-              <SelectTrigger className="h-11 w-full border-0 bg-muted/70 shadow-none">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {headerFormats
-                  .filter((format) =>
-                    templateType === "TEXT"
-                      ? format === "NONE" || format === "TEXT"
-                      : format !== "LOCATION"
-                  )
-                  .map((format) => (
-                    <SelectItem key={format} value={format}>
-                      {format === "NONE" ? "No header" : format}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-          ) : (
-            <div className="rounded-sm bg-muted/60 p-3 text-sm text-muted-foreground">
-              Header format is controlled by the selected template type:{" "}
-              <span className="font-semibold text-foreground">
-                {templateType}
-              </span>
-              .
-            </div>
-          )}
-
-          {headerFormat === "TEXT" && (
-            <Input
-              value={headerText}
-              onChange={(event) => setHeaderText(event.target.value)}
-              disabled={!canEditFields}
-              placeholder="Mega Sale!"
-              maxLength={60}
-              className="mt-4 h-11 border-0 bg-muted/70 shadow-none"
-            />
-          )}
-
-          {headerFormat !== "NONE" && headerFormat !== "TEXT" && (
-            <div className="mt-4 rounded-sm border p-3">
-              {["IMAGE", "VIDEO", "DOCUMENT"].includes(headerFormat) ? (
-                <div className="space-y-3">
-                  {selectedMediaUrl && headerFormat === "IMAGE" && (
-                    <img
-                      src={selectedMediaUrl}
-                      alt={selectedMediaName || "Template header"}
-                      className="aspect-[1.91/1] w-full rounded-sm object-cover"
-                    />
-                  )}
-                  {selectedMediaUrl && headerFormat === "VIDEO" && (
-                    <video
-                      src={selectedMediaUrl}
-                      className="aspect-video w-full rounded-sm bg-black object-contain"
-                      controls
-                    />
-                  )}
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">
-                        {selectedMediaName || "No media selected"}
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {selectedMediaId
-                          ? "This media is linked to the template."
-                          : "Select media from your organisation media library."}
-                      </p>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={!canEditFields}
-                      onClick={() => {
-                        setCarouselMediaIndex(null);
-                        setIsMediaPickerOpen(true);
-                      }}
-                    >
-                      {selectedMediaId ? "Change media" : "Select media"}
-                    </Button>
-                  </div>
-                </div>
-              ) : headerFormat === "LOCATION" ? (
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">
-                      {pickedLocation?.name || "No location selected"}
-                    </p>
-                    <p className="mt-1 truncate text-xs text-muted-foreground">
-                      {pickedLocation?.address ||
-                        "Choose the sample location shown during review."}
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={!canEditFields}
-                    onClick={() => setIsLocationPickerOpen(true)}
-                  >
-                    <MapPin className="size-4" />
-                    Choose on map
-                  </Button>
-                </div>
-              ) : (
-                <Input
-                  value={headerExampleUrl}
-                  onChange={(event) => setHeaderExampleUrl(event.target.value)}
+                <CategoryCards
+                  value={category}
+                  options={categoryOptions}
+                  onChange={(value) => setCategory(value)}
                   disabled={!canEditFields}
-                  placeholder="Paste sample media URL for review"
-                  className="h-11 border-0 bg-muted/70 shadow-none"
                 />
-              )}
-            </div>
-          )}
+              </Field>
+            )}
 
-          {templateType === "LIMITED_TIME_OFFER" && (
-            <div className="mt-4">
-              <div>
-                <Label>Offer title</Label>
+            {isMetaTemplateEdit ? (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <ReadOnlyField
+                  label="Template name"
+                  value={<span className="font-mono">{name}</span>}
+                />
+                <ReadOnlyField
+                  label="Language"
+                  value={languageLabel(language)}
+                />
+              </div>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field
+                  label="Template name"
+                  hint={
+                    <span className="flex items-center gap-1">
+                      {nameIsValid && (
+                        <Check className="size-3.5 text-emerald-600" />
+                      )}
+                      Lowercase letters, numbers and underscores.
+                    </span>
+                  }
+                >
+                  <Input
+                    value={name}
+                    onChange={(event) =>
+                      setName(sanitizeTemplateName(event.target.value))
+                    }
+                    disabled={!canEditFields}
+                    placeholder="summer_sale_2026"
+                    aria-label="Template name"
+                  />
+                </Field>
+                <Field label="Language">
+                  <Combobox
+                    value={language}
+                    onChange={(value) => value && setLanguage(value)}
+                    options={languages.map((item) => ({
+                      ...item,
+                      searchText: `${item.label} ${item.value}`
+                    }))}
+                    placeholder="Choose a language"
+                    disabled={!canEditFields}
+                    className="h-10"
+                  />
+                </Field>
+              </div>
+            )}
+
+            <Field
+              label="Format"
+              hint={
+                isMetaTemplateEdit
+                  ? "The format can't change after submission."
+                  : format === "carousel"
+                    ? "Scrollable cards, each with an image and up to 2 buttons."
+                    : format === "lto"
+                      ? "Highlights an offer with an optional countdown."
+                      : undefined
+              }
+            >
+              <Segmented
+                ariaLabel="Format"
+                value={format}
+                onChange={changeFormat}
+                disabled={!canEditFields || isMetaTemplateEdit}
+                options={[
+                  { value: "standard", label: "Standard" },
+                  { value: "carousel", label: "Carousel" },
+                  { value: "lto", label: "Limited-time offer" }
+                ]}
+              />
+            </Field>
+          </Section>
+
+          <Section
+            id="content"
+            number={2}
+            title="Content"
+            complete={sectionComplete("content")}
+            error={sectionError("content")}
+          >
+            {format === "lto" && (
+              <Field label="Offer title">
                 <Input
                   value={offerText}
                   onChange={(event) => setOfferText(event.target.value)}
                   disabled={!canEditFields}
-                  maxLength={60}
+                  maxLength={16}
                   placeholder="Limited-time offer"
-                  className="mt-2 h-11 border-0 bg-muted/70 shadow-none"
                 />
-              </div>
-            </div>
-          )}
+              </Field>
+            )}
 
-          {templateType === "CAROUSEL" && (
-            <div className="mt-4 space-y-4">
-              <div className="sm:w-44">
-                <Label>Cards</Label>
-                <Input
-                  type="number"
-                  min={2}
-                  max={10}
-                  value={carouselCardCount}
-                  onChange={(event) =>
-                    setCarouselCardCount(
-                      Math.max(2, Math.min(10, Number(event.target.value) || 2))
-                    )
-                  }
-                  className="mt-2 h-11 border-0 bg-muted/70 shadow-none"
-                />
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                {carouselCards.map((card, index) => (
-                  <div key={index} className="rounded-sm border p-3">
-                    {card.mediaUrl ? (
-                      <img
-                        src={card.mediaUrl}
-                        alt={card.mediaName || `Carousel card ${index + 1}`}
-                        className="mb-3 aspect-[1.45] w-full rounded-sm object-cover"
-                      />
-                    ) : (
-                      <div className="mb-3 flex aspect-[1.45] items-center justify-center rounded-sm bg-muted text-sm text-muted-foreground">
-                        No image selected
+            {format === "carousel" ? (
+              <Field
+                label="Cards"
+                hint="Every card uses the body below and the same buttons."
+              >
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    min={2}
+                    max={10}
+                    value={carouselCardCount}
+                    onChange={(event) =>
+                      setCarouselCardCount(
+                        Math.max(
+                          2,
+                          Math.min(10, Number(event.target.value) || 2)
+                        )
+                      )
+                    }
+                    className="w-24"
+                    aria-label="Number of cards"
+                  />
+                  <span className="text-sm text-muted-foreground">cards</span>
+                </div>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  {carouselCards.map((card, index) => (
+                    <div
+                      key={index}
+                      className="flex items-center gap-3 rounded-lg border p-2"
+                    >
+                      <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded bg-muted">
+                        {card.mediaUrl ? (
+                          <img
+                            src={card.mediaUrl}
+                            alt=""
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <ImageIcon className="size-5 text-muted-foreground" />
+                        )}
                       </div>
-                    )}
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">
-                          Card {index + 1}
-                        </p>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium">Card {index + 1}</p>
                         <p className="truncate text-xs text-muted-foreground">
-                          {card.mediaName || "Select carousel image"}
+                          {card.mediaName || "No image yet"}
                         </p>
                       </div>
                       <Button
                         type="button"
                         variant="outline"
+                        size="sm"
                         disabled={!canEditFields}
                         onClick={() => {
                           setCarouselMediaIndex(index);
                           setIsMediaPickerOpen(true);
                         }}
                       >
-                        Select
+                        {card.mediaId ? "Change" : "Choose"}
                       </Button>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </FieldBlock>
-
-        <FieldBlock
-          title="Template Body"
-          description="Use variables like {{1}} and provide sample values for review."
-        >
-          <Textarea
-            value={bodyText}
-            onChange={(event) => setBodyText(event.target.value)}
-            disabled={!canEditFields}
-            maxLength={1024}
-            className="min-h-40 resize-none border-0 bg-muted/70 shadow-none"
-          />
-          <div className="mt-2 flex items-center justify-between gap-3">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={!canEditFields}
-              onClick={addVariable}
-            >
-              <Variable className="size-4" />
-              Add variable
-            </Button>
-            <span className="text-xs text-muted-foreground">
-              {bodyText.length}/1024
-            </span>
-          </div>
-
-          {variables.length > 0 && (
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              {variables.map((key) => (
-                <div key={key}>
-                  <Label>Sample for {`{{${key}}}`}</Label>
-                  <Input
-                    value={bodyExamples[key] || ""}
-                    onChange={(event) =>
-                      setBodyExamples((value) => ({
-                        ...value,
-                        [key]: event.target.value
-                      }))
-                    }
-                    disabled={!canEditFields}
-                    placeholder="John"
-                    className="mt-2 h-10 border-0 bg-muted/70 shadow-none"
-                  />
+                  ))}
                 </div>
-              ))}
-            </div>
-          )}
-        </FieldBlock>
-
-        {supportsFooter ? (
-          <FieldBlock
-            title="Template Footer"
-            description="Optional footer text."
-          >
-            <Input
-              value={footerText}
-              onChange={(event) => setFooterText(event.target.value)}
-              disabled={!canEditFields}
-              maxLength={60}
-              placeholder="Reply STOP to opt out"
-              className="h-11 border-0 bg-muted/70 shadow-none"
-            />
-            <p className="mt-2 text-right text-xs text-muted-foreground">
-              {footerText.length}/60
-            </p>
-          </FieldBlock>
-        ) : (
-          <FieldBlock
-            title="Template Footer"
-            description="Footer is disabled for this template type."
-          >
-            <div className="rounded-sm bg-muted/60 p-3 text-sm text-muted-foreground">
-              {category === "AUTHENTICATION"
-                ? "Meta doesn't allow a custom footer on authentication templates."
-                : templateType === "LIMITED_TIME_OFFER"
-                  ? "Meta doesn't allow a custom footer on limited-time offer templates."
-                  : `${templateType} templates use a constrained Meta structure, so the footer is not shown for this type.`}
-            </div>
-          </FieldBlock>
-        )}
-
-        <FieldBlock
-          title="Interactive Actions"
-          description="Add call-to-actions and quick replies users can tap."
-        >
-          <div className="rounded-sm bg-primary/5 p-3 text-sm text-muted-foreground">
-            Click a button type below to add it. You can add{" "}
-            <span className="font-semibold text-foreground">
-              {totalButtonsLeft}
-            </span>{" "}
-            more button{totalButtonsLeft === 1 ? "" : "s"} total. Website left:{" "}
-            {urlButtonsLeft}; phone left: {phoneButtonsLeft}; quick replies can
-            use the remaining total slots. Button labels must be unique.
-          </div>
-
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            {buttonTypeOptions.map((option) => {
-              const Icon = option.icon;
-
-              return (
-                <Button
-                  key={option.value}
-                  type="button"
-                  variant="outline"
-                  disabled={
-                    !canEditFields ||
-                    totalButtonsLeft <= 0 ||
-                    (option.value === "URL" && urlButtonsLeft <= 0) ||
-                    (option.value === "PHONE_NUMBER" && phoneButtonsLeft <= 0)
-                  }
-                  className="h-auto justify-start whitespace-normal py-3"
-                  onClick={() => addButton(option.value)}
-                >
-                  <Icon className="size-4 shrink-0" />
-                  <span className="flex flex-col items-start text-left">
-                    <span>{option.label}</span>
-                    <span className="text-xs font-normal text-muted-foreground">
-                      {option.value === "URL"
-                        ? `${Math.max(urlButtonsLeft, 0)} left`
-                        : option.value === "PHONE_NUMBER"
-                          ? `${Math.max(phoneButtonsLeft, 0)} left`
-                          : `${Math.max(quickReplyButtonsLeft, 0)} left`}
-                    </span>
-                  </span>
-                </Button>
-              );
-            })}
-          </div>
-
-          <div className="mt-4 space-y-3">
-            {visibleButtonEntries.map(({ button, index }) => (
-              <Fragment key={`${button.type}-${index}`}>
-                {(index === 0 ||
-                  (buttons[index - 1].type === "QUICK_REPLY") !==
-                    (button.type === "QUICK_REPLY")) && (
-                  <p className="pt-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    {button.type === "QUICK_REPLY"
-                      ? "Quick replies"
-                      : "Call-to-action buttons"}
-                  </p>
-                )}
-                <div className="grid gap-3 rounded-sm bg-muted/40 p-3 lg:grid-cols-[180px_1fr_1fr_auto]">
-                  <Select
-                    value={button.type}
-                    onValueChange={(value) => {
-                      if (!value) return;
-                      updateButtonType(index, value as TemplateButtonType);
-                    }}
-                    disabled={!canEditFields}
-                  >
-                    <SelectTrigger className="h-10 w-full border-0 bg-white shadow-none">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {buttonTypeOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-
-                  <Input
-                    value={button.text}
-                    onChange={(event) =>
-                      updateButton(index, "text", event.target.value)
-                    }
-                    disabled={!canEditFields}
-                    maxLength={25}
-                    placeholder="Button title"
-                    className={cn(
-                      "h-10 border-0 bg-white shadow-none",
-                      button.text &&
-                        buttons.some(
-                          (item, itemIndex) =>
-                            itemIndex !== index &&
-                            item.text.trim().toLowerCase() ===
-                              button.text.trim().toLowerCase()
-                        ) &&
-                        "ring-2 ring-destructive/30"
-                    )}
-                  />
-
-                  {button.type === "URL" && (
-                    <Input
-                      value={button.url || ""}
-                      onChange={(event) =>
-                        updateButton(index, "url", event.target.value)
-                      }
-                      disabled={!canEditFields}
-                      placeholder="https://whatching.com/sale"
-                      className="h-10 border-0 bg-white shadow-none"
-                    />
-                  )}
-                  {button.type === "PHONE_NUMBER" && (
-                    <Input
-                      value={button.phone_number || ""}
-                      onChange={(event) =>
-                        updateButton(index, "phone_number", event.target.value)
-                      }
-                      disabled={!canEditFields}
-                      placeholder="+918777019999"
-                      className="h-10 border-0 bg-white shadow-none"
-                    />
-                  )}
-                  {button.type === "QUICK_REPLY" && (
-                    <div className="flex h-10 items-center rounded-sm bg-white px-3 text-xs text-muted-foreground">
-                      Trigger is selected when creating a broadcast.
+              </Field>
+            ) : (
+              <Field label="Header">
+                <Segmented
+                  ariaLabel="Header"
+                  value={headerFormat}
+                  onChange={changeHeader}
+                  options={headerOptions}
+                  disabled={!canEditFields}
+                />
+                {headerFormat === "TEXT" && (
+                  <div className="space-y-2">
+                    <div className="relative">
+                      <Input
+                        value={headerText}
+                        onChange={(event) => setHeaderText(event.target.value)}
+                        disabled={!canEditFields}
+                        maxLength={MAX_HEADER_TEXT}
+                        placeholder="Your order is on its way"
+                        aria-label="Header text"
+                        className="pr-28"
+                      />
+                      <span className="pointer-events-none absolute top-1/2 right-20 -translate-y-1/2 text-[11px] text-muted-foreground">
+                        {headerText.length}/{MAX_HEADER_TEXT}
+                      </span>
+                      {!/{{\s*1\s*}}/.test(headerText) && (
+                        <button
+                          type="button"
+                          className="absolute top-1/2 right-2 -translate-y-1/2 cursor-pointer rounded px-1.5 py-0.5 text-xs font-medium text-primary hover:bg-primary/10"
+                          onClick={() =>
+                            setHeaderText((current) =>
+                              `${current}{{1}}`.slice(0, MAX_HEADER_TEXT)
+                            )
+                          }
+                          disabled={!canEditFields}
+                        >
+                          + {"{{1}}"}
+                        </button>
+                      )}
                     </div>
-                  )}
+                    {/{{\s*1\s*}}/.test(headerText) && (
+                      <Input
+                        value={headerSample}
+                        onChange={(event) =>
+                          setHeaderSample(event.target.value)
+                        }
+                        disabled={!canEditFields}
+                        placeholder="Sample for {{1}}: Priya"
+                        aria-label="Header sample"
+                      />
+                    )}
+                  </div>
+                )}
+                {MEDIA_HEADERS.includes(headerFormat) && (
+                  <div className="flex items-center gap-3 rounded-lg border p-3">
+                    <div className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded bg-muted">
+                      {selectedMediaUrl && headerFormat === "IMAGE" ? (
+                        <img
+                          src={selectedMediaUrl}
+                          alt=""
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <ImageIcon className="size-6 text-muted-foreground" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">
+                        {selectedMediaName ||
+                          (existingHeaderHandle
+                            ? "Current header"
+                            : "Nothing chosen yet")}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {selectedMediaData?.data.media?.fileSize
+                          ? formatFileSize(
+                              selectedMediaData.data.media.fileSize
+                            )
+                          : headerFormat === "IMAGE"
+                            ? "JPG or PNG"
+                            : headerFormat === "VIDEO"
+                              ? "MP4"
+                              : "PDF"}
+                      </p>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={!canEditFields}
+                        onClick={() => {
+                          setCarouselMediaIndex(null);
+                          setIsMediaPickerOpen(true);
+                        }}
+                      >
+                        {selectedMediaId ? "Change" : "Choose"}
+                      </Button>
+                      {selectedMediaId && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          disabled={!canEditFields}
+                          onClick={clearMedia}
+                        >
+                          Remove
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )}
+                {headerFormat === "LOCATION" && (
+                  <div className="flex items-center gap-3 rounded-lg border p-3">
+                    <MapPin className="size-5 shrink-0 text-primary" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">
+                        {pickedLocation?.name ||
+                          (headerExampleUrl
+                            ? "Sample location set"
+                            : "No location yet")}
+                      </p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {pickedLocation?.address ||
+                          "The sample location Meta sees during review."}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={!canEditFields}
+                      onClick={() => setIsLocationPickerOpen(true)}
+                    >
+                      Choose on map
+                    </Button>
+                  </div>
+                )}
+              </Field>
+            )}
 
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="size-10 text-muted-foreground hover:text-destructive"
-                    onClick={() => removeButton(index)}
+            <Field label="Body">
+              <BodyEditor
+                value={bodyText}
+                onChange={setBodyText}
+                examples={bodyExamples}
+                onExamplesChange={setBodyExamples}
+                disabled={!canEditFields}
+              />
+            </Field>
+
+            {supportsFooter ? (
+              <Field label="Footer">
+                <div className="relative">
+                  <Input
+                    value={footerText}
+                    onChange={(event) => setFooterText(event.target.value)}
                     disabled={!canEditFields}
-                  >
-                    <Trash2 className="size-4" />
-                  </Button>
+                    maxLength={MAX_FOOTER}
+                    placeholder="Reply STOP to opt out"
+                    aria-label="Footer"
+                    className="pr-14"
+                  />
+                  <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-[11px] text-muted-foreground">
+                    {footerText.length}/{MAX_FOOTER}
+                  </span>
                 </div>
-              </Fragment>
-            ))}
+              </Field>
+            ) : (
+              <Field label="Footer">
+                <p className="text-sm text-muted-foreground">
+                  {footerHiddenReason(templateType, category)}
+                </p>
+              </Field>
+            )}
+          </Section>
+
+          <Section
+            id="buttons"
+            number={3}
+            title="Buttons"
+            complete={sectionComplete("buttons")}
+            error={sectionError("buttons")}
+          >
+            <ButtonsEditor
+              buttons={buttons}
+              onChange={setButtons}
+              isCarousel={format === "carousel"}
+              disabled={!canEditFields}
+            />
+          </Section>
+
+          <div className="space-y-4 lg:hidden" id="section-review">
+            <h2 className="flex items-center gap-2 font-heading text-lg font-semibold">
+              <span
+                className={cn(
+                  "flex size-7 items-center justify-center rounded-full text-sm",
+                  sectionComplete("review")
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground"
+                )}
+              >
+                {sectionComplete("review") ? <Check className="size-4" /> : 4}
+              </span>
+              Review
+            </h2>
+            {checklistCard}
           </div>
-        </FieldBlock>
+        </div>
+
+        <aside className="hidden lg:block">
+          <div className="sticky top-24 space-y-4">
+            <div className="rounded-lg bg-white p-3 shadow-xs">{preview}</div>
+            {checklistCard}
+          </div>
+        </aside>
       </div>
 
-      <aside>
-        <div className="sticky top-24 space-y-5">
-          <TemplatePreview
-            templateType={templateType}
-            headerFormat={headerFormat}
-            headerText={headerText}
-            bodyText={previewBody}
-            footerText={supportsFooter ? footerText : ""}
-            buttons={buttons}
-            offerText={offerText}
-            carouselCardCount={carouselCardCount}
-            mediaUrl={selectedMediaUrl}
-            carouselCards={carouselCards}
-          />
+      {/* Mobile: preview in a bottom sheet. */}
+      <Button
+        type="button"
+        variant="outline"
+        className="fixed right-4 bottom-20 z-30 rounded-full shadow-lg lg:hidden"
+        onClick={() => setIsPreviewOpen(true)}
+      >
+        <Eye className="size-4" />
+        Preview
+      </Button>
+      <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+        <DialogContent className="max-sm:top-auto max-sm:bottom-0 max-sm:translate-y-0 max-sm:rounded-b-none sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Preview</DialogTitle>
+          </DialogHeader>
+          {preview}
+        </DialogContent>
+      </Dialog>
 
-          <div className="rounded-lg bg-white p-4 shadow-xs">
-            <p className="font-heading text-sm font-semibold">Review payload</p>
-            <p className="mt-2 text-xs leading-5 text-muted-foreground">
-              Submit creates a Meta template with your selected type, variables,
-              footer when supported, and buttons. Status will show as pending
-              until Meta approves it.
-            </p>
-            <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
-              <div className="rounded-sm bg-muted/60 p-2">
-                <p className="font-semibold">{buttonCounts.total}/10</p>
-                <p className="text-muted-foreground">Buttons</p>
-              </div>
-              <div className="rounded-sm bg-muted/60 p-2">
-                <p className="font-semibold">{buttonCounts.urls}/2</p>
-                <p className="text-muted-foreground">URLs</p>
-              </div>
-              <div className="rounded-sm bg-muted/60 p-2">
-                <p className="font-semibold">{buttonCounts.phones}/1</p>
-                <p className="text-muted-foreground">Phone</p>
-              </div>
-            </div>
-            {!isEditing || isDraftEdit ? (
+      {/* One sticky action bar for the whole form. */}
+      <div className="fixed inset-x-0 bottom-0 z-20 border-t bg-white/95 backdrop-blur lg:left-20">
+        <div className="mx-auto flex max-w-[1100px] items-center justify-between gap-3 px-4 py-3">
+          <div className="flex items-center gap-3">
+            {(!isEditing || isDraftEdit) && (
               <Button
                 type="button"
                 variant="outline"
-                className="mt-4 w-full"
                 isLoading={isSavingDraft || isPatchingDraft}
                 disabled={!canEditFields}
                 onClick={handleSaveDraft}
               >
-                Save as draft
+                Save draft
               </Button>
-            ) : null}
-            <Button
-              type="submit"
-              className="mt-3 w-full"
-              isLoading={
-                isPending ||
-                isSubmittingDraft ||
-                isPatchingDraft ||
-                isPatchingApproved
-              }
-              disabled={!canEditFields}
-            >
-              <Plus className="size-4" />
-              {isEditing && !isDraftEdit ? "Save changes" : "Send for review"}
-            </Button>
+            )}
+            {draftSavedAt && (
+              <span className="hidden text-xs text-muted-foreground sm:block">
+                Saved draft{" "}
+                {formatRelative(draftSavedAt) === "Just now"
+                  ? "just now"
+                  : formatRelative(draftSavedAt)}
+              </span>
+            )}
           </div>
+          {missing.length > 0 && canEditFields ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span tabIndex={0} className="inline-flex">
+                  {submitButton}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>
+                <ul className="space-y-0.5">
+                  {missing.map((item) => (
+                    <li key={item.id}>• {item.problem || item.label}</li>
+                  ))}
+                </ul>
+              </TooltipContent>
+            </Tooltip>
+          ) : (
+            submitButton
+          )}
         </div>
-      </aside>
+      </div>
 
       <AlertDialog
         open={isTypeChangeConfirmOpen}
@@ -1624,18 +1468,18 @@ export default function TemplateCreateForm({
             <AlertDialogTitle>Change the template type?</AlertDialogTitle>
             <AlertDialogDescription>
               This changes the template from{" "}
-              {typeLabel(loadedTemplateType || "")} to {typeLabel(templateType)}
-              . Meta will re-review it
+              {typeLabels[loadedTemplateType || ""] || loadedTemplateType} to{" "}
+              {typeLabels[templateType] || templateType}. Meta will re-review it
               {loadedTemplateType &&
-              MEDIA_HEADER_FORMATS.includes(loadedTemplateType)
-                ? ` and the ${typeLabel(loadedTemplateType).toLowerCase()} will be removed`
+              MEDIA_HEADERS.includes(loadedTemplateType as HeaderChoice)
+                ? ` and the ${(typeLabels[loadedTemplateType] || "").toLowerCase()} will be removed`
                 : ""}
               .
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>
-              Keep {typeLabel(loadedTemplateType || "")}
+              Keep {typeLabels[loadedTemplateType || ""] || loadedTemplateType}
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
