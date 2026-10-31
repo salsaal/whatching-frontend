@@ -1,230 +1,147 @@
 "use client";
 
 import {
-  AlertTriangle,
-  CalendarClock,
-  CalendarIcon,
-  Clock,
+  Copy,
   CreditCard,
   ExternalLink,
-  Eye,
   Megaphone,
+  MoreHorizontal,
+  PlayCircle,
   Plus,
   RotateCcw,
   Search,
-  Send,
+  ShieldAlert,
+  X,
   XCircle
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import { toast } from "sonner";
 
 import {
-  cancelBroadcast,
-  consentToBroadcastMessagingLimitRetry,
-  createBroadcast,
   getAllBroadcasts,
-  getBroadcastById,
-  previewBroadcastAudienceCount,
-  startBroadcast
+  getBroadcastById
 } from "@/client-api/functions/broadcasts";
-import {
-  getBotCanvasTriggers,
-  isNoPublishedFlowError
-} from "@/client-api/functions/bot";
 import {
   getWhatsAppOutboundReadiness,
   testWhatsAppOutboundReadiness
 } from "@/client-api/functions/organizations";
-import { listCampaigns } from "@/client-api/functions/campaigns";
-import { getAllSubscribers, getTags } from "@/client-api/functions/subscribers";
 import { getAllTemplates } from "@/client-api/functions/templates";
+import { Broadcast } from "@/client-api/types/broadcasts.type";
 import {
-  Broadcast,
-  BroadcastAudience
-} from "@/client-api/types/broadcasts.type";
-import { Subscriber } from "@/client-api/types/subscribers.type";
+  broadcastActionsFor,
+  BroadcastProgress,
+  broadcastSenderLabel,
+  CancelBroadcastDialog,
+  retryingPillClass,
+  StartBroadcastDialog,
+  useAutoConsentRetry
+} from "@/components/broadcasts/BroadcastActions";
+import { CreateBroadcastWizard } from "@/components/broadcasts/CreateBroadcastWizard";
+import { PermissionGate } from "@/components/common/NoAccess";
 import {
-  ALL_WHATSAPP_NUMBERS,
-  isUsableWhatsAppNumber,
-  useWhatsAppNumberContext
-} from "@/components/whatsapp/WhatsAppNumberSwitcher";
-import { isPaymentBlocked } from "@/components/whatsapp/PaymentBlockedCallout";
-import {
-  BroadcastTemplatePreview,
-  PreviewValue
-} from "@/components/broadcasts/BroadcastTemplatePreview";
-import { BroadcastSenderSelect } from "@/components/broadcasts/BroadcastSenderSelect";
-import { getButtonsComponent } from "@/components/templates/templateUtils";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle
-} from "@/components/ui/alert-dialog";
+  BroadcastStatusBadge,
+  TemplateCategoryBadge
+} from "@/components/shared/StatusBadges";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Calendar } from "@/components/ui/calendar";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle
-} from "@/components/ui/dialog";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger
 } from "@/components/ui/popover";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectSeparator,
-  SelectTrigger,
-  SelectValue
-} from "@/components/ui/select";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger
-} from "@/components/ui/tooltip";
-import { EmptyState } from "@/components/shared/EmptyState";
-import { QueryErrorState } from "@/components/shared/QueryErrorState";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Switch } from "@/components/ui/switch";
+import {
+  ALL_WHATSAPP_NUMBERS,
+  useWhatsAppNumberContext
+} from "@/components/whatsapp/WhatsAppNumberSwitcher";
+import { useCurrentMembership } from "@/hooks/useCurrentMembership";
 import AppLayout from "@/layouts/AppLayout";
-import {
-  hasBroadcastRetryPreference,
-  setBroadcastRetryPreference
-} from "@/lib/broadcastRetryPreference";
-import {
-  BroadcastVariableMapping,
-  buildBroadcastComponents,
-  defaultVariableMapping,
-  getTemplateBodyExample,
-  getTemplateBodyVariables,
-  subscriberFieldOptions
-} from "@/lib/broadcastComponents";
+import { formatRelative, formatWhen } from "@/lib/displayFormat";
 import { cn } from "@/lib/utils";
 import { useOrganizationStore } from "@/stores/organizationStore";
-import { PermissionGate } from "@/components/common/NoAccess";
-import { useCurrentMembership } from "@/hooks/useCurrentMembership";
-import { useLiveFlows } from "@/hooks/useLiveFlows";
 
-const MAIN_MENU_ROUTE = "__main_menu__";
-// Grouping the block dropdown by type only helps once the list is long.
-const GROUP_TRIGGERS_AFTER = 8;
+const PAGE_SIZE = 30;
 
-const blockTypeLabel = (type: string) =>
-  type.replace(/[_-]+/g, " ").replace(/^\w/, (letter) => letter.toUpperCase());
+// Single-status tabs filter on the server; tabs that span several statuses
+// (the backend takes one) filter the loaded pages instead.
+const statusTabs: Array<{
+  value: string;
+  label: string;
+  server?: string;
+  statuses?: string[];
+}> = [
+  { value: "all", label: "All" },
+  { value: "draft", label: "Drafts", server: "draft" },
+  { value: "scheduled", label: "Scheduled", server: "scheduled" },
+  {
+    value: "sending",
+    label: "Sending",
+    statuses: ["processing", "in_progress", "paused_limit"]
+  },
+  { value: "completed", label: "Completed", server: "completed" },
+  { value: "ended", label: "Failed/Canceled", statuses: ["failed", "canceled"] }
+];
 
-// A variable is unmapped while it has nothing to send: empty fixed text, or
-// a field source with no field picked.
-const isVariableUnmapped = (mapping: BroadcastVariableMapping) =>
-  mapping.source === "literal" ? !mapping.literal.trim() : !mapping.path.trim();
-
-const formatDate = (date?: string | null) =>
-  date
-    ? new Intl.DateTimeFormat("en-IN", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit"
-      }).format(new Date(date))
-    : "-";
-
-const formatCalendarDate = (date?: Date) =>
-  date
-    ? new Intl.DateTimeFormat("en-IN", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric"
-      }).format(date)
-    : "Pick date";
-
-const getLocalDateValue = (date: Date, time: string) => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-
-  return `${year}-${month}-${day}T${time || "09:00"}`;
-};
-
-const hourOptions = Array.from({ length: 24 }, (_, index) =>
-  String(index).padStart(2, "0")
-);
-const minuteOptions = ["00", "15", "30", "45"];
-const BROADCASTS_PAGE_SIZE = 30;
-const BROADCAST_SUBSCRIBERS_PAGE_SIZE = 50;
-
-const statusClasses: Record<string, string> = {
-  draft: "bg-muted text-muted-foreground",
-  scheduled: "bg-blue-50 text-blue-700",
-  processing: "bg-amber-50 text-amber-700",
-  in_progress: "bg-amber-50 text-amber-700",
-  paused_limit: "bg-orange-50 text-orange-700",
-  completed: "bg-primary/10 text-primary",
-  failed: "bg-destructive/10 text-destructive",
-  canceled: "bg-muted text-muted-foreground"
+const whenText = (broadcast: Broadcast) => {
+  switch (broadcast.status) {
+    case "draft":
+      return `Created ${formatRelative(broadcast.createdAt)}`;
+    case "scheduled":
+      return broadcast.scheduledAt
+        ? `Sends ${formatRelative(broadcast.scheduledAt)}`
+        : "Scheduled";
+    case "completed":
+    case "failed":
+    case "canceled":
+      return broadcast.completedAt
+        ? `Finished ${formatRelative(broadcast.completedAt)}`
+        : `Created ${formatRelative(broadcast.createdAt)}`;
+    default:
+      return broadcast.startedAt
+        ? `Started ${formatRelative(broadcast.startedAt)}`
+        : `Created ${formatRelative(broadcast.createdAt)}`;
+  }
 };
 
 function BroadcastsPageContent() {
-  const { can } = useCurrentMembership();
   const router = useRouter();
-  const broadcastLoadMoreRef = useRef<HTMLDivElement | null>(null);
-  const subscriberLoadMoreRef = useRef<HTMLDivElement | null>(null);
+  const { can } = useCurrentMembership();
   const activeOrganization = useOrganizationStore(
     (state) => state.activeOrganization
   );
-  const [query, setQuery] = useState("");
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [selectedBroadcastId, setSelectedBroadcastId] = useState("");
-  const [cancelTarget, setCancelTarget] = useState<Broadcast | null>(null);
-  const [scheduleDate, setScheduleDate] = useState<Date | undefined>();
-  const [scheduleTime, setScheduleTime] = useState("09:00");
-  const [broadcastName, setBroadcastName] = useState("");
+  const orgId = activeOrganization?._id;
   const {
     selectedPhoneNumberId,
+    selectedNumber,
     effectiveNumber,
-    numbers: whatsappNumbers
+    setSelectedPhoneNumberId
   } = useWhatsAppNumberContext();
-  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-  const [senderPhoneNumberId, setSenderPhoneNumberId] = useState("");
-  const [templateId, setTemplateId] = useState("");
-  const [quickReplyRoutes, setQuickReplyRoutes] = useState<
-    Record<number, string>
-  >({});
-  const [variableMappings, setVariableMappings] = useState<
-    Record<string, BroadcastVariableMapping>
-  >({});
-  const [audienceMode, setAudienceMode] =
-    useState<BroadcastAudience["mode"]>("all");
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [selectedSubscriberIds, setSelectedSubscriberIds] = useState<string[]>(
-    []
-  );
-  const [selectedCampaignSourceIds, setSelectedCampaignSourceIds] = useState<
-    string[]
-  >([]);
-  const [subscriberSearch, setSubscriberSearch] = useState("");
-  const [retryOnMessagingLimit, setRetryOnMessagingLimit] = useState(true);
-  const [retryOnRecipientEngagementLimit, setRetryOnRecipientEngagementLimit] =
-    useState(true);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+
+  const [tab, setTab] = useState("all");
+  const [searchInput, setSearchInput] = useState("");
+  const [query, setQuery] = useState("");
+  const [startTarget, setStartTarget] = useState<Broadcast | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<Broadcast | null>(null);
+  const [wizardKey, setWizardKey] = useState(0);
+  const [isWizardOpen, setIsWizardOpen] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setQuery(searchInput.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  // ---------- outbound readiness (unchanged rules) ----------
   const paymentMethodUrl =
     activeOrganization?.messagingBilling?.paymentSetupUrl || null;
   const senderRecordId = effectiveNumber?._id || effectiveNumber?.id || "";
@@ -238,324 +155,18 @@ function BroadcastsPageContent() {
     enabled: Boolean(senderRecordId) && can("whatsapp_numbers:view"),
     // Only poll while a test is actually in flight waiting on Meta's
     // delivery webhook -- see pages/overview.tsx for the same fix and why.
-    refetchInterval: (query) => {
-      const status = query.state.data?.data.readiness?.status;
+    refetchInterval: (state) => {
+      const status = state.state.data?.data.readiness?.status;
       return status === "testing" || status === "template_pending"
         ? 4000
         : false;
     },
     refetchOnWindowFocus: true
   });
+  const readiness = readinessData?.data.readiness;
   const canCreateBroadcast =
     readinessData?.data.canStartBroadcast === true ||
-    readinessData?.data.readiness.status === "ready";
-  const readiness = readinessData?.data.readiness;
-  const readinessBlocker = readinessData?.data.blocker;
-
-  const {
-    data,
-    isLoading,
-    isError,
-    isFetchingNextPage,
-    hasNextPage,
-    fetchNextPage,
-    refetch
-  } = useInfiniteQuery({
-    queryKey: ["broadcasts", selectedPhoneNumberId, query.trim()],
-    queryFn: ({ pageParam }) =>
-      getAllBroadcasts({
-        page: pageParam,
-        limit: BROADCASTS_PAGE_SIZE,
-        q: query,
-        ...(selectedPhoneNumberId !== ALL_WHATSAPP_NUMBERS
-          ? { phoneNumberId: selectedPhoneNumberId }
-          : {})
-      }),
-    initialPageParam: 1,
-    getNextPageParam: (lastPage) => {
-      const currentPage = lastPage.pagination.page;
-      return currentPage < lastPage.pagination.totalPages
-        ? currentPage + 1
-        : undefined;
-    },
-    refetchOnMount: "always",
-    refetchInterval: 5000
-  });
-  const { data: templatesData } = useQuery({
-    enabled: can("templates:view"),
-    queryKey: ["templates"],
-    queryFn: getAllTemplates
-  });
-  const {
-    data: subscribersData,
-    isFetchingNextPage: isFetchingMoreSubscribers,
-    hasNextPage: hasMoreSubscribers,
-    fetchNextPage: fetchMoreSubscribers
-  } = useInfiniteQuery({
-    queryKey: ["broadcast-subscribers", subscriberSearch],
-    queryFn: ({ pageParam }) =>
-      getAllSubscribers({
-        channel: "whatsapp",
-        page: pageParam,
-        limit: BROADCAST_SUBSCRIBERS_PAGE_SIZE,
-        q: subscriberSearch,
-        broadcastEligibility: "eligible"
-      }),
-    initialPageParam: 1,
-    getNextPageParam: (lastPage) => {
-      const currentPage = lastPage.pagination.page;
-      return currentPage < lastPage.pagination.totalPages
-        ? currentPage + 1
-        : undefined;
-    },
-    enabled: isCreateOpen && audienceMode === "specific" && can("contacts:view")
-  });
-  const { data: tagsData } = useQuery({
-    queryKey: ["subscriber-tags"],
-    queryFn: getTags
-  });
-  const { data: campaignsData } = useQuery({
-    queryKey: ["campaigns", "broadcast-audience"],
-    queryFn: () => listCampaigns({ sort: "recent", limit: 100 }),
-    enabled: isCreateOpen && audienceMode === "campaign" && can("contacts:view")
-  });
-  const { data: senderTriggersData, error: senderTriggersError } = useQuery({
-    queryKey: ["bot-canvas-triggers", senderPhoneNumberId],
-    queryFn: () => getBotCanvasTriggers(senderPhoneNumberId),
-    enabled:
-      Boolean(isCreateOpen && senderPhoneNumberId) && can("broadcasts:manage"),
-    refetchOnMount: "always"
-  });
-  const currentAudience = useMemo<BroadcastAudience>(() => {
-    if (audienceMode === "tags") {
-      return { mode: "tags", tags: selectedTags, tagMatch: "any" };
-    }
-    if (audienceMode === "specific") {
-      return { mode: "specific", subscriberIds: selectedSubscriberIds };
-    }
-    if (audienceMode === "campaign") {
-      return { mode: "campaign", campaignSourceIds: selectedCampaignSourceIds };
-    }
-    return { mode: "all" };
-  }, [
-    audienceMode,
-    selectedTags,
-    selectedSubscriberIds,
-    selectedCampaignSourceIds
-  ]);
-  const isAudienceSelectionReady =
-    audienceMode === "all" ||
-    (audienceMode === "tags" && selectedTags.length > 0) ||
-    (audienceMode === "specific" && selectedSubscriberIds.length > 0) ||
-    (audienceMode === "campaign" && selectedCampaignSourceIds.length > 0);
-  // Debounced so ticking several checkboxes in a row (tags, subscribers,
-  // campaigns) doesn't refire this query on every single click.
-  const [debouncedAudience, setDebouncedAudience] =
-    useState<BroadcastAudience>(currentAudience);
-  useEffect(() => {
-    const timeout = setTimeout(
-      () => setDebouncedAudience(currentAudience),
-      400
-    );
-    return () => clearTimeout(timeout);
-  }, [currentAudience]);
-  const { data: audienceCountData, isFetching: isAudienceCountLoading } =
-    useQuery({
-      queryKey: ["broadcast-audience-count", debouncedAudience],
-      queryFn: () => previewBroadcastAudienceCount(debouncedAudience),
-      enabled: isCreateOpen && isAudienceSelectionReady,
-      placeholderData: (previous) => previous
-    });
-  const audienceCount = audienceCountData?.data?.count;
-  const { data: selectedBroadcastData, refetch: refetchSelectedBroadcast } =
-    useQuery({
-      queryKey: ["broadcast-preview", selectedBroadcastId],
-      queryFn: () => getBroadcastById(selectedBroadcastId),
-      enabled: Boolean(selectedBroadcastId),
-      refetchInterval: selectedBroadcastId ? 3000 : false
-    });
-
-  const broadcasts = useMemo(() => {
-    const uniqueBroadcasts = new Map<string, Broadcast>();
-    data?.pages
-      .flatMap((page) => page.data.broadcasts || [])
-      .forEach((broadcast) => uniqueBroadcasts.set(broadcast._id, broadcast));
-    return Array.from(uniqueBroadcasts.values());
-  }, [data?.pages]);
-  const templates = useMemo(
-    () =>
-      (templatesData?.data.templates || []).filter(
-        (template) => template.status.toUpperCase() === "APPROVED"
-      ),
-    [templatesData?.data.templates]
-  );
-  const subscribers = useMemo(() => {
-    const uniqueSubscribers = new Map<string, Subscriber>();
-    subscribersData?.pages
-      .flatMap((page) => page.data.subscribers || [])
-      .filter((subscriber) => Boolean(subscriber.phoneNumber))
-      .forEach((subscriber) =>
-        uniqueSubscribers.set(subscriber._id, subscriber)
-      );
-    return Array.from(uniqueSubscribers.values());
-  }, [subscribersData?.pages]);
-  const tags = useMemo(
-    () => (tagsData?.data.tags || []).map((tag) => tag.name),
-    [tagsData?.data.tags]
-  );
-  const campaigns = campaignsData?.data.campaigns || [];
-  const filteredBroadcasts = broadcasts;
-
-  const selectedBroadcast = selectedBroadcastData?.data.broadcast;
-  const selectedTemplate = useMemo(
-    () => templates.find((template) => template.templateId === templateId),
-    [templateId, templates]
-  );
-  const bodyVariables = useMemo(
-    () => getTemplateBodyVariables(selectedTemplate),
-    [selectedTemplate]
-  );
-  const quickReplyButtons = useMemo(
-    () =>
-      getButtonsComponent(selectedTemplate?.components || [])
-        ?.buttons?.map((button, index) => ({ button, index }))
-        .filter(({ button }) => button.type === "QUICK_REPLY") || [],
-    [selectedTemplate?.components]
-  );
-  const senderTriggerKeys = useMemo(
-    () => new Set(senderTriggersData?.data?.triggerKeys || []),
-    [senderTriggersData?.data?.triggerKeys]
-  );
-  // "Main menu" is what the backend runs when no block is picked; sending
-  // its key explicitly keeps every quick reply routed.
-  const defaultTriggerKey =
-    senderTriggersData?.data?.defaultTriggerKey || "DEFAULT";
-  const blockTriggers = useMemo(
-    () =>
-      (senderTriggersData?.data?.triggers || []).filter(
-        (trigger) => trigger.triggerKey !== defaultTriggerKey
-      ),
-    [defaultTriggerKey, senderTriggersData?.data?.triggers]
-  );
-  const selectedQuickReplyRoutes = useMemo(
-    () =>
-      quickReplyButtons.map(({ button, index }) => {
-        const picked = quickReplyRoutes[index];
-        return {
-          index,
-          label: button.text || `Quick reply ${index + 1}`,
-          triggerKey:
-            picked && senderTriggerKeys.has(picked) ? picked : defaultTriggerKey
-        };
-      }),
-    [defaultTriggerKey, quickReplyButtons, quickReplyRoutes, senderTriggerKeys]
-  );
-  const senderNumbers = useMemo(
-    () => whatsappNumbers.filter(isUsableWhatsAppNumber),
-    [whatsappNumbers]
-  );
-  const senderNumber = senderNumbers.find(
-    (number) => number.phoneNumberId === senderPhoneNumberId
-  );
-  const { effectiveCanvasFor } = useLiveFlows();
-  const senderFlowName = senderNumber
-    ? effectiveCanvasFor(senderNumber)?.name
-    : undefined;
-  const hasNoLiveFlow = isNoPublishedFlowError(senderTriggersError);
-  const unmappedVariables = bodyVariables.filter((key) =>
-    isVariableUnmapped(variableMappings[key] || defaultVariableMapping(key))
-  );
-  const previewValues = useMemo(
-    () =>
-      Object.fromEntries(
-        bodyVariables.map((key) => {
-          const mapping = variableMappings[key] || defaultVariableMapping(key);
-          const sample = getTemplateBodyExample(selectedTemplate, key);
-          const fieldLabel = subscriberFieldOptions.find(
-            (option) => option.value === mapping.path
-          )?.label;
-          const value: PreviewValue = isVariableUnmapped(mapping)
-            ? { text: sample || `{{${key}}}`, isPlaceholder: true }
-            : mapping.source === "literal"
-              ? { text: mapping.literal.trim(), isPlaceholder: false }
-              : {
-                  text: sample || `[${fieldLabel || mapping.path}]`,
-                  isPlaceholder: false
-                };
-          return [key, value];
-        })
-      ),
-    [bodyVariables, selectedTemplate, variableMappings]
-  );
-  const createBlockedReason = unmappedVariables.length
-    ? "Map every template variable first."
-    : quickReplyButtons.length && hasNoLiveFlow
-      ? "Quick replies need a live flow on this number. Set one in Bot → Flows."
-      : "";
-  const isLoadingTriggers =
-    quickReplyButtons.length > 0 &&
-    Boolean(senderPhoneNumberId) &&
-    !senderTriggersData &&
-    !senderTriggersError;
-
-  // Default to the header's number, skipping one Meta can't send from.
-  useEffect(() => {
-    if (!isCreateOpen || senderPhoneNumberId) return;
-    const preferred =
-      effectiveNumber && !isPaymentBlocked(effectiveNumber)
-        ? effectiveNumber
-        : senderNumbers.find((number) => !isPaymentBlocked(number));
-    if (preferred?.phoneNumberId) {
-      setSenderPhoneNumberId(preferred.phoneNumberId);
-    }
-  }, [effectiveNumber, isCreateOpen, senderNumbers, senderPhoneNumberId]);
-
-  useEffect(() => {
-    if (!selectedTemplate) {
-      setVariableMappings({});
-      setQuickReplyRoutes({});
-      return;
-    }
-
-    setVariableMappings((current) =>
-      bodyVariables.reduce<Record<string, BroadcastVariableMapping>>(
-        (acc, key) => {
-          acc[key] = current[key] || defaultVariableMapping(key);
-          return acc;
-        },
-        {}
-      )
-    );
-    setQuickReplyRoutes({});
-  }, [bodyVariables, selectedTemplate]);
-
-  const { mutate: createDraft, isPending: isCreating } = useMutation({
-    mutationFn: createBroadcast,
-    meta: { showToast: false },
-    onSuccess: (response) => {
-      setBroadcastRetryPreference(
-        response.data.broadcast._id,
-        retryOnMessagingLimit
-      );
-      toast.success("Broadcast draft created");
-      setIsCreateOpen(false);
-      setSelectedBroadcastId(response.data.broadcast._id);
-      setBroadcastName("");
-      setTemplateId("");
-      setVariableMappings({});
-      setQuickReplyRoutes({});
-      setAudienceMode("all");
-      setSelectedTags([]);
-      setSelectedSubscriberIds([]);
-      setRetryOnMessagingLimit(true);
-      refetch();
-    },
-    onError: (error: AxiosError<{ message?: string }>) => {
-      toast.error(
-        error.response?.data?.message || "Broadcast draft could not be created."
-      );
-    }
-  });
+    readiness?.status === "ready";
   const { mutate: runReadinessTest, isPending: isTestingReadiness } =
     useMutation({
       mutationFn: () => testWhatsAppOutboundReadiness(senderRecordId),
@@ -567,208 +178,249 @@ function BroadcastsPageContent() {
         );
         await refetchReadiness();
       },
-      onError: (error: AxiosError<{ message?: string }>) => {
+      onError: (error: AxiosError<{ message?: string }>) =>
         toast.error(
           error.response?.data?.message ||
             "Broadcast verification could not be started."
-        );
-      }
-    });
-  const { mutate: consentToRetry, isPending: isConsentingToRetry } =
-    useMutation({
-      mutationFn: consentToBroadcastMessagingLimitRetry,
-      meta: { showToast: false },
-      onSuccess: async (response) => {
-        toast.success(response.message);
-        setBroadcastRetryPreference(response.data.broadcastId, false);
-        await Promise.all([refetch(), refetchSelectedBroadcast()]);
-      },
-      onError: (error: AxiosError<{ message?: string }>, broadcastId) => {
-        setBroadcastRetryPreference(broadcastId, false);
-        toast.error(
-          error.response?.data?.message || "Couldn't resume this broadcast."
-        );
-      }
+        )
     });
 
-  useEffect(() => {
-    const retryCandidate = broadcasts.find(
-      (broadcast) =>
-        broadcast.status === "paused_limit" &&
-        broadcast.messagingLimitRetry?.status === "awaiting_consent" &&
-        hasBroadcastRetryPreference(broadcast._id)
-    );
-    if (retryCandidate && !isConsentingToRetry) {
-      consentToRetry(retryCandidate._id);
-    }
-  }, [broadcasts, consentToRetry, isConsentingToRetry]);
+  // ---------- templates (for the "no approved template yet" nudge) ----------
+  const { data: templatesData } = useQuery({
+    queryKey: ["templates", orgId],
+    queryFn: getAllTemplates,
+    enabled: Boolean(orgId) && can("templates:view")
+  });
+  const hasApprovedTemplate = (templatesData?.data.templates || []).some(
+    (template) => template.status.toUpperCase() === "APPROVED"
+  );
+
+  // ---------- list ----------
+  const activeTab =
+    statusTabs.find((item) => item.value === tab) || statusTabs[0];
+  const {
+    data,
+    isLoading,
+    isError,
+    error,
+    refetch,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage
+  } = useInfiniteQuery({
+    queryKey: [
+      "broadcasts",
+      selectedPhoneNumberId,
+      query,
+      activeTab.server || ""
+    ],
+    queryFn: ({ pageParam }) =>
+      getAllBroadcasts({
+        page: pageParam,
+        limit: PAGE_SIZE,
+        ...(query ? { q: query } : {}),
+        ...(activeTab.server ? { status: activeTab.server } : {}),
+        ...(selectedPhoneNumberId !== ALL_WHATSAPP_NUMBERS
+          ? { phoneNumberId: selectedPhoneNumberId }
+          : {})
+      }),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) =>
+      lastPage.pagination.page < lastPage.pagination.totalPages
+        ? lastPage.pagination.page + 1
+        : undefined,
+    refetchOnMount: "always",
+    refetchInterval: 5000
+  });
+  const broadcasts = useMemo(() => {
+    const unique = new Map<string, Broadcast>();
+    data?.pages
+      .flatMap((page) => page.data.broadcasts || [])
+      .forEach((broadcast) => unique.set(broadcast._id, broadcast));
+    const all = Array.from(unique.values());
+    return activeTab.statuses
+      ? all.filter((broadcast) =>
+          activeTab.statuses?.includes(broadcast.status)
+        )
+      : all;
+  }, [activeTab.statuses, data?.pages]);
+  const { consent, isConsenting } = useAutoConsentRetry(broadcasts);
 
   useEffect(() => {
-    const sentinel = broadcastLoadMoreRef.current;
+    const sentinel = loadMoreRef.current;
     if (!sentinel || !hasNextPage) return;
-
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting && !isFetchingNextPage) {
-          fetchNextPage();
-        }
+        if (entry.isIntersecting && !isFetchingNextPage) fetchNextPage();
       },
       { rootMargin: "240px 0px" }
     );
-
     observer.observe(sentinel);
     return () => observer.disconnect();
   }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
 
+  // ---------- wizard (deep links: ?new=1&templateId=…, ?duplicate=…) ----------
+  const duplicateId =
+    typeof router.query.duplicate === "string" ? router.query.duplicate : "";
+  const linkedTemplateId =
+    typeof router.query.templateId === "string" ? router.query.templateId : "";
+  const wantsNew = router.query.new === "1";
+  const { data: duplicateData, isLoading: isDuplicateLoading } = useQuery({
+    queryKey: ["broadcast-duplicate-source", duplicateId],
+    queryFn: () => getBroadcastById(duplicateId, { limit: 1 }),
+    enabled: Boolean(duplicateId)
+  });
   useEffect(() => {
-    const sentinel = subscriberLoadMoreRef.current;
-    if (!sentinel || !hasMoreSubscribers || audienceMode !== "specific") return;
+    if (
+      (wantsNew || (duplicateId && !isDuplicateLoading)) &&
+      canCreateBroadcast
+    ) {
+      setWizardKey((key) => key + 1);
+      setIsWizardOpen(true);
+    }
+  }, [canCreateBroadcast, duplicateId, isDuplicateLoading, wantsNew]);
 
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting && !isFetchingMoreSubscribers) {
-          fetchMoreSubscribers();
-        }
-      },
-      { rootMargin: "120px 0px" }
+  const closeWizard = (open: boolean) => {
+    setIsWizardOpen(open);
+    if (!open && (wantsNew || duplicateId)) {
+      router.replace("/broadcasts", undefined, { shallow: true });
+    }
+  };
+  const openWizard = () => {
+    setWizardKey((key) => key + 1);
+    setIsWizardOpen(true);
+  };
+
+  const errorText =
+    (error as AxiosError<{ message?: string }> | null)?.response?.data
+      ?.message || "Broadcasts couldn't be loaded.";
+
+  const renderActions = (broadcast: Broadcast) => {
+    const actions = broadcastActionsFor(broadcast);
+    const stop = (event: React.MouseEvent) => event.stopPropagation();
+    return (
+      <div className="flex items-center justify-end gap-1" onClick={stop}>
+        {actions.canStart && (
+          <Button size="sm" onClick={() => setStartTarget(broadcast)}>
+            <PlayCircle className="size-4" />
+            Start or schedule
+          </Button>
+        )}
+        {actions.needsRetryConsent && (
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={isConsenting}
+            onClick={() => consent(broadcast._id)}
+          >
+            <RotateCcw className="size-4" />
+            Retry
+          </Button>
+        )}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-8"
+              aria-label="Broadcast actions"
+            >
+              <MoreHorizontal className="size-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem asChild>
+              <Link href={`/broadcasts/${broadcast._id}`}>View</Link>
+            </DropdownMenuItem>
+            {actions.canDuplicate && (
+              <DropdownMenuItem
+                onSelect={() =>
+                  router.push(
+                    `/broadcasts?duplicate=${broadcast._id}`,
+                    undefined,
+                    {
+                      shallow: true
+                    }
+                  )
+                }
+              >
+                <Copy className="size-4" />
+                Duplicate
+              </DropdownMenuItem>
+            )}
+            {actions.canDiscard && (
+              <DropdownMenuItem
+                className="text-destructive"
+                onSelect={() => setCancelTarget(broadcast)}
+              >
+                <XCircle className="size-4" />
+                Discard
+              </DropdownMenuItem>
+            )}
+            {actions.canCancelSchedule && (
+              <DropdownMenuItem
+                className="text-destructive"
+                onSelect={() => setCancelTarget(broadcast)}
+              >
+                <XCircle className="size-4" />
+                Cancel schedule
+              </DropdownMenuItem>
+            )}
+            {actions.canCancel && (
+              <DropdownMenuItem
+                className="text-destructive"
+                onSelect={() => setCancelTarget(broadcast)}
+              >
+                <XCircle className="size-4" />
+                Cancel
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     );
-
-    observer.observe(sentinel);
-    return () => observer.disconnect();
-  }, [
-    audienceMode,
-    fetchMoreSubscribers,
-    hasMoreSubscribers,
-    isFetchingMoreSubscribers
-  ]);
-
-  const { mutate: startSelected, isPending: isStarting } = useMutation({
-    mutationFn: startBroadcast,
-    meta: { showToast: false },
-    onSuccess: () => {
-      toast.success("Broadcast accepted for processing");
-      setScheduleDate(undefined);
-      setScheduleTime("09:00");
-      refetch();
-      refetchSelectedBroadcast();
-    },
-    onError: (error: AxiosError<{ message?: string }>) => {
-      toast.error(
-        error.response?.data?.message || "Broadcast could not be started."
-      );
-    }
-  });
-
-  const { mutate: cancelSelected, isPending: isCanceling } = useMutation({
-    mutationFn: cancelBroadcast,
-    meta: { showToast: false },
-    onSuccess: () => {
-      toast.success("Broadcast canceled");
-      setCancelTarget(null);
-      refetch();
-      refetchSelectedBroadcast();
-    },
-    onError: (error: AxiosError<{ message?: string }>) => {
-      toast.error(
-        error.response?.data?.message || "Broadcast could not be canceled."
-      );
-    }
-  });
-
-  const handleCreate = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-
-    if (!canCreateBroadcast) {
-      toast.error("Complete outbound verification before creating broadcasts.");
-      return;
-    }
-    if (!broadcastName.trim() || !templateId) {
-      toast.error("Broadcast name and template are required");
-      return;
-    }
-    if (!senderPhoneNumberId) {
-      toast.error("Select the WhatsApp sender number");
-      return;
-    }
-    if (createBlockedReason) {
-      toast.error(createBlockedReason);
-      return;
-    }
-
-    const audience = currentAudience;
-
-    const componentsResult = buildBroadcastComponents(
-      bodyVariables,
-      variableMappings
-    );
-    if (!componentsResult.ok) {
-      toast.error(componentsResult.error);
-      return;
-    }
-
-    createDraft({
-      name: broadcastName.trim(),
-      templateId,
-      audience,
-      components: componentsResult.components,
-      phoneNumberId: senderPhoneNumberId,
-      retryOnRecipientEngagementLimit,
-      ...(selectedQuickReplyRoutes.length
-        ? { quickReplyRoutes: selectedQuickReplyRoutes }
-        : {})
-    });
   };
 
-  const canStart =
-    selectedBroadcast?.status === "draft" ||
-    selectedBroadcast?.status === "scheduled";
-  const [scheduleHour, scheduleMinute] = scheduleTime.split(":");
-
-  const handleStartNow = () => {
-    if (!selectedBroadcast) return;
-    startSelected({
-      broadcastId: selectedBroadcast._id
-    });
-  };
-
-  const handleScheduleBroadcast = () => {
-    if (!selectedBroadcast) return;
-    if (!scheduleDate) {
-      toast.error("Choose a date before scheduling this broadcast.");
-      return;
-    }
-
-    startSelected({
-      broadcastId: selectedBroadcast._id,
-      payload: {
-        scheduledLocal: getLocalDateValue(scheduleDate, scheduleTime),
-        timezone: "Asia/Kolkata"
-      }
-    });
-  };
+  const newBroadcastButton = !canCreateBroadcast ? null : hasApprovedTemplate ||
+    !can("templates:view") ? (
+    <Button onClick={openWizard}>
+      <Plus className="size-4" />
+      New broadcast
+    </Button>
+  ) : (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button>
+          <Plus className="size-4" />
+          New broadcast
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-64 space-y-3 text-sm">
+        <p>You need an approved template first.</p>
+        <Button asChild size="sm" className="w-full">
+          <Link href="/templates/create">Create template</Link>
+        </Button>
+      </PopoverContent>
+    </Popover>
+  );
 
   return (
     <AppLayout>
-      <div className="mx-auto max-w-7xl space-y-6">
+      <div className="mx-auto max-w-7xl space-y-5 pb-20 sm:pb-0">
         <section className="flex flex-col gap-4 rounded-lg bg-white p-5 shadow-xs lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-sm font-medium text-primary">Broadcasts</p>
-            <h1 className="mt-1 font-heading text-3xl font-semibold">
-              Broadcast campaigns
-            </h1>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Create drafts, schedule sends, and track WhatsApp broadcast
-              delivery.
+            <h1 className="font-heading text-2xl font-semibold">Broadcasts</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Send an approved template to many contacts at once.
             </p>
           </div>
-          <div className="flex flex-row flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {paymentMethodUrl ? (
               <Button variant="outline" className="whitespace-nowrap" asChild>
                 <a
                   href={paymentMethodUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex gap-2 items-center"
                 >
                   {readiness?.status === "ready" ? (
                     <>
@@ -783,22 +435,8 @@ function BroadcastsPageContent() {
                   )}
                 </a>
               </Button>
-            ) : (
-              <Button
-                variant="outline"
-                disabled
-                tooltip="Connect a WhatsApp Business account before adding its payment method"
-              >
-                <CreditCard className="size-4" />
-                Add payment method
-              </Button>
-            )}
-            {canCreateBroadcast && (
-              <Button onClick={() => setIsCreateOpen(true)}>
-                <Plus className="size-4" />
-                New broadcast
-              </Button>
-            )}
+            ) : null}
+            <div className="hidden sm:block">{newBroadcastButton}</div>
           </div>
         </section>
 
@@ -816,1125 +454,254 @@ function BroadcastsPageContent() {
                         : "Complete broadcast setup"}
                 </p>
                 <p className="mt-1 max-w-3xl text-sm text-amber-900/80">
-                  {readinessBlocker?.message ||
+                  {readinessData?.data.blocker?.message ||
                     readiness?.failureMessage ||
                     "We send a one-time test template to verify that this sender can start paid business messages. The test costs approximately Rs. 0.115."}
                 </p>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
-                {paymentMethodUrl && (
-                  <Button variant="outline" asChild>
-                    <a
-                      href={paymentMethodUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex gap-2 items-center"
-                    >
-                      <CreditCard className="size-4" />
-                      Add payment method
-                    </a>
-                  </Button>
-                )}
-                {readiness?.status !== "testing" && (
-                  <Button
-                    disabled={isTestingReadiness}
-                    onClick={() => runReadinessTest()}
-                  >
-                    <RotateCcw
-                      className={cn(
-                        "size-4",
-                        isTestingReadiness && "animate-spin"
-                      )}
-                    />
-                    {readiness?.status === "template_pending"
-                      ? "Check approval and continue"
-                      : "Run verification"}
-                  </Button>
-                )}
-              </div>
+              {readiness?.status !== "testing" && (
+                <Button
+                  disabled={isTestingReadiness}
+                  onClick={() => runReadinessTest()}
+                >
+                  <RotateCcw
+                    className={cn(
+                      "size-4",
+                      isTestingReadiness && "animate-spin"
+                    )}
+                  />
+                  {readiness?.status === "template_pending"
+                    ? "Check approval and continue"
+                    : "Run verification"}
+                </Button>
+              )}
             </div>
           </section>
         )}
 
-        <section className="rounded-lg bg-white p-4 shadow-xs">
-          <div className="relative w-full lg:max-w-md">
-            <Search className="absolute left-3 top-3.5 size-4 text-muted-foreground" />
-            <Input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search broadcasts by name, status, template"
-              className="h-12 rounded-sm border-0 bg-muted/70 pl-9 shadow-none"
-            />
+        <section className="space-y-3 rounded-lg bg-white p-4 shadow-xs">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+            <div className="relative lg:w-72">
+              <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={searchInput}
+                onChange={(event) => setSearchInput(event.target.value)}
+                placeholder="Search by name"
+                aria-label="Search broadcasts by name"
+                className="h-10 pl-9"
+              />
+            </div>
+            <div className="flex gap-1 overflow-x-auto pb-1 lg:pb-0">
+              {statusTabs.map((item) => (
+                <button
+                  key={item.value}
+                  type="button"
+                  onClick={() => setTab(item.value)}
+                  className={cn(
+                    "shrink-0 cursor-pointer rounded-full px-3 py-1.5 text-sm font-medium transition",
+                    tab === item.value
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  )}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+            {selectedPhoneNumberId !== ALL_WHATSAPP_NUMBERS && (
+              <span className="inline-flex w-fit items-center gap-1 rounded-full bg-muted px-3 py-1 text-xs font-medium lg:ml-auto">
+                From{" "}
+                {selectedNumber?.displayPhoneNumber || selectedPhoneNumberId}
+                <button
+                  type="button"
+                  aria-label="Show broadcasts from every number"
+                  className="cursor-pointer rounded-full p-0.5 hover:bg-white"
+                  onClick={() => setSelectedPhoneNumberId(ALL_WHATSAPP_NUMBERS)}
+                >
+                  <X className="size-3" />
+                </button>
+              </span>
+            )}
           </div>
         </section>
 
-        {isError && (
-          <QueryErrorState message="Broadcasts could not be loaded for this organisation." />
-        )}
-
-        <section className="rounded-lg bg-white p-2 shadow-xs">
-          {isLoading ? (
-            <div className="space-y-3 p-3">
-              {Array.from({ length: 6 }).map((_, index) => (
-                <Skeleton key={index} className="h-12" />
-              ))}
-            </div>
-          ) : filteredBroadcasts.length ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-primary">
-                    <th className="p-4">Name</th>
-                    <th className="p-4">Template</th>
-                    <th className="p-4">Status</th>
-                    <th className="p-4">Sender</th>
-                    <th className="p-4">Recipients</th>
-                    <th className="p-4">Created</th>
-                    <th className="p-4 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredBroadcasts.map((broadcast) => (
-                    <tr key={broadcast._id} className="border-t">
-                      <td className="p-4">
-                        <p className="font-medium">{broadcast.name}</p>
-                        {(broadcast.lastError ||
-                          broadcast.messagingLimitRetry
-                            ?.lastFailureMessage) && (
-                          <p
-                            className="mt-1 max-w-64 truncate text-xs text-destructive"
-                            title={
-                              broadcast.lastError ||
-                              broadcast.messagingLimitRetry?.lastFailureMessage
-                            }
-                          >
-                            {broadcast.lastError ||
-                              broadcast.messagingLimitRetry?.lastFailureMessage}
-                          </p>
-                        )}
-                      </td>
-                      <td className="p-4">{broadcast.template?.name || "-"}</td>
-                      <td className="p-4">
-                        <span
-                          className={cn(
-                            "rounded-sm px-2 py-1 text-xs font-medium capitalize",
-                            statusClasses[broadcast.status] ||
-                              "bg-muted text-muted-foreground"
-                          )}
+        {isError ? (
+          <div className="flex flex-col gap-3 rounded-lg border border-destructive/20 bg-destructive/5 p-4 sm:flex-row sm:items-center">
+            <ShieldAlert className="size-5 shrink-0 text-destructive" />
+            <p className="flex-1 text-sm text-destructive">{errorText}</p>
+            <Button variant="outline" size="sm" onClick={() => refetch()}>
+              Retry
+            </Button>
+          </div>
+        ) : (
+          <section className="rounded-lg bg-white shadow-xs">
+            {isLoading ? (
+              <div className="space-y-3 p-4">
+                {Array.from({ length: 6 }).map((_, index) => (
+                  <Skeleton key={index} className="h-14" />
+                ))}
+              </div>
+            ) : broadcasts.length ? (
+              <>
+                <div className="hidden md:block">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-left text-xs text-muted-foreground">
+                        <th className="px-4 py-3 font-medium">Broadcast</th>
+                        <th className="px-4 py-3 font-medium">Status</th>
+                        <th className="px-4 py-3 font-medium">Progress</th>
+                        <th className="px-4 py-3 font-medium">Sender</th>
+                        <th className="px-4 py-3 font-medium">When</th>
+                        <th className="px-4 py-3" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {broadcasts.map((broadcast) => (
+                        <tr
+                          key={broadcast._id}
+                          onClick={() =>
+                            router.push(`/broadcasts/${broadcast._id}`)
+                          }
+                          className="cursor-pointer border-b transition last:border-0 hover:bg-muted/40"
                         >
-                          {broadcast.status}
-                        </span>
-                      </td>
-                      <td className="p-4">
-                        {broadcast.whatsappSender?.displayPhoneNumber ||
-                          broadcast.whatsappSender?.phoneNumberId ||
-                          broadcast.displayPhoneNumber ||
-                          broadcast.whatsappPhoneNumberId ||
-                          broadcast.phoneNumberId ||
-                          "-"}
-                      </td>
-                      <td className="p-4">
-                        {broadcast.stats?.totalRecipients || 0}
-                      </td>
-                      <td className="p-4">{formatDate(broadcast.createdAt)}</td>
-                      <td className="p-4">
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            tooltip="View broadcast details"
-                            onClick={() =>
-                              router.push(`/broadcasts/${broadcast._id}`)
-                            }
-                          >
-                            <Eye className="size-4" />
-                          </Button>
-                          {broadcast.status === "paused_limit" &&
-                            broadcast.messagingLimitRetry?.status ===
-                              "awaiting_consent" && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                tooltip="Consent to retry unfinished recipients after Meta's recovery period"
-                                disabled={isConsentingToRetry}
-                                onClick={() => consentToRetry(broadcast._id)}
-                              >
-                                <RotateCcw className="size-4" />
-                              </Button>
-                            )}
-                          {["draft", "scheduled", "processing"].includes(
-                            broadcast.status
-                          ) && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              tooltip="Cancel this broadcast"
-                              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                              onClick={() => setCancelTarget(broadcast)}
-                            >
-                              <XCircle className="size-4" />
-                            </Button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div ref={broadcastLoadMoreRef} className="h-px" />
-              {isFetchingNextPage && (
-                <div className="space-y-3 border-t p-3">
-                  {Array.from({ length: 3 }).map((_, index) => (
-                    <Skeleton key={index} className="h-12" />
-                  ))}
-                </div>
-              )}
-              {!hasNextPage && broadcasts.length > 0 && (
-                <p className="border-t p-4 text-center text-xs text-muted-foreground">
-                  All matching broadcasts are loaded.
-                </p>
-              )}
-            </div>
-          ) : (
-            <EmptyState
-              icon={Megaphone}
-              title="No broadcasts found"
-              description="Create a broadcast to reach subscribers by tag, campaign, or your full audience."
-            />
-          )}
-        </section>
-      </div>
-
-      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-        <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden sm:max-w-5xl">
-          <DialogHeader>
-            <DialogTitle>Create broadcast draft</DialogTitle>
-          </DialogHeader>
-          <form
-            onSubmit={handleCreate}
-            className="flex min-h-0 flex-1 flex-col gap-4"
-          >
-            {/* Desktop: form scrolls on the left, preview stays put on the
-                right. Mobile: one scrolling column, preview behind a toggle. */}
-            <div className="grid min-h-0 flex-1 gap-5 overflow-x-hidden overflow-y-auto pr-1 lg:grid-cols-[minmax(0,1fr)_340px] lg:grid-rows-[minmax(0,1fr)] lg:overflow-hidden lg:pr-0">
-              <aside className="order-first min-w-0 lg:order-last lg:overflow-y-auto">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="w-full lg:hidden"
-                  onClick={() => setIsPreviewOpen((current) => !current)}
-                >
-                  <Eye className="size-4" />
-                  {isPreviewOpen ? "Hide preview" : "Preview"}
-                </Button>
-                <div
-                  className={cn(
-                    "mt-3 space-y-2 lg:mt-0 lg:block",
-                    !isPreviewOpen && "hidden"
-                  )}
-                >
-                  {selectedTemplate && (
-                    <p className="truncate text-xs text-muted-foreground">
-                      <span className="font-medium text-foreground">
-                        {selectedTemplate.name}
-                      </span>{" "}
-                      · {selectedTemplate.language} ·{" "}
-                      {selectedTemplate.category} ·{" "}
-                      {bodyVariables.length
-                        ? `${bodyVariables.length} variable${bodyVariables.length > 1 ? "s" : ""}`
-                        : "No variables"}
-                    </p>
-                  )}
-                  <BroadcastTemplatePreview
-                    template={selectedTemplate}
-                    values={previewValues}
-                  />
-                </div>
-              </aside>
-
-              <div className="min-w-0 space-y-5 lg:overflow-y-auto lg:pr-1">
-                <div className="space-y-2">
-                  <Label>Name</Label>
-                  <Input
-                    value={broadcastName}
-                    onChange={(event) => setBroadcastName(event.target.value)}
-                    placeholder="E.g. July product update"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Template</Label>
-                  <Select
-                    value={templateId}
-                    onValueChange={(value) => {
-                      setTemplateId(value);
-                      setQuickReplyRoutes({});
-                    }}
-                  >
-                    <SelectTrigger className="h-11 w-full">
-                      <SelectValue placeholder="Select template" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {templates.map((template) => (
-                        <SelectItem
-                          key={template.templateId}
-                          value={template.templateId}
-                        >
-                          {template.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>WhatsApp sender</Label>
-                  <BroadcastSenderSelect
-                    numbers={senderNumbers}
-                    value={senderPhoneNumberId}
-                    onValueChange={(value) => {
-                      setSenderPhoneNumberId(value);
-                      // Blocks belong to the sender's flow, so start over.
-                      setQuickReplyRoutes({});
-                    }}
-                  />
-                </div>
-
-                {selectedTemplate &&
-                  quickReplyButtons.length > 0 &&
-                  (hasNoLiveFlow ? (
-                    <div className="flex gap-2.5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
-                      <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
-                      <div className="space-y-1">
-                        <p>
-                          Quick replies need a live flow on this number. Without
-                          one, Meta delivers the buttons but nothing happens
-                          when customers tap them.
-                        </p>
-                        <Link
-                          href="/bot/flows"
-                          className="font-medium text-amber-900 underline-offset-2 hover:underline"
-                        >
-                          Set a flow →
-                        </Link>
-                      </div>
-                    </div>
-                  ) : (
-                    <section className="space-y-3 rounded-lg border p-4">
-                      <div>
-                        <p className="text-sm font-semibold">
-                          Quick reply triggers
-                        </p>
-                        <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                          When someone taps a button, the bot starts the flow
-                          block you choose.
-                          {senderNumber && (
-                            <>
-                              {" "}
-                              This uses the flow live on{" "}
-                              {senderNumber.displayPhoneNumber ||
-                                senderNumber.phoneNumberId}
-                              {senderFlowName ? `: ${senderFlowName}` : ""}.
-                            </>
-                          )}
-                        </p>
-                      </div>
-                      <div className="space-y-2">
-                        {quickReplyButtons.map(({ button, index }) => {
-                          const picked = quickReplyRoutes[index];
-                          const value =
-                            picked && senderTriggerKeys.has(picked)
-                              ? picked
-                              : MAIN_MENU_ROUTE;
-                          const groups = blockTriggers.reduce<
-                            Record<string, typeof blockTriggers>
-                          >((acc, trigger) => {
-                            const type = String(trigger.blockType || "other");
-                            (acc[type] ||= []).push(trigger);
-                            return acc;
-                          }, {});
-
-                          return (
-                            <div
-                              key={`${button.text}-${index}`}
-                              className="grid gap-2 rounded-md bg-muted/40 p-3 sm:grid-cols-[minmax(0,1fr)_minmax(220px,1fr)] sm:items-center"
-                            >
-                              <p className="truncate text-sm font-medium">
-                                {button.text || `Quick reply ${index + 1}`}
-                              </p>
-                              <Select
-                                value={value}
-                                disabled={
-                                  !senderPhoneNumberId || isLoadingTriggers
-                                }
-                                onValueChange={(next) =>
-                                  setQuickReplyRoutes((current) => ({
-                                    ...current,
-                                    [index]:
-                                      next === MAIN_MENU_ROUTE ? "" : next
-                                  }))
-                                }
-                              >
-                                <SelectTrigger className="w-full bg-white">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value={MAIN_MENU_ROUTE}>
-                                    Main menu (default)
-                                  </SelectItem>
-                                  {blockTriggers.length > 0 && (
-                                    <SelectSeparator />
-                                  )}
-                                  {blockTriggers.length > GROUP_TRIGGERS_AFTER
-                                    ? Object.entries(groups).map(
-                                        ([type, items]) => (
-                                          <SelectGroup key={type}>
-                                            <SelectLabel>
-                                              {blockTypeLabel(type)}
-                                            </SelectLabel>
-                                            {items.map((trigger) => (
-                                              <SelectItem
-                                                key={trigger.triggerKey}
-                                                value={trigger.triggerKey}
-                                              >
-                                                {trigger.name}
-                                              </SelectItem>
-                                            ))}
-                                          </SelectGroup>
-                                        )
-                                      )
-                                    : blockTriggers.map((trigger) => (
-                                        <SelectItem
-                                          key={trigger.triggerKey}
-                                          value={trigger.triggerKey}
-                                        >
-                                          {trigger.name}
-                                          <span className="ml-2 rounded-sm bg-muted px-1.5 text-[11px] text-muted-foreground">
-                                            {blockTypeLabel(
-                                              String(trigger.blockType || "")
-                                            )}
-                                          </span>
-                                        </SelectItem>
-                                      ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </section>
-                  ))}
-
-                {selectedTemplate && bodyVariables.length > 0 && (
-                  <section className="space-y-3 rounded-lg border p-4">
-                    <div>
-                      <p className="text-sm font-semibold">
-                        Template variables
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Fill each placeholder from a subscriber field or fixed
-                        text.
-                        {unmappedVariables.length > 0 && (
-                          <span className="ml-1 font-medium text-amber-700">
-                            {unmappedVariables.length} not mapped yet.
-                          </span>
-                        )}
-                      </p>
-                    </div>
-                    <div className="space-y-2">
-                      {bodyVariables.map((key) => {
-                        const mapping =
-                          variableMappings[key] || defaultVariableMapping(key);
-                        const sample = getTemplateBodyExample(
-                          selectedTemplate,
-                          key
-                        );
-                        const isFixed = mapping.source === "literal";
-                        const isUnmapped = isVariableUnmapped(mapping);
-                        const updateMapping = (
-                          patch: Partial<BroadcastVariableMapping>
-                        ) =>
-                          setVariableMappings((current) => ({
-                            ...current,
-                            [key]: { ...mapping, ...patch }
-                          }));
-
-                        return (
-                          <div
-                            key={key}
-                            className={cn(
-                              "space-y-2 rounded-md bg-muted/40 p-3",
-                              isUnmapped && "bg-amber-50 ring-1 ring-amber-300"
-                            )}
-                          >
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <span className="font-mono text-sm font-medium">{`{{${key}}}`}</span>
-                              {isUnmapped && (
-                                <span className="text-xs font-medium text-amber-700">
-                                  Not mapped
+                          <td className="max-w-72 px-4 py-3">
+                            <p className="truncate font-medium">
+                              {broadcast.name}
+                            </p>
+                            <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                              <span className="truncate">
+                                {broadcast.template?.name}
+                              </span>
+                              <TemplateCategoryBadge
+                                category={broadcast.template?.category}
+                              />
+                            </p>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex flex-col items-start gap-1">
+                              <BroadcastStatusBadge
+                                status={broadcast.status}
+                                scheduledAt={broadcast.scheduledAt}
+                              />
+                              {(broadcast.stats?.deferredRecipients || 0) >
+                                0 && (
+                                <span className={retryingPillClass}>
+                                  Retrying
                                 </span>
                               )}
-                              <div
-                                role="radiogroup"
-                                aria-label={`Source for {{${key}}}`}
-                                className="ml-auto inline-flex rounded-md bg-white p-0.5 shadow-xs"
-                              >
-                                {(
-                                  [
-                                    ["subscriber_field", "Subscriber field"],
-                                    ["literal", "Fixed text"]
-                                  ] as const
-                                ).map(([source, label]) => {
-                                  const isActive =
-                                    source === "literal" ? isFixed : !isFixed;
-                                  return (
-                                    <button
-                                      key={source}
-                                      type="button"
-                                      role="radio"
-                                      aria-checked={isActive}
-                                      className={cn(
-                                        "cursor-pointer rounded-sm px-2.5 py-1 text-xs font-medium transition",
-                                        isActive
-                                          ? "bg-primary text-primary-foreground"
-                                          : "text-muted-foreground hover:text-foreground"
-                                      )}
-                                      onClick={() =>
-                                        updateMapping(
-                                          source === "literal"
-                                            ? { source: "literal" }
-                                            : {
-                                                source: "subscriber_field",
-                                                path:
-                                                  !isFixed && mapping.path
-                                                    ? mapping.path
-                                                    : "firstName"
-                                              }
-                                        )
-                                      }
-                                    >
-                                      {label}
-                                    </button>
-                                  );
-                                })}
-                              </div>
                             </div>
-                            {isFixed ? (
-                              <Input
-                                value={mapping.literal}
-                                className="bg-white"
-                                placeholder={
-                                  sample ? `Sample: ${sample}` : "Type the text"
-                                }
-                                onChange={(event) =>
-                                  updateMapping({ literal: event.target.value })
-                                }
-                              />
-                            ) : (
-                              <div className="grid gap-2 sm:grid-cols-2">
-                                <Select
-                                  value={mapping.path || undefined}
-                                  onValueChange={(value) =>
-                                    updateMapping({ path: value })
-                                  }
-                                >
-                                  <SelectTrigger className="w-full bg-white">
-                                    <SelectValue
-                                      placeholder={
-                                        sample
-                                          ? `Sample: ${sample}`
-                                          : "Choose a field"
-                                      }
-                                    />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {subscriberFieldOptions.map((option) => (
-                                      <SelectItem
-                                        key={option.value}
-                                        value={option.value}
-                                      >
-                                        {option.label}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                                <Input
-                                  value={mapping.fallback}
-                                  className="bg-white"
-                                  placeholder="If empty, send… (optional)"
-                                  onChange={(event) =>
-                                    updateMapping({
-                                      fallback: event.target.value
-                                    })
-                                  }
-                                />
-                              </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <BroadcastProgress broadcast={broadcast} />
+                          </td>
+                          <td className="px-4 py-3 text-xs text-muted-foreground">
+                            {broadcastSenderLabel(broadcast) || "-"}
+                          </td>
+                          <td
+                            className="px-4 py-3 text-xs text-muted-foreground"
+                            title={formatWhen(
+                              broadcast.scheduledAt ||
+                                broadcast.startedAt ||
+                                broadcast.createdAt
                             )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </section>
-                )}
-
-                <div>
-                  <Label>Audience</Label>
-                  <div className="mt-2 grid gap-2 sm:grid-cols-4">
-                    {(["all", "tags", "specific", "campaign"] as const).map(
-                      (mode) => (
-                        <button
-                          key={mode}
-                          type="button"
-                          onClick={() => setAudienceMode(mode)}
-                          className={cn(
-                            "rounded-md border bg-white p-3 text-left text-sm font-medium capitalize shadow-xs transition hover:border-primary/30",
-                            audienceMode === mode &&
-                              "border-primary/40 bg-primary/10 text-primary"
-                          )}
-                        >
-                          {mode}
-                        </button>
-                      )
-                    )}
-                  </div>
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    {!isAudienceSelectionReady ? (
-                      audienceMode === "tags" ? (
-                        "Select at least one tag to see how many subscribers will receive this broadcast."
-                      ) : audienceMode === "campaign" ? (
-                        "Select at least one campaign to see how many subscribers will receive this broadcast."
-                      ) : (
-                        "Select at least one subscriber to see the recipient count."
-                      )
-                    ) : isAudienceCountLoading &&
-                      audienceCount === undefined ? (
-                      "Counting matching subscribers..."
-                    ) : (
-                      <>
-                        <span className="font-heading font-semibold text-foreground">
-                          {(audienceCount ?? 0).toLocaleString("en-IN")}
-                        </span>{" "}
-                        subscriber{audienceCount === 1 ? "" : "s"} will receive
-                        this broadcast
-                        {isAudienceCountLoading ? " (updating...)" : ""}
-                      </>
-                    )}
-                  </p>
-                </div>
-
-                {audienceMode === "tags" && (
-                  <div className="flex flex-wrap gap-2">
-                    {tags.map((tag) => (
-                      <button
-                        key={tag}
-                        type="button"
-                        onClick={() =>
-                          setSelectedTags((current) =>
-                            current.includes(tag)
-                              ? current.filter((item) => item !== tag)
-                              : [...current, tag]
-                          )
-                        }
-                        className={cn(
-                          "rounded-sm bg-muted px-3 py-2 text-sm",
-                          selectedTags.includes(tag) &&
-                            "bg-primary/10 text-primary"
-                        )}
-                      >
-                        {tag}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {audienceMode === "campaign" && (
-                  <div className="rounded-sm border p-3">
-                    {campaigns.length ? (
-                      <div className="flex flex-col gap-2">
-                        {campaigns.map((campaign) => (
-                          <label
-                            key={campaign.sourceId}
-                            className="flex items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-muted"
                           >
-                            <span className="flex items-center gap-2">
-                              <Checkbox
-                                checked={selectedCampaignSourceIds.includes(
-                                  campaign.sourceId
-                                )}
-                                onCheckedChange={() =>
-                                  setSelectedCampaignSourceIds((current) =>
-                                    current.includes(campaign.sourceId)
-                                      ? current.filter(
-                                          (item) => item !== campaign.sourceId
-                                        )
-                                      : [...current, campaign.sourceId]
-                                  )
-                                }
-                              />
-                              {campaign.label}
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              {campaign.subscriberCount} contacts
-                            </span>
-                          </label>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="p-2 text-sm text-muted-foreground">
-                        No campaigns found.
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {audienceMode === "specific" && (
-                  <div className="rounded-sm border p-3">
-                    <div className="mb-3 flex items-center justify-between gap-3">
-                      <div className="relative flex-1">
-                        <Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
-                        <Input
-                          value={subscriberSearch}
-                          onChange={(event) =>
-                            setSubscriberSearch(event.target.value)
-                          }
-                          placeholder="Search subscriber name or phone"
-                          className="pl-9"
-                        />
-                      </div>
-                      <Badge variant="outline">
-                        {selectedSubscriberIds.length} selected
-                      </Badge>
-                    </div>
-                    <div className="max-h-64 space-y-1 overflow-y-auto pr-1">
-                      {subscribers.length ? (
-                        subscribers.map((subscriber) => (
-                          <label
-                            key={subscriber._id}
-                            className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm hover:bg-muted/60"
-                          >
-                            <Checkbox
-                              checked={selectedSubscriberIds.includes(
-                                subscriber._id
-                              )}
-                              onCheckedChange={(checked) =>
-                                setSelectedSubscriberIds((current) =>
-                                  checked
-                                    ? [...current, subscriber._id]
-                                    : current.filter(
-                                        (item) => item !== subscriber._id
-                                      )
-                                )
-                              }
-                            />
-                            <span className="min-w-0">
-                              <span className="block truncate font-medium">
-                                {[subscriber.firstName, subscriber.lastName]
-                                  .filter(Boolean)
-                                  .join(" ") || subscriber.phoneNumber}
-                              </span>
-                              <span className="block truncate text-xs text-muted-foreground">
-                                {subscriber.phoneNumber}
-                              </span>
-                            </span>
-                          </label>
-                        ))
-                      ) : (
-                        <div className="py-6 text-center text-sm text-muted-foreground">
-                          No eligible subscribers found.
-                        </div>
-                      )}
-                      <div ref={subscriberLoadMoreRef} className="h-px" />
-                      {isFetchingMoreSubscribers && (
-                        <div className="space-y-2 p-2">
-                          {Array.from({ length: 3 }).map((_, index) => (
-                            <Skeleton key={index} className="h-12" />
-                          ))}
-                        </div>
-                      )}
-                      {!hasMoreSubscribers && subscribers.length > 0 && (
-                        <p className="py-2 text-center text-xs text-muted-foreground">
-                          All eligible subscribers are loaded.
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex items-start justify-between gap-4 rounded-lg border bg-muted/20 p-4">
-                  <div>
-                    <Label htmlFor="broadcast-limit-retry">
-                      Retry after a Meta messaging-limit pause
-                    </Label>
-                    <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">
-                      If Meta pauses this campaign because the business
-                      messaging limit was reached, automatically grant consent
-                      to retry the unfinished recipients after the backend
-                      recovery period. This does not retry recipients that
-                      failed for other reasons.
-                    </p>
-                  </div>
-                  <Switch
-                    id="broadcast-limit-retry"
-                    checked={retryOnMessagingLimit}
-                    onCheckedChange={setRetryOnMessagingLimit}
-                  />
-                </div>
-
-                <div className="flex items-start justify-between gap-4 rounded-lg border bg-muted/20 p-4">
-                  <div>
-                    <Label htmlFor="broadcast-engagement-retry">
-                      Retry recipients throttled by Meta&apos;s engagement limit
-                    </Label>
-                    <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">
-                      If Meta declines to deliver to a specific recipient to
-                      protect them from marketing fatigue (error 131049),
-                      automatically retry just that recipient once, about 24
-                      hours later. This never pauses the rest of the campaign --
-                      it only affects the throttled recipient.
-                    </p>
-                  </div>
-                  <Switch
-                    id="broadcast-engagement-retry"
-                    checked={retryOnRecipientEngagementLimit}
-                    onCheckedChange={setRetryOnRecipientEngagementLimit}
-                  />
-                </div>
-              </div>
-            </div>
-
-            <DialogFooter className="shrink-0 border-t pt-4">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setIsCreateOpen(false)}
-              >
-                Cancel
-              </Button>
-              {createBlockedReason ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    {/* Disabled buttons swallow hover, so the span carries it. */}
-                    <span tabIndex={0} className="inline-flex">
-                      <Button type="submit" disabled>
-                        Create draft
-                      </Button>
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent>{createBlockedReason}</TooltipContent>
-                </Tooltip>
-              ) : (
-                <Button
-                  type="submit"
-                  isLoading={isCreating}
-                  disabled={isLoadingTriggers}
-                >
-                  Create draft
-                </Button>
-              )}
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={Boolean(selectedBroadcastId)}
-        onOpenChange={(open) => !open && setSelectedBroadcastId("")}
-      >
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>{selectedBroadcast?.name || "Broadcast"}</DialogTitle>
-          </DialogHeader>
-
-          {selectedBroadcast ? (
-            <div className="space-y-4">
-              <div className="grid gap-3 sm:grid-cols-3">
-                {[
-                  ["Status", selectedBroadcast.status],
-                  ["Template", selectedBroadcast.template?.name],
-                  ["Created", formatDate(selectedBroadcast.createdAt)],
-                  ["Started", formatDate(selectedBroadcast.startedAt)],
-                  ["Completed", formatDate(selectedBroadcast.completedAt)],
-                  ["Scheduled", formatDate(selectedBroadcast.scheduledAt)]
-                ].map(([label, value]) => (
-                  <div key={label} className="rounded-sm bg-muted/60 p-3">
-                    <p className="text-xs text-muted-foreground">{label}</p>
-                    <p className="mt-1 truncate font-medium capitalize">
-                      {value || "-"}
-                    </p>
-                  </div>
-                ))}
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-4">
-                {[
-                  ["Total", selectedBroadcast.stats.totalRecipients],
-                  ["Queued", selectedBroadcast.stats.queuedRecipients],
-                  ["Sent", selectedBroadcast.stats.sentRecipients],
-                  ["Delivered", selectedBroadcast.stats.deliveredRecipients],
-                  ["Read", selectedBroadcast.stats.readRecipients],
-                  ["Failed", selectedBroadcast.stats.failedRecipients],
-                  ["Skipped", selectedBroadcast.stats.skippedRecipients],
-                  ["Canceled", selectedBroadcast.stats.canceledRecipients]
-                ].map(([label, value]) => (
-                  <div
-                    key={label}
-                    className="rounded-sm border bg-white p-3 shadow-xs"
-                  >
-                    <p className="text-xs text-muted-foreground">{label}</p>
-                    <p className="mt-1 text-2xl font-semibold">{value}</p>
-                  </div>
-                ))}
-              </div>
-
-              {selectedBroadcast.lastError && (
-                <div className="rounded-sm bg-destructive/10 p-3 text-sm text-destructive">
-                  {selectedBroadcast.lastError}
-                </div>
-              )}
-
-              {canStart && (
-                <div className="rounded-lg border bg-gradient-to-br from-primary/5 via-white to-emerald-50/60 p-4">
-                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                    <div>
-                      <p className="text-sm font-semibold">Send timing</p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Start immediately or pick a local schedule in
-                        Asia/Kolkata.
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => setScheduleDate(undefined)}
-                      >
-                        <Clock className="size-4" />
-                        Clear schedule
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_210px]">
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <button
-                          type="button"
-                          className={cn(
-                            "flex min-h-20 items-center gap-3 rounded-lg border bg-white px-4 text-left shadow-xs transition hover:border-primary/40",
-                            scheduleDate && "border-primary/40 bg-primary/5"
-                          )}
-                        >
-                          <span className="flex size-11 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-                            <CalendarIcon className="size-5" />
-                          </span>
-                          <span>
-                            <span className="block text-xs text-muted-foreground">
-                              Schedule date
-                            </span>
-                            <span className="mt-1 block font-medium">
-                              {formatCalendarDate(scheduleDate)}
-                            </span>
-                          </span>
-                        </button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={scheduleDate}
-                          onSelect={setScheduleDate}
-                          disabled={{ before: new Date() }}
-                        />
-                      </PopoverContent>
-                    </Popover>
-
-                    <div className="rounded-lg border bg-white p-3 shadow-xs">
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Clock className="size-4" />
-                        Local time
-                      </div>
-                      <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-                        <Select
-                          value={scheduleHour || "09"}
-                          onValueChange={(hour) =>
-                            setScheduleTime(`${hour}:${scheduleMinute || "00"}`)
-                          }
-                        >
-                          <SelectTrigger className="h-11 w-full border-primary/20 bg-primary/5 font-semibold">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {hourOptions.map((hour) => (
-                              <SelectItem key={hour} value={hour}>
-                                {hour}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <span className="text-lg font-semibold text-muted-foreground">
-                          :
-                        </span>
-                        <Select
-                          value={scheduleMinute || "00"}
-                          onValueChange={(minute) =>
-                            setScheduleTime(`${scheduleHour || "09"}:${minute}`)
-                          }
-                        >
-                          <SelectTrigger className="h-11 w-full border-primary/20 bg-primary/5 font-semibold">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {minuteOptions.map((minute) => (
-                              <SelectItem key={minute} value={minute}>
-                                {minute}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {["09:00", "12:00", "15:00", "18:00"].map((time) => (
-                      <button
-                        key={time}
-                        type="button"
-                        onClick={() => setScheduleTime(time)}
-                        className={cn(
-                          "rounded-full border bg-white px-3 py-1.5 text-xs font-medium shadow-xs transition hover:border-primary/40",
-                          scheduleTime === time &&
-                            "border-primary/40 bg-primary/10 text-primary"
-                        )}
-                      >
-                        {time}
-                      </button>
-                    ))}
-                  </div>
-
-                  <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      isLoading={isStarting}
-                      onClick={handleStartNow}
-                    >
-                      <Send className="size-4" />
-                      Start now
-                    </Button>
-                    <Button
-                      type="button"
-                      isLoading={isStarting}
-                      onClick={handleScheduleBroadcast}
-                    >
-                      <CalendarClock className="size-4" />
-                      Schedule
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-              <div className="rounded-sm border">
-                <div className="flex items-center justify-between gap-3 border-b p-3">
-                  <p className="font-medium">Recipients</p>
-                  <p className="text-xs text-muted-foreground">
-                    {selectedBroadcastData?.data.recipientsPagination?.total ??
-                      selectedBroadcastData?.data.recipients?.length ??
-                      0}{" "}
-                    total
-                  </p>
-                </div>
-                <div className="max-h-80 overflow-y-auto">
-                  {(selectedBroadcastData?.data.recipients || []).length ? (
-                    <table className="w-full text-sm">
-                      <thead className="sticky top-0 bg-white text-left text-primary">
-                        <tr>
-                          <th className="p-3">Recipient</th>
-                          <th className="p-3">Status</th>
-                          <th className="p-3">Sent</th>
-                          <th className="p-3">Delivered</th>
-                          <th className="p-3">Read</th>
+                            {whenText(broadcast)}
+                          </td>
+                          <td className="px-4 py-3">
+                            {renderActions(broadcast)}
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {(selectedBroadcastData?.data.recipients || []).map(
-                          (recipient) => (
-                            <tr key={recipient._id} className="border-t">
-                              <td className="p-3">
-                                <p className="font-medium">
-                                  {[
-                                    recipient.subscriberId?.firstName,
-                                    recipient.subscriberId?.lastName
-                                  ]
-                                    .filter(Boolean)
-                                    .join(" ") || recipient.phoneNumber}
-                                </p>
-                                <p className="text-xs text-muted-foreground">
-                                  {recipient.phoneNumber}
-                                </p>
-                              </td>
-                              <td className="p-3 capitalize">
-                                {recipient.status}
-                              </td>
-                              <td className="p-3">
-                                {formatDate(
-                                  recipient.sentAt ||
-                                    recipient.messageId?.sentAt
-                                )}
-                              </td>
-                              <td className="p-3">
-                                {formatDate(
-                                  recipient.deliveredAt ||
-                                    recipient.messageId?.deliveredAt
-                                )}
-                              </td>
-                              <td className="p-3">
-                                {formatDate(
-                                  recipient.readAt ||
-                                    recipient.messageId?.readAt
-                                )}
-                              </td>
-                            </tr>
-                          )
-                        )}
-                      </tbody>
-                    </table>
-                  ) : (
-                    <div className="p-8 text-center text-sm text-muted-foreground">
-                      No recipients returned for this broadcast.
-                    </div>
-                  )}
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
+                <ul className="divide-y md:hidden">
+                  {broadcasts.map((broadcast) => (
+                    <li
+                      key={broadcast._id}
+                      onClick={() =>
+                        router.push(`/broadcasts/${broadcast._id}`)
+                      }
+                      className="cursor-pointer space-y-2 p-4"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate font-medium">
+                            {broadcast.name}
+                          </p>
+                          <p className="truncate text-xs text-muted-foreground">
+                            {broadcast.template?.name} · {whenText(broadcast)}
+                          </p>
+                        </div>
+                        <BroadcastStatusBadge
+                          status={broadcast.status}
+                          scheduledAt={broadcast.scheduledAt}
+                        />
+                      </div>
+                      <BroadcastProgress broadcast={broadcast} />
+                      {renderActions(broadcast)}
+                    </li>
+                  ))}
+                </ul>
+                <div ref={loadMoreRef} className="h-px" />
+                {isFetchingNextPage && (
+                  <div className="space-y-2 p-4">
+                    {Array.from({ length: 3 }).map((_, index) => (
+                      <Skeleton key={index} className="h-12" />
+                    ))}
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="flex flex-col items-center gap-3 px-6 py-14 text-center">
+                <span className="flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+                  <Megaphone className="size-6" />
+                </span>
+                <p className="text-sm text-muted-foreground">
+                  {query || tab !== "all"
+                    ? "No broadcasts match these filters."
+                    : "No broadcasts yet. Reach many contacts with one approved template."}
+                </p>
+                {!query && tab === "all" && newBroadcastButton}
               </div>
-            </div>
-          ) : (
-            <Skeleton className="h-56" />
-          )}
-        </DialogContent>
-      </Dialog>
+            )}
+          </section>
+        )}
+      </div>
 
-      <AlertDialog
+      {/* Mobile: the primary action sits in a sticky bottom bar. */}
+      {newBroadcastButton && (
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t bg-white p-3 sm:hidden [&_button]:w-full">
+          {newBroadcastButton}
+        </div>
+      )}
+
+      {isWizardOpen && (
+        <CreateBroadcastWizard
+          key={wizardKey}
+          open={isWizardOpen}
+          onOpenChange={closeWizard}
+          initialTemplateId={linkedTemplateId || undefined}
+          duplicateFrom={duplicateId ? duplicateData?.data.broadcast : null}
+          onCreated={(broadcastId) => {
+            setIsWizardOpen(false);
+            router.push(`/broadcasts/${broadcastId}`);
+          }}
+        />
+      )}
+      <StartBroadcastDialog
+        broadcast={startTarget}
+        open={Boolean(startTarget)}
+        onOpenChange={(open) => !open && setStartTarget(null)}
+        onStarted={() => {
+          if (startTarget) router.push(`/broadcasts/${startTarget._id}`);
+        }}
+      />
+      <CancelBroadcastDialog
+        broadcast={cancelTarget}
         open={Boolean(cancelTarget)}
         onOpenChange={(open) => !open && setCancelTarget(null)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Cancel broadcast?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will cancel {cancelTarget?.name || "this broadcast"} if it is
-              still cancelable.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Keep broadcast</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-white hover:bg-destructive/90"
-              disabled={isCanceling}
-              onClick={() => cancelTarget && cancelSelected(cancelTarget._id)}
-            >
-              Cancel broadcast
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      />
     </AppLayout>
   );
 }
