@@ -293,12 +293,10 @@ describe("wire removal", () => {
     const removed = removedOutputHandles(before, after);
     expect(removed).toEqual(["a2"]);
     const remaining = removeEdgesForActions(edges, "carousel", removed);
-    expect(remaining.map((item) => [item.sourceHandle, item.target])).toEqual(
-      [
-        ["a1", "plans"],
-        ["a3", "help"]
-      ]
-    );
+    expect(remaining.map((item) => [item.sourceHandle, item.target])).toEqual([
+      ["a1", "plans"],
+      ["a3", "help"]
+    ]);
   });
 
   it("deleting the first of 4 list rows keeps the other 3 wires and another list's wires", () => {

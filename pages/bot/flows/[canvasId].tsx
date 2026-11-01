@@ -377,8 +377,7 @@ const mergeActions = (
 };
 
 const hasLocation = (content: BotCanvasNodeContent) =>
-  typeof content.latitude === "number" &&
-  typeof content.longitude === "number";
+  typeof content.latitude === "number" && typeof content.longitude === "number";
 
 const summarizeNode = (
   blockType: BotBlockType,
@@ -999,7 +998,10 @@ const canvasEdgesToFlow = (
   nodes.forEach((node) => {
     node.data.actions.forEach((action) => {
       handleByActionId.set(`${node.id}:${action.actionId}`, action.actionId);
-      if (action.replyId && !handleByReplyId.has(`${node.id}:${action.replyId}`))
+      if (
+        action.replyId &&
+        !handleByReplyId.has(`${node.id}:${action.replyId}`)
+      )
         handleByReplyId.set(`${node.id}:${action.replyId}`, action.actionId);
     });
   });
@@ -1031,7 +1033,9 @@ const canvasEdgesToFlow = (
 // swapped for the built-in one (see lib/flowStarter).
 const buildEditorState = (draft?: BotCanvasDraftState | null) => {
   const loadedNodes = draft?.nodes?.length
-    ? ensureUniqueNodeTriggers(ensureRequiredNodes(draft.nodes.map(toReactNode)))
+    ? ensureUniqueNodeTriggers(
+        ensureRequiredNodes(draft.nodes.map(toReactNode))
+      )
     : defaultCanvasNodes();
   const loadedEdges = canvasEdgesToFlow(draft?.edges, loadedNodes);
   const useStarter = shouldReplaceWithStarter(loadedNodes, loadedEdges);
@@ -1176,9 +1180,7 @@ function FlowsBuilder() {
   const [lastSavedAt, setLastSavedAt] = useState<string>("");
   const [issues, setIssues] = useState<BotFlowIssue[]>([]);
   const [issuesOpen, setIssuesOpen] = useState(false);
-  const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(
-    null
-  );
+  const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null);
   const [conflict, setConflict] = useState<DraftConflict | null>(null);
   const [cachedOffer, setCachedOffer] =
     useState<CachedDraft<BotCanvasDraftState> | null>(null);
@@ -1383,7 +1385,14 @@ function FlowsBuilder() {
         changed: changedIds.has(node.id)
       }
     }));
-  }, [draftChanges, isLiveView, issues, nodes, publishedNodes, rawVisibleEdges]);
+  }, [
+    draftChanges,
+    isLiveView,
+    issues,
+    nodes,
+    publishedNodes,
+    rawVisibleEdges
+  ]);
 
   const previewNode = useMemo(
     () => visibleNodes.find((node) => node.id === previewNodeId) || null,
@@ -1842,7 +1851,9 @@ function FlowsBuilder() {
           applyUpdate(previous, nodesRef.current).data.actions
         );
         if (removed.length) {
-          setEdges((current) => removeEdgesForActions(current, nodeId, removed));
+          setEdges((current) =>
+            removeEdgesForActions(current, nodeId, removed)
+          );
         }
       }
       setNodes((current) =>
@@ -2310,10 +2321,7 @@ function FlowsBuilder() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <span
-              className="text-xs text-muted-foreground"
-              aria-live="polite"
-            >
+            <span className="text-xs text-muted-foreground" aria-live="polite">
               {saveState === "saving" ? (
                 <span className="flex items-center gap-1.5">
                   <Loader2 className="size-3.5 animate-spin" />
@@ -2442,7 +2450,9 @@ function FlowsBuilder() {
                     }
                     className={cn(
                       "flex w-full items-start gap-2.5 rounded-xl border bg-white p-2.5 text-left shadow-xs transition hover:border-primary/40 hover:bg-primary/5",
-                      isLiveView ? "cursor-not-allowed opacity-55" : "cursor-grab"
+                      isLiveView
+                        ? "cursor-not-allowed opacity-55"
+                        : "cursor-grab"
                     )}
                   >
                     <Icon className="mt-0.5 size-[18px] shrink-0 text-primary" />
@@ -2731,7 +2741,9 @@ function FlowsBuilder() {
       <AlertDialog open={Boolean(conflict)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>This flow changed while you were editing</AlertDialogTitle>
+            <AlertDialogTitle>
+              This flow changed while you were editing
+            </AlertDialogTitle>
             <AlertDialogDescription>
               {conflictName} changed this flow at {conflictTime}. Reload their
               version (your unsaved edits are lost), or keep yours (it
@@ -3112,8 +3124,8 @@ function PropertiesPanel({
                 <div>
                   <p className="text-sm font-medium">Start block</p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    The first message for new chats, and the reply when the
-                    bot doesn&apos;t understand.
+                    The first message for new chats, and the reply when the bot
+                    doesn&apos;t understand.
                   </p>
                 </div>
                 <Switch
@@ -4607,7 +4619,9 @@ const findIssueTarget = (
   );
   const field = request.field;
   if (field) {
-    const exact = fields.find((element) => element.dataset.issueField === field);
+    const exact = fields.find(
+      (element) => element.dataset.issueField === field
+    );
     if (exact) return exact;
     const related = fields.find((element) => {
       const candidate = element.dataset.issueField || "";
@@ -4688,7 +4702,11 @@ function FollowUpDelayField({
         <Input
           type="number"
           min={1}
-          max={unit === "hours" ? FOLLOW_UP_MAX_MINUTES / 60 : FOLLOW_UP_MAX_MINUTES}
+          max={
+            unit === "hours"
+              ? FOLLOW_UP_MAX_MINUTES / 60
+              : FOLLOW_UP_MAX_MINUTES
+          }
           className="[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
           value={typed}
           disabled={readOnly}
