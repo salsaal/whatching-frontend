@@ -75,17 +75,17 @@ const iconByType: Record<BotBlockType, React.ElementType> = {
 const labelByType: Record<BotBlockType, string> = {
   text: "Text",
   buttons: "Buttons",
-  list: "List Menu",
+  list: "List menu",
   image: "Image",
   document: "Document",
   video: "Video",
-  location: "Location",
-  location_request: "Location Request",
-  address_request: "Address Request",
-  contacts: "Contacts",
+  location: "Location pin",
+  location_request: "Ask for location",
+  address_request: "Ask for address",
+  contacts: "Contact card",
   handoff_to_agent: "Hand to team",
-  product_carousel: "Product Carousel",
-  generic_carousel: "Generic Carousel"
+  product_carousel: "Product carousel",
+  generic_carousel: "Carousel"
 };
 
 // Options that end here instead of going to another block.

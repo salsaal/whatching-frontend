@@ -318,6 +318,18 @@ export type BotCanvasResponse = ApiResponse<{
   /** Present on a successful go-live. */
   validation?: BotCanvasValidation;
 }>;
+/** A version that went live, newest first. */
+export interface BotCanvasVersion {
+  _id: string;
+  versionNumber: number;
+  publishedAt: string | null;
+  publishedBy: { _id: string; name: string } | null;
+  blockCount: number | null;
+  isLive: boolean;
+}
+export type BotCanvasVersionsResponse = ApiResponse<{
+  versions: BotCanvasVersion[];
+}>;
 export type BotCanvasValidateResponse = ApiResponse<{
   validation: BotCanvasValidation;
 }>;

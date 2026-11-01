@@ -4,8 +4,11 @@ import {
   BotAction,
   BotActionType,
   BotBlockType,
+  BotCanvasLiveInfo,
   BotCanvasNode,
-  BotCanvasNodeContent
+  BotCanvasNodeContent,
+  BotDraftChanges,
+  BotFlowEntryPoint
 } from "@/client-api/types/bot.type";
 import type {
   BotFlowNodeData,
@@ -285,6 +288,29 @@ const trimmed = (value: unknown) =>
 const isUrlButton = (button: OptionRecord) =>
   String(button.type || (button.url ? "url" : "quick_reply")) === "url";
 
+const replyActionTypes = new Set<BotActionType>([
+  "go_to_trigger",
+  "escalate_to_agent",
+  "end_conversation"
+]);
+
+/**
+ * What tapping an option does. List rows keep it in `type`; carousel quick
+ * replies in `actionType` (their `type` is WhatsApp's button type).
+ */
+export const getOptionActionType = (
+  blockType: BotBlockType,
+  option: Record<string, unknown>
+): BotActionType => {
+  if (blockType === "generic_carousel" && isUrlButton(option)) {
+    return "open_url";
+  }
+  const value = String(
+    (blockType === "generic_carousel" ? option.actionType : option.type) || ""
+  ) as BotActionType;
+  return replyActionTypes.has(value) ? value : "go_to_trigger";
+};
+
 /** The reply ID an option already has; URL buttons fall back to their URL. */
 const optionKey = (option: OptionRecord, isUrl: boolean) =>
   trimmed(option.replyId) ||
@@ -450,7 +476,7 @@ export const getContentActions = (
       const rows = (section as ListSection).rows;
       if (!Array.isArray(rows)) return;
       rows.forEach((row) =>
-        addAction(row, String(row.type || "go_to_trigger") as BotActionType, {
+        addAction(row, getOptionActionType("list", row), {
           description:
             typeof row.description === "string" ? row.description : "",
           sectionTitle:
@@ -465,7 +491,7 @@ export const getContentActions = (
       const buttons = (card as GenericCarouselCard).buttons;
       if (!Array.isArray(buttons)) return;
       buttons.forEach((button) =>
-        addAction(button, isUrlButton(button) ? "open_url" : "go_to_trigger")
+        addAction(button, getOptionActionType("generic_carousel", button))
       );
     });
   }
@@ -510,7 +536,7 @@ export const getNodeOptions = (
         if (!actionId) return;
         options.push({
           actionId,
-          type: "go_to_trigger",
+          type: getOptionActionType("list", row),
           label: trimmed(row.title) || trimmed(row.label) || "Untitled option",
           group,
           description: trimmed(row.description) || undefined
@@ -531,7 +557,7 @@ export const getNodeOptions = (
         if (!actionId) return;
         options.push({
           actionId,
-          type: isUrl ? "open_url" : "go_to_trigger",
+          type: getOptionActionType("generic_carousel", button),
           label: trimmed(button.label) || trimmed(button.title) || "Button",
           group
         });
@@ -701,4 +727,160 @@ export const formatDelay = (minutes: number) => {
   const rest = total % 60;
   if (!hours) return `${rest} min`;
   return rest ? `${hours} h ${rest} min` : `${hours} h`;
+};
+
+// ---------------------------------------------------------------------------
+// Duplicating
+// ---------------------------------------------------------------------------
+
+/**
+ * A copy of a block's content and actions for "Duplicate": every option gets
+ * a new actionId and reply ID (two blocks answering the same reply ID would
+ * clash), and nothing is wired yet.
+ */
+export const cloneBlockOptions = (
+  blockType: BotBlockType,
+  content: BotCanvasNodeContent,
+  actions: BotAction[]
+): { content: BotCanvasNodeContent; actions: BotAction[] } => {
+  const copied = JSON.parse(JSON.stringify(content)) as BotCanvasNodeContent;
+  if (blockType === "list" || blockType === "generic_carousel") {
+    const usedReplyIds: string[] = [];
+    const nextContent = mapContentOptions(
+      blockType,
+      copied,
+      (option, isUrl) => {
+        const next: OptionRecord = { ...option, actionId: newId("opt") };
+        if (!isUrl) {
+          const replyId = newOptionReplyId(usedReplyIds);
+          usedReplyIds.push(replyId);
+          next.replyId = replyId;
+          next.id = replyId;
+        }
+        return next;
+      }
+    );
+    return {
+      content: nextContent,
+      actions: getContentActions(blockType, nextContent)
+    };
+  }
+
+  // Reply buttons live on the actions; content.buttons is rebuilt on save.
+  if (blockType === "buttons") delete copied.buttons;
+  const usedReplyIds: string[] = [];
+  return {
+    content: copied,
+    actions: actions.map((action) => {
+      const replyId =
+        action.type === "open_url"
+          ? action.replyId
+          : newOptionReplyId(usedReplyIds);
+      if (replyId) usedReplyIds.push(replyId);
+      return {
+        ...action,
+        actionId: newId("action"),
+        replyId,
+        nextTriggerKey: undefined,
+        metadata: action.metadata ? { ...action.metadata } : undefined
+      };
+    })
+  };
+};
+
+// ---------------------------------------------------------------------------
+// Status and wording
+// ---------------------------------------------------------------------------
+
+export type FlowStatus = {
+  tone: "grey" | "amber" | "green";
+  label: string;
+  /** Where clicking the pill takes you, if anywhere. */
+  href?: string;
+  /** The numbers the flow answers on, for the tooltip. */
+  numbers?: string[];
+};
+
+/** The header's status pill: the first rule that matches wins. */
+export const getFlowStatus = (
+  live: BotCanvasLiveInfo | undefined,
+  changes: BotDraftChanges | undefined
+): FlowStatus => {
+  if (live && !live.botEnabled) {
+    return { tone: "grey", label: "Bot is off", href: "/bot/settings" };
+  }
+  const neverLive = changes ? changes.neverPublished : !live?.hasLiveVersion;
+  if (neverLive) return { tone: "grey", label: "Not live yet" };
+  if (live && live.phoneNumbers.length === 0) {
+    return {
+      tone: "amber",
+      label: "Live, but no number uses it",
+      href: "/bot/flows#flows-per-number"
+    };
+  }
+  if (changes?.hasUnpublishedChanges) {
+    const count = changes.changedBlockCount;
+    return {
+      tone: "amber",
+      label:
+        count > 0
+          ? `Live · ${count} change${count === 1 ? "" : "s"} not live yet`
+          : "Live · changes not live yet"
+    };
+  }
+  const numbers = (live?.phoneNumbers || []).map(
+    (number) =>
+      number.displayPhoneNumber || number.verifiedName || "a WhatsApp number"
+  );
+  return {
+    tone: "green",
+    label:
+      numbers.length === 1
+        ? `Live on ${numbers[0]}`
+        : numbers.length > 1
+          ? `Live on ${numbers.length} numbers`
+          : "Live",
+    numbers
+  };
+};
+
+/** The header's main button. */
+export const getPrimaryAction = (
+  changes: BotDraftChanges | undefined,
+  hasLiveVersion: boolean,
+  hasUnsavedEdits: boolean
+): { label: string; disabled: boolean } => {
+  if (changes ? changes.neverPublished : !hasLiveVersion) {
+    return { label: "Go live", disabled: false };
+  }
+  if (hasUnsavedEdits || !changes || changes.hasUnpublishedChanges) {
+    return { label: "Update live flow", disabled: false };
+  }
+  return { label: "Up to date", disabled: true };
+};
+
+/** One line of a block's "Reached from" list. */
+export const describeEntryPoint = (entry: BotFlowEntryPoint) => {
+  switch (entry.kind) {
+    case "start":
+      return "Start of the flow";
+    case "opt_in":
+      return "When a customer opts back in";
+    case "opt_out":
+      return "When a customer opts out";
+    case "ai":
+      return "AI replies can send customers here";
+    case "option":
+      return entry.label
+        ? `${entry.fromBlockName} › ${entry.label}`
+        : entry.fromBlockName;
+    case "follow_up":
+      return `Follow-up of ${entry.fromBlockName} after ${formatDelay(entry.delayMinutes)}`;
+    case "template":
+      return `Template ${entry.templateName} › ${entry.label}`;
+    case "broadcast":
+      return `Broadcast ${entry.broadcastName} › ${entry.label}`;
+    default:
+      return "Another part of your account";
+  }
 };

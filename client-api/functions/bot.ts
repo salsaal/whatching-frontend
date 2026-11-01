@@ -4,6 +4,7 @@ import {
   BotCanvasDraftState,
   BotCanvasResponse,
   BotCanvasValidateResponse,
+  BotCanvasVersionsResponse,
   BotCanvasValidation,
   BotDraftConflictDetails,
   BotFlowIssue,
@@ -174,6 +175,48 @@ export const publishBotCanvasDraftById = async ({
   const res = await api.post<BotCanvasResponse>(
     BOT_ENDPOINTS.CANVAS_PUBLISH_BY_ID(canvasId),
     { draftState, baseRevision }
+  );
+  return res.data;
+};
+
+// Resets the draft to the live version. Answers like a draft save.
+export const discardBotCanvasDraftById = async ({
+  canvasId,
+  baseRevision
+}: {
+  canvasId: string;
+  baseRevision?: number;
+}): Promise<BotCanvasResponse> => {
+  const res = await api.post<BotCanvasResponse>(
+    BOT_ENDPOINTS.CANVAS_DISCARD_DRAFT_BY_ID(canvasId),
+    { baseRevision }
+  );
+  return res.data;
+};
+
+export const listBotCanvasVersions = async (
+  canvasId: string
+): Promise<BotCanvasVersionsResponse> => {
+  const res = await api.get<BotCanvasVersionsResponse>(
+    BOT_ENDPOINTS.CANVAS_VERSIONS_BY_ID(canvasId)
+  );
+  return res.data;
+};
+
+// Copies a version that went live into the draft; the live flow is
+// unchanged until the next go-live. Answers like a draft save.
+export const restoreBotCanvasVersionById = async ({
+  canvasId,
+  versionId,
+  baseRevision
+}: {
+  canvasId: string;
+  versionId: string;
+  baseRevision?: number;
+}): Promise<BotCanvasResponse> => {
+  const res = await api.post<BotCanvasResponse>(
+    BOT_ENDPOINTS.CANVAS_VERSION_RESTORE_BY_ID(canvasId, versionId),
+    { baseRevision }
   );
   return res.data;
 };

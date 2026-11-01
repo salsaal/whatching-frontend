@@ -1,10 +1,20 @@
 import { Edge } from "@xyflow/react";
 import { describe, expect, it } from "vitest";
 
-import { BotAction, BotCanvasNodeContent } from "@/client-api/types/bot.type";
+import {
+  BotAction,
+  BotCanvasLiveInfo,
+  BotCanvasNodeContent,
+  BotDraftChanges
+} from "@/client-api/types/bot.type";
 import {
   addMissingWires,
   assignActionReplyIds,
+  cloneBlockOptions,
+  describeEntryPoint,
+  getFlowStatus,
+  getOptionActionType,
+  getPrimaryAction,
   assignOptionIds,
   buildTargetByAction,
   countChars,
@@ -509,5 +519,233 @@ describe("counting and formatting", () => {
     expect(formatDelay(45)).toBe("45 min");
     expect(formatDelay(60)).toBe("1 h");
     expect(formatDelay(90)).toBe("1 h 30 min");
+  });
+});
+
+describe("option actions", () => {
+  it("reads what a tap does from list rows and carousel buttons", () => {
+    expect(getOptionActionType("list", { type: "escalate_to_agent" })).toBe(
+      "escalate_to_agent"
+    );
+    expect(getOptionActionType("list", {})).toBe("go_to_trigger");
+    // A list row can't open a website.
+    expect(getOptionActionType("list", { type: "open_url" })).toBe(
+      "go_to_trigger"
+    );
+    expect(
+      getOptionActionType("generic_carousel", {
+        type: "quick_reply",
+        actionType: "end_conversation"
+      })
+    ).toBe("end_conversation");
+    expect(
+      getOptionActionType("generic_carousel", { type: "url", url: "https://a" })
+    ).toBe("open_url");
+  });
+
+  it("carries a row's type into its action, so it has no handle", () => {
+    const content = {
+      sections: [
+        {
+          title: "Menu",
+          rows: [
+            {
+              actionId: "r1",
+              replyId: "R1",
+              title: "Team",
+              type: "escalate_to_agent"
+            }
+          ]
+        }
+      ]
+    };
+    expect(getContentActions("list", content)[0].type).toBe(
+      "escalate_to_agent"
+    );
+    expect(getNodeOptions("list", content, [])[0].type).toBe(
+      "escalate_to_agent"
+    );
+  });
+});
+
+describe("cloneBlockOptions", () => {
+  it("gives a duplicated carousel new IDs and keeps the rest", () => {
+    const content = threeCardCarousel();
+    const copy = cloneBlockOptions("generic_carousel", content, []);
+    const before = getContentActions("generic_carousel", content);
+    const after = copy.actions;
+    expect(after).toHaveLength(3);
+    after.forEach((action, index) => {
+      expect(action.actionId).not.toBe(before[index].actionId);
+      expect(action.replyId).not.toBe(before[index].replyId);
+      expect(action.label).toBe(before[index].label);
+      expect(action.nextTriggerKey).toBeUndefined();
+    });
+    // The original is untouched.
+    expect(getContentActions("generic_carousel", content)).toEqual(before);
+  });
+
+  it("gives duplicated reply buttons new IDs and no wiring", () => {
+    const actions: BotAction[] = [
+      {
+        actionId: "a",
+        type: "go_to_trigger",
+        replyId: "R",
+        label: "Go",
+        nextTriggerKey: "NEXT"
+      },
+      { actionId: "t", type: "escalate_to_agent", replyId: "T", label: "Team" }
+    ];
+    const copy = cloneBlockOptions(
+      "buttons",
+      { bodyText: "Pick", buttons: [{ id: "R" }] },
+      actions
+    );
+    expect(copy.content.buttons).toBeUndefined();
+    expect(copy.actions.map((action) => action.type)).toEqual([
+      "go_to_trigger",
+      "escalate_to_agent"
+    ]);
+    copy.actions.forEach((action, index) => {
+      expect(action.actionId).not.toBe(actions[index].actionId);
+      expect(action.replyId).not.toBe(actions[index].replyId);
+      expect(action.nextTriggerKey).toBeUndefined();
+    });
+  });
+});
+
+describe("getFlowStatus", () => {
+  const live = (
+    overrides: Partial<BotCanvasLiveInfo> = {}
+  ): BotCanvasLiveInfo => ({
+    hasLiveVersion: true,
+    isOrgDefault: false,
+    botEnabled: true,
+    phoneNumbers: [
+      { _id: "n1", displayPhoneNumber: "+91 98765 43210", source: "assigned" }
+    ],
+    ...overrides
+  });
+  const changes = (
+    overrides: Partial<BotDraftChanges> = {}
+  ): BotDraftChanges => ({
+    neverPublished: false,
+    hasUnpublishedChanges: false,
+    changedBlockCount: 0,
+    addedBlockIds: [],
+    removedBlockIds: [],
+    changedBlockIds: [],
+    startChanged: false,
+    ...overrides
+  });
+
+  it("follows the rules in order, first match wins", () => {
+    expect(getFlowStatus(live({ botEnabled: false }), changes()).label).toBe(
+      "Bot is off"
+    );
+    expect(getFlowStatus(live(), changes({ neverPublished: true })).label).toBe(
+      "Not live yet"
+    );
+    expect(getFlowStatus(live({ phoneNumbers: [] }), changes())).toMatchObject({
+      tone: "amber",
+      label: "Live, but no number uses it"
+    });
+    expect(
+      getFlowStatus(
+        live(),
+        changes({ hasUnpublishedChanges: true, changedBlockCount: 3 })
+      )
+    ).toMatchObject({ tone: "amber", label: "Live · 3 changes not live yet" });
+    expect(getFlowStatus(live(), changes())).toMatchObject({
+      tone: "green",
+      label: "Live on +91 98765 43210"
+    });
+  });
+
+  it("counts numbers when there are several", () => {
+    const status = getFlowStatus(
+      live({
+        phoneNumbers: [
+          { _id: "a", displayPhoneNumber: "+91 1", source: "assigned" },
+          { _id: "b", displayPhoneNumber: "+91 2", source: "org_default" }
+        ]
+      }),
+      changes()
+    );
+    expect(status.label).toBe("Live on 2 numbers");
+    expect(status.numbers).toEqual(["+91 1", "+91 2"]);
+  });
+});
+
+describe("getPrimaryAction", () => {
+  const changes = (
+    overrides: Partial<BotDraftChanges> = {}
+  ): BotDraftChanges => ({
+    neverPublished: false,
+    hasUnpublishedChanges: false,
+    changedBlockCount: 0,
+    addedBlockIds: [],
+    removedBlockIds: [],
+    changedBlockIds: [],
+    startChanged: false,
+    ...overrides
+  });
+
+  it("names the button for the flow's state", () => {
+    expect(
+      getPrimaryAction(changes({ neverPublished: true }), false, false)
+    ).toEqual({ label: "Go live", disabled: false });
+    expect(
+      getPrimaryAction(changes({ hasUnpublishedChanges: true }), true, false)
+    ).toEqual({ label: "Update live flow", disabled: false });
+    expect(getPrimaryAction(changes(), true, false)).toEqual({
+      label: "Up to date",
+      disabled: true
+    });
+  });
+
+  it("treats unsaved edits as changes", () => {
+    expect(getPrimaryAction(changes(), true, true).label).toBe(
+      "Update live flow"
+    );
+  });
+});
+
+describe("describeEntryPoint", () => {
+  it("words each way in for the Reached from list", () => {
+    expect(describeEntryPoint({ kind: "start" })).toBe("Start of the flow");
+    expect(describeEntryPoint({ kind: "ai" })).toBe(
+      "AI replies can send customers here"
+    );
+    expect(
+      describeEntryPoint({
+        kind: "option",
+        fromNodeId: "m",
+        fromBlockName: "Main menu",
+        label: "Pricing"
+      })
+    ).toBe("Main menu › Pricing");
+    expect(
+      describeEntryPoint({
+        kind: "follow_up",
+        fromNodeId: "w",
+        fromBlockName: "Welcome",
+        delayMinutes: 60
+      })
+    ).toBe("Follow-up of Welcome after 1 h");
+    expect(
+      describeEntryPoint({
+        kind: "template",
+        templateName: "setup_call",
+        label: "I'll be there"
+      })
+    ).toBe("Template setup_call › I'll be there");
+    expect(
+      describeEntryPoint({
+        kind: "broadcast",
+        broadcastName: "Diwali",
+        label: "See prices"
+      })
+    ).toBe("Broadcast Diwali › See prices");
   });
 });

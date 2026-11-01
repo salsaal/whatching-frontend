@@ -128,12 +128,15 @@ export const layoutFlow = async ({
   nodes,
   edges,
   sizes,
-  handles
+  handles,
+  firstNodeId
 }: {
   nodes: Node[];
   edges: Edge[];
   sizes: Map<string, Size>;
   handles: Map<string, HandlePoint[]>;
+  /** Pinned to the first (leftmost) column, e.g. the start block. */
+  firstNodeId?: string | null;
 }) => {
   const { default: ELK } = await import("elkjs/lib/elk.bundled.js");
   const elk = new ELK();
@@ -158,7 +161,12 @@ export const layoutFlow = async ({
         id: node.id,
         width: size.width,
         height: size.height,
-        layoutOptions: { "elk.portConstraints": "FIXED_POS" },
+        layoutOptions: {
+          "elk.portConstraints": "FIXED_POS",
+          ...(node.id === firstNodeId
+            ? { "elk.layered.layering.layerConstraint": "FIRST" }
+            : {})
+        },
         ports: [
           {
             id: `${node.id}::in`,

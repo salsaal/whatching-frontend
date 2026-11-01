@@ -65,6 +65,10 @@ type FlowDiagramPreviewDialogProps = {
   platform: FlowPlatform;
   nodes: Node[];
   edges: Edge[];
+  /** "try" opens straight into the phone simulator, listed first as "Test". */
+  defaultMode?: "diagram" | "try";
+  /** Offers "Start from this block" in the simulator. */
+  alternateStart?: { nodeId: string; label: string } | null;
 };
 
 interface MessagePreviewNodeData extends Record<string, unknown> {
@@ -244,12 +248,15 @@ function FlowPreviewBody({
   title,
   platform,
   nodes,
-  edges
+  edges,
+  defaultMode = "diagram",
+  alternateStart
 }: Omit<FlowDiagramPreviewDialogProps, "open" | "onOpenChange">) {
   const { fitView, getInternalNode, setViewport } = useReactFlow();
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const [isMinimapVisible, setIsMinimapVisible] = useState(true);
-  const [mode, setMode] = useState<Mode>("diagram");
+  const [mode, setMode] = useState<Mode>(defaultMode);
+  const [startFromAlternate, setStartFromAlternate] = useState(false);
   const [isLaidOut, setIsLaidOut] = useState(false);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [pinnedId, setPinnedId] = useState<string | null>(null);
@@ -503,11 +510,15 @@ function FlowPreviewBody({
               aria-label="Preview mode"
               className="inline-flex rounded-md bg-muted p-0.5"
             >
-              {(
-                [
-                  ["diagram", "Diagram"],
-                  ["try", "Try it"]
-                ] as const
+              {(defaultMode === "try"
+                ? ([
+                    ["try", "Test"],
+                    ["diagram", "Diagram"]
+                  ] as const)
+                : ([
+                    ["diagram", "Diagram"],
+                    ["try", "Try it"]
+                  ] as const)
               ).map(([value, label]) => (
                 <button
                   key={value}
@@ -591,13 +602,50 @@ function FlowPreviewBody({
         </ReactFlow>
       </div>
       {mode === "try" && nodes.length > 0 && (
-        <div className="min-h-0 flex-1 bg-slate-100">
-          <FlowSimulator
-            platform={platform}
-            nodes={nodes}
-            edges={edges}
-            startNodeId={startNodeId}
-          />
+        <div className="flex min-h-0 flex-1 flex-col bg-slate-100">
+          {alternateStart && alternateStart.nodeId !== startNodeId && (
+            <div
+              role="radiogroup"
+              aria-label="Where the test starts"
+              className="flex shrink-0 flex-wrap items-center justify-center gap-2 border-b bg-white px-4 py-2 text-xs"
+            >
+              <span className="text-muted-foreground">Start from</span>
+              {(
+                [
+                  [false, "the start block"],
+                  [true, `this block (${alternateStart.label})`]
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={String(value)}
+                  type="button"
+                  role="radio"
+                  aria-checked={startFromAlternate === value}
+                  onClick={() => setStartFromAlternate(value)}
+                  className={cn(
+                    "max-w-60 cursor-pointer truncate rounded-full px-2.5 py-1 font-medium ring-1 transition",
+                    startFromAlternate === value
+                      ? "bg-primary text-white ring-primary"
+                      : "text-muted-foreground ring-border hover:text-foreground"
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="min-h-0 flex-1">
+            <FlowSimulator
+              platform={platform}
+              nodes={nodes}
+              edges={edges}
+              startNodeId={
+                startFromAlternate && alternateStart
+                  ? alternateStart.nodeId
+                  : startNodeId
+              }
+            />
+          </div>
         </div>
       )}
     </>

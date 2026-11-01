@@ -171,6 +171,12 @@ export const BOT_ENDPOINTS = {
     `${BOT_BASE}/canvases/${canvasId}/publish`,
   CANVAS_STATUS_BY_ID: (canvasId: string) =>
     `${BOT_BASE}/canvases/${canvasId}/status`,
+  CANVAS_DISCARD_DRAFT_BY_ID: (canvasId: string) =>
+    `${BOT_BASE}/canvases/${canvasId}/discard-draft`,
+  CANVAS_VERSIONS_BY_ID: (canvasId: string) =>
+    `${BOT_BASE}/canvases/${canvasId}/versions`,
+  CANVAS_VERSION_RESTORE_BY_ID: (canvasId: string, versionId: string) =>
+    `${BOT_BASE}/canvases/${canvasId}/versions/${versionId}/restore`,
   KNOWLEDGE_SOURCES: `${BOT_BASE}/knowledge-sources`,
   KNOWLEDGE_SEARCH_TEST: `${BOT_BASE}/knowledge-search/test`,
   KNOWLEDGE_TEXT: `${BOT_BASE}/knowledge-sources/text`,

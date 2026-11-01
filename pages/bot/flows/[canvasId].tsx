@@ -5,42 +5,36 @@ import {
   Background,
   Connection,
   ConnectionLineType,
-  Controls,
   Edge,
   MiniMap,
   NodeChange,
   ReactFlow,
   ReactFlowInstance,
   ReactFlowProvider,
-  ViewportPortal,
   useEdgesState,
   useNodesState
 } from "@xyflow/react";
 import {
   ArrowLeft,
-  Bot,
+  Check,
   ChevronDown,
   ChevronUp,
-  ContactRound,
+  Copy,
+  CopyPlus,
   Eye,
   FileUp,
-  ImageIcon,
-  Layers3,
-  List,
-  LocateFixed,
+  History,
   Loader2,
   Lock,
   MapPin,
-  MessageSquareText,
   MoreHorizontal,
-  MousePointerClick,
+  Pencil,
+  Play,
   Plus,
   Send,
   Timer,
   Trash2,
-  UserRound,
-  Video,
-  Workflow
+  Undo2
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
@@ -49,12 +43,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import {
+  discardBotCanvasDraftById,
   getApiErrorMessage,
   getBotCanvas,
   getBotStatus,
   getDraftConflict,
   getFlowInvalid,
   publishBotCanvasDraftById,
+  restoreBotCanvasVersionById,
   saveBotCanvasDraftById,
   updateBotCanvas,
   validateBotCanvasById
@@ -79,22 +75,42 @@ import {
   BotCanvasNode,
   BotCanvasNodeContent,
   BotCanvasResponse,
+  BotCanvasValidation,
   BotDraftChanges,
   BotDraftConflictDetails,
+  BotFlowEntryPoint,
   BotFlowIssue
 } from "@/client-api/types/bot.type";
 import { MediaAsset } from "@/client-api/types/media.type";
 import BotFlowNode from "@/components/flows/BotFlowNode";
+import {
+  blockPalette,
+  FlowBlockLibrary,
+  getBlockLabel
+} from "@/components/flows/FlowBlockLibrary";
+import { FlowCanvasToolbar } from "@/components/flows/FlowCanvasToolbar";
+import { FlowVersionHistoryDialog } from "@/components/flows/FlowVersionHistoryDialog";
+import { layoutFlow } from "@/components/flows/flowGraph";
 import FlowDiagramPreviewDialog from "@/components/flows/FlowDiagramPreviewDialog";
 import { WhatsAppFlowBlockPreview } from "@/components/flows/FlowBlockPreview";
 import LocationPickerDialog from "@/components/location/LocationPickerDialog";
 import MediaPickerDialog from "@/components/media/MediaPickerDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Combobox } from "@/components/ui/combobox";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
@@ -111,6 +127,12 @@ import {
   SelectValue
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger
+} from "@/components/ui/tooltip";
 import { Textarea } from "@/components/ui/textarea";
 import AppLayout from "@/layouts/AppLayout";
 import {
@@ -124,6 +146,12 @@ import { cn } from "@/lib/utils";
 import {
   addMissingWires,
   assignActionReplyIds,
+  cloneBlockOptions,
+  describeEntryPoint,
+  getFlowStatus,
+  getNodeOptions,
+  getOptionActionType,
+  getPrimaryAction,
   assignOptionIds,
   buildTargetByAction,
   BuilderNode,
@@ -161,6 +189,13 @@ import {
   slugifyTrigger,
   TEXT_MESSAGE_MAX
 } from "@/lib/flowBuilder";
+import {
+  emptyHistory,
+  FlowHistory,
+  recordHistory,
+  redoHistory,
+  undoHistory
+} from "@/lib/flowHistory";
 import { useOrganizationStore } from "@/stores/organizationStore";
 import { PermissionGate } from "@/components/common/NoAccess";
 
@@ -171,101 +206,95 @@ type MediaPickerTarget =
 type CanvasMode = "draft" | "live";
 
 const nodeTypes = { botBlock: BotFlowNode };
-const flowEdgeStyle = { strokeWidth: 1.25, strokeDasharray: "4 5" };
+// Wires are faint until their block is selected.
+const flowEdgeStyle = {
+  strokeWidth: 1.25,
+  strokeDasharray: "4 5",
+  opacity: 0.45
+};
 const selectedFlowEdgeStyle = {
   stroke: "#16a34a",
   strokeWidth: 2,
-  strokeDasharray: "4 5"
+  strokeDasharray: "4 5",
+  opacity: 1
 };
-const blockTypes: Array<{
-  type: BotBlockType | "automatic_follow_up";
-  label: string;
-  description: string;
-  icon: React.ElementType;
-}> = [
-  {
-    type: "text",
-    label: "Text",
-    description: "Send a plain message",
-    icon: MessageSquareText
-  },
-  {
-    type: "buttons",
-    label: "Buttons",
-    description: "Reply buttons with routes",
-    icon: MousePointerClick
-  },
-  {
-    type: "list",
-    label: "List Menu",
-    description: "Sectioned menu choices",
-    icon: List
-  },
-  {
-    type: "image",
-    label: "Image",
-    description: "Send an uploaded image",
-    icon: ImageIcon
-  },
-  {
-    type: "document",
-    label: "Document",
-    description: "Send a file/document",
-    icon: FileUp
-  },
-  {
-    type: "video",
-    label: "Video",
-    description: "Send an uploaded video",
-    icon: Video
-  },
-  {
-    type: "contacts",
-    label: "Contacts",
-    description: "Share contact cards",
-    icon: ContactRound
-  },
-  {
-    type: "handoff_to_agent",
-    label: "Hand to team",
-    description: "Hand over to a human agent",
-    icon: UserRound
-  },
-  {
-    type: "generic_carousel",
-    label: "Generic Carousel",
-    description: "Media cards with actions",
-    icon: Layers3
-  },
-  {
-    type: "location",
-    label: "Location",
-    description: "Share map coordinates",
-    icon: MapPin
-  },
-  {
-    type: "location_request",
-    label: "Location Request",
-    description: "Ask customer to share location",
-    icon: LocateFixed
-  },
-  {
-    type: "address_request",
-    label: "Address Request",
-    description: "Collect an India address",
-    icon: MapPin
-  }
-];
-
 const actionTypeOptions: Array<{ value: BotActionType; label: string }> = [
   { value: "go_to_trigger", label: "Go to block" },
   { value: "escalate_to_agent", label: "Hand to team" },
   { value: "open_url", label: "Open website" },
   { value: "end_conversation", label: "End chat" }
 ];
-const buttonActionTypeOptions = actionTypeOptions.filter((option) =>
-  ["go_to_trigger", "open_url"].includes(option.value)
-);
+// What a tap can do, per kind of block. "Open website" is a different
+// WhatsApp button, so only buttons and carousels have it.
+const allowedActionTypes = (blockType: BotBlockType): BotActionType[] =>
+  blockType === "buttons" || blockType === "generic_carousel"
+    ? ["go_to_trigger", "escalate_to_agent", "open_url", "end_conversation"]
+    : ["go_to_trigger", "escalate_to_agent", "end_conversation"];
+
+// Sets what tapping one carousel button does. Switching to or from a
+// website button changes that button on every card, since WhatsApp needs
+// the same button types on each card.
+const setCarouselOptionType = (
+  cards: GenericCarouselCard[],
+  cardIndex: number,
+  buttonIndex: number,
+  type: BotActionType
+): GenericCarouselCard[] => {
+  const buttonsOf = (card: GenericCarouselCard) =>
+    (card.buttons || []) as Array<Record<string, unknown>>;
+  const used = cards.flatMap((card) =>
+    buttonsOf(card).map((button) => String(button.replyId || button.id || ""))
+  );
+  const current = buttonsOf(cards[cardIndex] || {})[buttonIndex] || {};
+  const isUrl =
+    String(current.type || (current.url ? "url" : "quick_reply")) === "url";
+  const wantsUrl = type === "open_url";
+  let next = cards;
+  if (wantsUrl !== isUrl) {
+    next = cards.map((card) => {
+      const buttons = [...buttonsOf(card)];
+      const button = buttons[buttonIndex] || {};
+      if (wantsUrl) {
+        buttons[buttonIndex] = {
+          ...button,
+          type: "url",
+          url: button.url || "",
+          replyId: undefined,
+          id: undefined,
+          actionType: undefined
+        };
+      } else {
+        const replyId =
+          String(button.replyId || button.id || "") || newOptionReplyId(used);
+        used.push(replyId);
+        buttons[buttonIndex] = {
+          ...button,
+          type: "quick_reply",
+          id: replyId,
+          replyId,
+          url: undefined
+        };
+      }
+      return { ...card, buttons };
+    });
+  }
+  if (wantsUrl) return next;
+  return next.map((card, index) =>
+    index === cardIndex
+      ? {
+          ...card,
+          buttons: buttonsOf(card).map((button, currentIndex) =>
+            currentIndex === buttonIndex
+              ? {
+                  ...button,
+                  actionType: type === "go_to_trigger" ? undefined : type
+                }
+              : button
+          )
+        }
+      : card
+  );
+};
 
 const lockedNodeIds = new Set([
   "main-menu",
@@ -335,7 +364,8 @@ const normalizeGenericCarouselContent = (
             label,
             title: label,
             replyId: undefined,
-            id: undefined
+            id: undefined,
+            actionType: undefined
           };
         }
 
@@ -481,21 +511,19 @@ const toReactNode = (rawNode: unknown): BuilderNode => {
   );
   const contentActions = getContentActions(node.blockType, content);
   let actions: BotAction[];
-  if (node.blockType === "generic_carousel") {
-    // Carousel options live only in the cards; keep the saved routing.
+  if (node.blockType === "generic_carousel" || node.blockType === "list") {
+    // These options live only in the content (which also says what a tap
+    // does); keep the saved routing.
     const savedById = new Map(
       savedActions.map((action) => [action.actionId, action])
     );
     actions = contentActions.map((action) => ({
       ...action,
       nextTriggerKey: savedById.get(action.actionId)?.nextTriggerKey,
-      metadata: savedById.get(action.actionId)?.metadata || action.metadata
-    }));
-  } else if (node.blockType === "list") {
-    actions = mergeActions(savedActions, contentActions).map((action) => ({
-      ...action,
-      type: "go_to_trigger" as const,
-      url: undefined
+      metadata: {
+        ...(savedById.get(action.actionId)?.metadata || {}),
+        ...action.metadata
+      }
     }));
   } else {
     actions = mergeActions(
@@ -534,10 +562,7 @@ const createNode = (
   name?: string,
   overrides?: Partial<BotCanvasNode>
 ): BuilderNode => {
-  const label =
-    name ||
-    blockTypes.find((item) => item.type === blockType)?.label ||
-    "Block";
+  const label = name || getBlockLabel(blockType);
   const content = overrides?.content || defaultContent(blockType);
   const actions =
     overrides?.actions ||
@@ -574,7 +599,8 @@ const defaultCanvasNodes = (): BuilderNode[] => [
             {
               id: "TALK_TO_TEAM",
               title: "Talk to team",
-              description: "Ask us for help"
+              description: "Ask us for help",
+              type: "escalate_to_agent"
             },
             {
               id: "OPT_OUT",
@@ -958,6 +984,9 @@ const prepareNodeContent = (node: BuilderNode): BotCanvasNodeContent => {
             );
             return {
               ...(row.actionId ? { actionId: row.actionId } : {}),
+              ...(row.type && row.type !== "go_to_trigger"
+                ? { type: row.type }
+                : {}),
               id,
               replyId: String(row.replyId || id),
               title,
@@ -1073,28 +1102,60 @@ const formatTime = (value: string | number | Date = Date.now()) =>
   });
 
 type SaveState = "idle" | "saving" | "saved" | "error";
+type FlowSnapshot = { nodes: BuilderNode[]; edges: Edge[]; signature: string };
+// Changes this close together (typing, nudging) share one undo step.
+const HISTORY_COALESCE_MS = 1000;
+const ARRANGE_DURATION_MS = 350;
 type FocusRequest = {
   nodeId: string;
   field?: string;
   actionId?: string;
+  /** Opens this editor tab regardless of field. */
+  tab?: PanelTab;
   nonce: number;
 };
 type DraftConflict = {
   details: BotDraftConflictDetails;
   /** What to retry after "Keep mine". */
-  retry: "save" | "go-live";
+  retry:
+    | { kind: "save" }
+    | { kind: "go-live" }
+    | { kind: "discard" }
+    | { kind: "restore"; versionId: string };
 };
+type PanelTab = "message" | "next" | "settings";
+
+// The editor tab an issue's field or option lives on.
+const tabForFocus = (request: FocusRequest): PanelTab => {
+  if (request.tab) return request.tab;
+  if (request.field?.startsWith("followUp")) return "next";
+  if (request.field === "name") return "settings";
+  if (request.field && !request.field.startsWith("action.")) {
+    return "message";
+  }
+  return request.actionId ? "next" : "message";
+};
+
+const formatHint = (
+  <p className="text-[11px] text-muted-foreground">
+    <span className="font-mono">*bold*</span>{" "}
+    <span className="font-mono">_italic_</span>{" "}
+    <span className="font-mono">~strike~</span>
+  </p>
+);
 
 function IssuesBar({
   issues,
   open,
   onOpenChange,
-  onSelect
+  onSelect,
+  className
 }: {
   issues: BotFlowIssue[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSelect: (issue: BotFlowIssue) => void;
+  className?: string;
 }) {
   const errors = issues.filter((issue) => issue.severity === "error");
   const warnings = issues.filter((issue) => issue.severity !== "error");
@@ -1108,7 +1169,12 @@ function IssuesBar({
     .join(" · ");
 
   return (
-    <div className="absolute bottom-4 left-16 right-40 z-10 rounded-lg border bg-white shadow-md">
+    <div
+      className={cn(
+        "absolute bottom-4 left-16 z-10 rounded-lg border bg-white shadow-md",
+        className
+      )}
+    >
       <button
         type="button"
         className="flex w-full cursor-pointer items-center justify-between gap-3 px-3 py-2 text-sm font-medium"
@@ -1177,7 +1243,6 @@ function FlowsBuilder() {
     Edge
   > | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [previewNodeId, setPreviewNodeId] = useState<string | null>(null);
   const [flowPreviewOpen, setFlowPreviewOpen] = useState(false);
   const [locationPickerOpen, setLocationPickerOpen] = useState(false);
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
@@ -1190,6 +1255,19 @@ function FlowsBuilder() {
   const [cachedOffer, setCachedOffer] =
     useState<CachedDraft<BotCanvasDraftState> | null>(null);
   const [isGoingLive, setIsGoingLive] = useState(false);
+  const [hasUnsavedEdits, setHasUnsavedEdits] = useState(false);
+  const [analysis, setAnalysis] = useState<BotCanvasValidation["analysis"]>();
+  const [discardOpen, setDiscardOpen] = useState(false);
+  const [versionsOpen, setVersionsOpen] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+  const [wiresVisible, setWiresVisible] = useState(true);
+  const [minimapVisible, setMinimapVisible] = useState(false);
+  const [isArranging, setIsArranging] = useState(false);
+  const [historyState, setHistoryState] = useState({
+    canUndo: false,
+    canRedo: false
+  });
   // Bumped whenever there are edits the server doesn't have; restarts the
   // autosave timer.
   const [pendingVersion, setPendingVersion] = useState(0);
@@ -1197,6 +1275,8 @@ function FlowsBuilder() {
     ids: Set<string>;
     label: string;
     cascadesFollowUp: boolean;
+    /** How customers reach the block now; these stop working. */
+    reachedFrom?: string[];
   } | null>(null);
   const [mediaPicker, setMediaPicker] = useState<{
     open: boolean;
@@ -1220,6 +1300,14 @@ function FlowsBuilder() {
   const conflictRef = useRef(false);
   const validateTimerRef = useRef<number | undefined>(undefined);
   const validateRequestRef = useRef(0);
+  // Undo/redo: the last recorded state and the stacks around it. Drags and
+  // auto-arrange record once, when they finish; quick edits in a row (like
+  // typing) share one step.
+  const historyRef = useRef<FlowHistory<FlowSnapshot>>(emptyHistory());
+  const snapshotRef = useRef<FlowSnapshot | null>(null);
+  const lastRecordAtRef = useRef(0);
+  const isDraggingRef = useRef(false);
+  const isArrangingRef = useRef(false);
 
   const queryClient = useQueryClient();
 
@@ -1335,13 +1423,14 @@ function FlowsBuilder() {
           ...edge,
           type: "smoothstep",
           selected,
+          hidden: !wiresVisible && !connectedToSelected && !selected,
           style:
             connectedToSelected || selected
               ? { ...edge.style, ...selectedFlowEdgeStyle }
               : { ...edge.style, ...flowEdgeStyle }
         };
       }),
-    [rawVisibleEdges, selectedEdgeId, selectedNodeId]
+    [rawVisibleEdges, selectedEdgeId, selectedNodeId, wiresVisible]
   );
 
   // Display-only extras for each block: where its options lead, the worst
@@ -1401,11 +1490,6 @@ function FlowsBuilder() {
     publishedNodes,
     rawVisibleEdges
   ]);
-
-  const previewNode = useMemo(
-    () => visibleNodes.find((node) => node.id === previewNodeId) || null,
-    [previewNodeId, visibleNodes]
-  );
 
   const buildDraftState = useCallback(
     (currentNodes = nodes, currentEdges = edges): BotCanvasDraftState => {
@@ -1491,6 +1575,7 @@ function FlowsBuilder() {
           const response = await validateBotCanvasById(canvasId);
           if (requestId !== validateRequestRef.current) return;
           setIssues(response.data?.validation?.issues || []);
+          setAnalysis(response.data?.validation?.analysis);
         } catch {
           // Keep the last result; the next save checks again.
         }
@@ -1528,6 +1613,7 @@ function FlowsBuilder() {
         ? draftSignature(latest) !== signature
         : false;
       hasPendingEditsRef.current = stillPending;
+      setHasUnsavedEdits(stillPending);
       if (stillPending && latest) {
         writeCachedDraft(orgId, canvasId, latest, draftRevisionRef.current);
         setPendingVersion((value) => value + 1);
@@ -1576,7 +1662,7 @@ function FlowsBuilder() {
       } catch (error) {
         const draftConflict = getDraftConflict(error);
         if (draftConflict) {
-          openConflict(draftConflict.details, "save");
+          openConflict(draftConflict.details, { kind: "save" });
         } else {
           setSaveState("error");
         }
@@ -1597,12 +1683,62 @@ function FlowsBuilder() {
       setNodes(loaded.nodes);
       setEdges(loaded.edges);
       setSelectedNodeId(loaded.nodes[0]?.id || null);
-      setPreviewNodeId(null);
       setSelectedEdgeId(null);
       return loaded;
     },
     [setEdges, setNodes]
   );
+
+  const syncHistoryState = useCallback(() => {
+    setHistoryState({
+      canUndo: historyRef.current.past.length > 0,
+      canRedo: historyRef.current.future.length > 0
+    });
+  }, []);
+
+  // Called on every committed change. Only a change to what's saved (not
+  // selection) becomes an undo step.
+  const recordSnapshot = useCallback(
+    (snapshot: FlowSnapshot) => {
+      if (isDraggingRef.current || isArrangingRef.current) return;
+      const previous = snapshotRef.current;
+      snapshotRef.current = snapshot;
+      if (!previous || previous.signature === snapshot.signature) return;
+      const now = Date.now();
+      historyRef.current =
+        now - lastRecordAtRef.current > HISTORY_COALESCE_MS
+          ? recordHistory(historyRef.current, previous)
+          : { ...historyRef.current, future: [] };
+      lastRecordAtRef.current = now;
+      syncHistoryState();
+    },
+    [syncHistoryState]
+  );
+
+  // A different draft came from the server; there's nothing to undo to.
+  const resetHistory = useCallback(() => {
+    historyRef.current = emptyHistory();
+    snapshotRef.current = null;
+    lastRecordAtRef.current = 0;
+    syncHistoryState();
+  }, [syncHistoryState]);
+
+  const stepHistory = (direction: "undo" | "redo") => {
+    const current = snapshotRef.current;
+    if (isLiveView || !current) return;
+    const result =
+      direction === "undo"
+        ? undoHistory(historyRef.current, current)
+        : redoHistory(historyRef.current, current);
+    if (!result) return;
+    historyRef.current = result.history;
+    // Already the recorded state, so restoring it isn't a new step.
+    snapshotRef.current = result.snapshot;
+    lastRecordAtRef.current = 0;
+    setNodes(result.snapshot.nodes);
+    setEdges(result.snapshot.edges);
+    syncHistoryState();
+  };
 
   useEffect(() => {
     if (!canvasData || hydratedRef.current) return;
@@ -1615,6 +1751,7 @@ function FlowsBuilder() {
     // nothing is saved or cached until the user changes it.
     savedSignatureRef.current = null;
     hasPendingEditsRef.current = false;
+    resetHistory();
     const loaded = applyDraft(serverDraft);
 
     const cached = readCachedDraft(orgId, canvasId);
@@ -1626,26 +1763,30 @@ function FlowsBuilder() {
     // A starter swap isn't saved yet, so the server's checks would be about
     // blocks that aren't on screen.
     if (!loaded.useStarter) scheduleValidate(0, false);
-  }, [applyDraft, canvasData, canvasId, orgId, scheduleValidate]);
+  }, [applyDraft, canvasData, canvasId, orgId, resetHistory, scheduleValidate]);
 
   useEffect(() => {
     if (isLiveView || !hydratedRef.current || !nodes.length) return;
     const draft = buildDraftState();
     const signature = draftSignature(draft);
     latestDraftRef.current = draft;
+    recordSnapshot({ nodes, edges, signature });
     if (savedSignatureRef.current === null) {
       savedSignatureRef.current = signature;
       return;
     }
     const wasPending = hasPendingEditsRef.current;
     hasPendingEditsRef.current = signature !== savedSignatureRef.current;
+    setHasUnsavedEdits(hasPendingEditsRef.current);
     if (hasPendingEditsRef.current) {
       writeCachedDraft(orgId, canvasId, draft, draftRevisionRef.current);
       setPendingVersion((value) => value + 1);
     } else if (wasPending) {
       clearCachedDraft(orgId, canvasId);
     }
-  }, [buildDraftState, canvasId, isLiveView, nodes.length, orgId]);
+    // nodes/edges change exactly when buildDraftState does.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [buildDraftState, canvasId, isLiveView, orgId, recordSnapshot]);
 
   // Autosave, 2.5 s after the last change. Paused while a conflict is open.
   useEffect(() => {
@@ -1687,19 +1828,10 @@ function FlowsBuilder() {
     };
   }, [canvasId, orgId, router.events]);
 
-  const focusIssue = useCallback(
-    (issue: BotFlowIssue) => {
-      if (!issue.nodeId) return;
-      let node = nodesRef.current.find((item) => item.id === issue.nodeId);
-      let field = issue.field;
-      // A follow-up message is edited from the block that sends it.
-      const followUpSourceId = node?.data.metadata?.followUpSourceId;
-      if (node?.hidden && followUpSourceId) {
-        node = nodesRef.current.find(
-          (item) => item.id === String(followUpSourceId)
-        );
-        field = "followUp";
-      }
+  // Selects a block and centres it on the canvas.
+  const focusNode = useCallback(
+    (nodeId: string, request?: Omit<FocusRequest, "nodeId" | "nonce">) => {
+      const node = nodesRef.current.find((item) => item.id === nodeId);
       if (!node) return;
       setCanvasMode("draft");
       setSelectedEdgeId(null);
@@ -1712,14 +1844,29 @@ function FlowsBuilder() {
         node.position.y + height / 2,
         { zoom: Math.max(reactFlow.getZoom(), 0.9), duration: 300 }
       );
-      setFocusRequest({
-        nodeId: node.id,
-        field,
-        actionId: issue.actionId,
-        nonce: Date.now()
-      });
+      if (request) {
+        setFocusRequest({ ...request, nodeId: node.id, nonce: Date.now() });
+      }
     },
     [reactFlow]
+  );
+
+  const focusIssue = useCallback(
+    (issue: BotFlowIssue) => {
+      if (!issue.nodeId) return;
+      const node = nodesRef.current.find((item) => item.id === issue.nodeId);
+      // A follow-up message is edited from the block that sends it.
+      const followUpSourceId = node?.data.metadata?.followUpSourceId;
+      if (node?.hidden && followUpSourceId) {
+        focusNode(String(followUpSourceId), { field: "followUp" });
+        return;
+      }
+      focusNode(issue.nodeId, {
+        field: issue.field,
+        actionId: issue.actionId
+      });
+    },
+    [focusNode]
   );
 
   // One request saves, checks and makes the flow live.
@@ -1742,6 +1889,7 @@ function FlowsBuilder() {
         response.data?.canvas?.draftRevision ?? response.data?.draftRevision
       );
       setIssues(response.data?.validation?.issues || []);
+      setAnalysis(response.data?.validation?.analysis);
       await Promise.all([refetchCanvas(), refetchStatus()]);
       queryClient.invalidateQueries({ queryKey: ["bot-canvases", orgId] });
       toast.success(
@@ -1752,7 +1900,7 @@ function FlowsBuilder() {
     } catch (error) {
       const draftConflict = getDraftConflict(error);
       if (draftConflict) {
-        openConflict(draftConflict.details, "go-live");
+        openConflict(draftConflict.details, { kind: "go-live" });
         return;
       }
       const invalid = getFlowInvalid(error);
@@ -1792,24 +1940,84 @@ function FlowsBuilder() {
     }
   };
 
+  // Shows a draft the server just sent (reload, discard, restore) as the
+  // new baseline: nothing unsaved, nothing to undo.
+  const showServerDraft = (data: BotCanvasResponse["data"]) => {
+    draftRevisionRef.current =
+      data?.draftRevision ?? data?.canvas?.draftRevision;
+    savedSignatureRef.current = null;
+    hasPendingEditsRef.current = false;
+    setHasUnsavedEdits(false);
+    resetHistory();
+    applyDraft(data?.canvas?.draftState || data?.draftState);
+    clearCachedDraft(orgId, canvasId);
+    setCachedOffer(null);
+    setCanvasMode("draft");
+    if (data?.draftChanges) {
+      applyDraftChanges(data.draftChanges);
+    } else {
+      void refetchCanvas();
+    }
+    scheduleValidate(0, false);
+  };
+
   const reloadTheirVersion = async () => {
     const result = await refetchCanvas();
     if (!result.data) {
       toast.error("Couldn't load the latest version. Try again.");
       return;
     }
-    draftRevisionRef.current =
-      result.data.data?.draftRevision ??
-      result.data.data?.canvas?.draftRevision;
-    savedSignatureRef.current = null;
-    hasPendingEditsRef.current = false;
-    applyDraft(getDraftStateFromResponse(result.data));
-    clearCachedDraft(orgId, canvasId);
-    setCachedOffer(null);
+    showServerDraft(result.data.data);
     conflictRef.current = false;
     setConflict(null);
     setSaveState("idle");
-    scheduleValidate(0, false);
+  };
+
+  // Discard changes, or copy a version that went live into the editor.
+  const replaceDraft = async (
+    target: { kind: "discard" } | { kind: "restore"; versionId: string }
+  ) => {
+    while (saveInFlightRef.current) {
+      await saveInFlightRef.current;
+    }
+    if (conflictRef.current) return false;
+    try {
+      const response =
+        target.kind === "discard"
+          ? await discardBotCanvasDraftById({
+              canvasId,
+              baseRevision: draftRevisionRef.current
+            })
+          : await restoreBotCanvasVersionById({
+              canvasId,
+              versionId: target.versionId,
+              baseRevision: draftRevisionRef.current
+            });
+      showServerDraft(response.data);
+      setSaveState("saved");
+      setLastSavedAt(formatTime());
+      toast.success(
+        target.kind === "discard"
+          ? "Back to the live version."
+          : "Version copied into your editor. Update the live flow when you're ready."
+      );
+      return true;
+    } catch (error) {
+      const draftConflict = getDraftConflict(error);
+      if (draftConflict) {
+        openConflict(draftConflict.details, target);
+      } else {
+        toast.error(
+          getApiErrorMessage(
+            error,
+            target.kind === "discard"
+              ? "Couldn't discard the changes. Try again."
+              : "Couldn't restore that version. Try again."
+          )
+        );
+      }
+      return false;
+    }
   };
 
   const keepMyVersion = () => {
@@ -1818,10 +2026,12 @@ function FlowsBuilder() {
     const { retry } = conflict;
     conflictRef.current = false;
     setConflict(null);
-    if (retry === "go-live") {
+    if (retry.kind === "go-live") {
       void goLive();
-    } else {
+    } else if (retry.kind === "save") {
       void saveNow();
+    } else {
+      void replaceDraft(retry);
     }
   };
 
@@ -1940,7 +2150,6 @@ function FlowsBuilder() {
       node.data.triggerKey = makeUniqueTrigger(node.data.triggerKey, nodes);
       setNodes((current) => [...current, node]);
       setSelectedNodeId(node.id);
-      setPreviewNodeId(node.id);
       setRightPanelOpen(true);
     },
     [isLiveView, nodes, setNodes]
@@ -2115,7 +2324,10 @@ function FlowsBuilder() {
     setNodeDeletionRequest({
       ids: nodeIdsToDelete,
       label: selectedNode.data.label || "This block",
-      cascadesFollowUp
+      cascadesFollowUp,
+      reachedFrom: (analysis?.[selectedNode.id]?.entryPoints || []).map(
+        describeEntryPoint
+      )
     });
   };
 
@@ -2130,9 +2342,6 @@ function FlowsBuilder() {
       )
     );
     setSelectedNodeId((current) =>
-      current && nodeIdsToDelete.has(current) ? null : current
-    );
-    setPreviewNodeId((current) =>
       current && nodeIdsToDelete.has(current) ? null : current
     );
   };
@@ -2208,7 +2417,13 @@ function FlowsBuilder() {
         setNodeDeletionRequest({
           ids: allIds,
           label,
-          cascadesFollowUp: cascadeIds.size > 0
+          cascadesFollowUp: cascadeIds.size > 0,
+          reachedFrom:
+            removableIds.length === 1
+              ? (analysis?.[removableIds[0]]?.entryPoints || []).map(
+                  describeEntryPoint
+                )
+              : undefined
         });
       }
 
@@ -2218,7 +2433,7 @@ function FlowsBuilder() {
       if (!allowedChanges.length) return;
       onNodesChange(allowedChanges);
     },
-    [nodes, onNodesChange]
+    [analysis, nodes, onNodesChange]
   );
 
   const selectMedia = (media: MediaAsset) => {
@@ -2275,14 +2490,237 @@ function FlowsBuilder() {
   const enterLiveView = () => {
     setCanvasMode("live");
     setSelectedNodeId(null);
-    setPreviewNodeId(null);
     setSelectedEdgeId(null);
   };
   const exitLiveView = () => {
     setCanvasMode("draft");
     setSelectedNodeId(null);
-    setPreviewNodeId(null);
   };
+
+  // Points an option at a block (or at nothing). Same as dragging a wire.
+  const connectOption = (
+    nodeId: string,
+    actionId: string,
+    targetId: string | null
+  ) => {
+    if (isLiveView) return;
+    setEdges((current) => {
+      const rest = removeEdgesForAction(current, nodeId, actionId);
+      return targetId
+        ? [
+            ...rest,
+            {
+              id: newId("edge"),
+              source: nodeId,
+              sourceHandle: actionId,
+              target: targetId,
+              targetHandle: "in",
+              type: "smoothstep",
+              animated: false,
+              style: flowEdgeStyle
+            }
+          ]
+        : rest;
+    });
+  };
+
+  // "+ New block" on an option: a new block to the right, wired and selected.
+  const createConnectedBlock = (
+    nodeId: string,
+    actionId: string,
+    type: BotBlockType
+  ) => {
+    if (isLiveView) return;
+    const source = nodes.find((node) => node.id === nodeId);
+    if (!source) return;
+    const siblings = edges.filter((edge) => edge.source === nodeId).length;
+    const node = createNode(type, {
+      x: source.position.x + 380,
+      y: source.position.y + siblings * 60
+    });
+    node.data.triggerKey = makeUniqueTrigger(node.data.triggerKey, nodes);
+    setNodes((current) => [...current, node]);
+    connectOption(nodeId, actionId, node.id);
+    setSelectedNodeId(node.id);
+    setFocusRequest({ nodeId: node.id, tab: "message", nonce: Date.now() });
+  };
+
+  // A copy with new IDs for the block, its options and reply IDs, and no
+  // wires. A follow-up isn't copied: it is a block of its own.
+  const duplicateNode = (nodeId: string) => {
+    if (isLiveView) return;
+    const source = nodes.find((node) => node.id === nodeId);
+    if (!source || source.hidden) return;
+    const { content, actions } = cloneBlockOptions(
+      source.data.blockType,
+      source.data.content,
+      source.data.actions
+    );
+    const label = `${source.data.label} copy`;
+    // The copy is never the start block, locked, or a follow-up sender.
+    const metadata = Object.fromEntries(
+      Object.entries(source.data.metadata || {}).filter(
+        ([key]) =>
+          ![
+            "isDefault",
+            "locked",
+            "automaticFollowUp",
+            "followUpDelayUnit"
+          ].includes(key)
+      )
+    );
+    const copy = createNode(
+      source.data.blockType,
+      { x: source.position.x + 40, y: source.position.y + 40 },
+      label,
+      { content, actions, metadata }
+    );
+    copy.data.triggerKey = makeUniqueTrigger(slugifyTrigger(label), nodes);
+    setNodes((current) => [
+      ...current.map((node) => ({ ...node, selected: false })),
+      { ...copy, selected: true }
+    ]);
+    setSelectedNodeId(copy.id);
+    toast.success(`Duplicated "${source.data.label}".`);
+  };
+
+  // Left-to-right layout from the start block; opt-in/opt-out get their own
+  // column. Animated, and one undo step.
+  const autoArrange = async () => {
+    if (isLiveView || !reactFlow || isArrangingRef.current) return;
+    const visible = nodes.filter((node) => !node.hidden);
+    const isSystem = (node: BuilderNode) =>
+      node.data.triggerKey === "OPT_IN" || node.data.triggerKey === "OPT_OUT";
+    const main = visible.filter((node) => !isSystem(node));
+    const system = visible.filter(isSystem);
+    if (!main.length) return;
+    const sizeOf = (node: BuilderNode) => {
+      const internal = reactFlow.getInternalNode(node.id);
+      return {
+        width: internal?.measured.width || 300,
+        height: internal?.measured.height || 200
+      };
+    };
+    const sizes = new Map(main.map((node) => [node.id, sizeOf(node)]));
+    const handles = new Map(
+      main.map((node) => [
+        node.id,
+        (
+          reactFlow.getInternalNode(node.id)?.internals.handleBounds?.source ||
+          []
+        )
+          .filter((handle) => handle.id)
+          .map((handle) => ({
+            id: String(handle.id),
+            y: handle.y + handle.height / 2
+          }))
+      ])
+    );
+    const startId =
+      main.find((node) => Boolean(node.data.metadata?.isDefault))?.id ||
+      main[0].id;
+
+    setIsArranging(true);
+    isArrangingRef.current = true;
+    try {
+      const laidOut = await layoutFlow({
+        nodes: main,
+        edges,
+        sizes,
+        handles,
+        firstNodeId: startId
+      });
+      // Keep the start block where it is; everything else moves around it.
+      const startNode = main.find((node) => node.id === startId)!;
+      const startTarget = laidOut.get(startId) || startNode.position;
+      const dx = startNode.position.x - startTarget.x;
+      const dy = startNode.position.y - startTarget.y;
+      const targets = new Map<string, { x: number; y: number }>();
+      laidOut.forEach((position, id) =>
+        targets.set(id, { x: position.x + dx, y: position.y + dy })
+      );
+      const right = Math.max(
+        ...main.map(
+          (node) =>
+            (targets.get(node.id)?.x ?? node.position.x) +
+            (sizes.get(node.id)?.width || 300)
+        )
+      );
+      let systemY = Math.min(...[...targets.values()].map((point) => point.y));
+      system.forEach((node) => {
+        targets.set(node.id, { x: right + 160, y: systemY });
+        systemY += sizeOf(node).height + 40;
+      });
+
+      const starts = new Map(
+        visible.map((node) => [node.id, { ...node.position }])
+      );
+      await new Promise<void>((resolve) => {
+        const began = performance.now();
+        const step = (now: number) => {
+          const progress = Math.min(1, (now - began) / ARRANGE_DURATION_MS);
+          const eased = 1 - Math.pow(1 - progress, 3);
+          setNodes((current) =>
+            current.map((node) => {
+              const from = starts.get(node.id);
+              const to = targets.get(node.id);
+              if (!from || !to) return node;
+              return {
+                ...node,
+                position: {
+                  x: from.x + (to.x - from.x) * eased,
+                  y: from.y + (to.y - from.y) * eased
+                }
+              };
+            })
+          );
+          if (progress < 1) {
+            window.requestAnimationFrame(step);
+          } else {
+            resolve();
+          }
+        };
+        window.requestAnimationFrame(step);
+      });
+    } catch {
+      toast.error("Couldn't arrange the blocks. Try again.");
+    } finally {
+      isArrangingRef.current = false;
+      setIsArranging(false);
+      // One more pass so the finished layout is recorded as one undo step.
+      setNodes((current) => [...current]);
+    }
+    void reactFlow.fitView({ padding: 0.2, duration: 300 });
+  };
+
+  // Undo/redo and duplicate from the keyboard. Inside a text field the
+  // browser's own undo applies.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.isContentEditable ||
+          ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))
+      ) {
+        return;
+      }
+      if (!(event.metaKey || event.ctrlKey) || isLiveView) return;
+      const key = event.key.toLowerCase();
+      if (key === "z" && !event.shiftKey) {
+        event.preventDefault();
+        stepHistory("undo");
+      } else if ((key === "z" && event.shiftKey) || key === "y") {
+        event.preventDefault();
+        stepHistory("redo");
+      } else if (key === "d" && selectedNodeId) {
+        event.preventDefault();
+        duplicateNode(selectedNodeId);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  });
 
   const canvasName = canvasData?.data?.canvas?.name || "";
   const isDefaultFlowName = !canvasName || canvasName === DEFAULT_FLOW_NAME;
@@ -2291,52 +2729,78 @@ function FlowsBuilder() {
   const conflictTime = conflict?.details.updatedAt
     ? formatTime(conflict.details.updatedAt)
     : "just now";
+  const flowStatus = getFlowStatus(canvasData?.data?.live, draftChanges);
+  const liveSince =
+    hasLiveVersion && publishedState?.publishedAt
+      ? formatLiveDate(publishedState.publishedAt)
+      : "";
+  const primaryAction = getPrimaryAction(
+    draftChanges,
+    hasLiveVersion,
+    hasUnsavedEdits
+  );
+  const canDiscard =
+    hasLiveVersion &&
+    !neverLive &&
+    (hasUnsavedEdits || Boolean(draftChanges?.hasUnpublishedChanges));
+  const testStart =
+    selectedNode && !selectedNode.hidden && !isLiveView
+      ? { nodeId: selectedNode.id, label: selectedNode.data.label }
+      : null;
+  const blockChoices = nodes
+    .filter((node) => !node.hidden)
+    .map((node) => ({ id: node.id, label: node.data.label }));
+  const selectedTargets = selectedNode
+    ? Object.fromEntries(
+        edges
+          .filter(
+            (edge) => edge.source === selectedNode.id && edge.sourceHandle
+          )
+          .map((edge) => [String(edge.sourceHandle), edge.target])
+      )
+    : {};
+
+  const statusPill = (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
+        flowStatus.tone === "green" && "bg-emerald-50 text-emerald-800",
+        flowStatus.tone === "amber" && "bg-amber-50 text-amber-800",
+        flowStatus.tone === "grey" && "bg-muted text-muted-foreground"
+      )}
+    >
+      <span
+        className={cn(
+          "size-1.5 rounded-full",
+          flowStatus.tone === "green" && "bg-emerald-500",
+          flowStatus.tone === "amber" && "bg-amber-500",
+          flowStatus.tone === "grey" && "bg-slate-400"
+        )}
+      />
+      {flowStatus.label}
+    </span>
+  );
 
   return (
     <AppLayout hideHeader fullBleed>
       <div className="flex h-dvh flex-col overflow-hidden border bg-white shadow-xs">
-        <header className="shrink-0 flex flex-col gap-3 border-b bg-white px-4 py-2.5 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                asChild
-                variant="ghost"
-                size="sm"
-                className="cursor-pointer"
-              >
-                <Link href="/bot/flows" className="flex items-center gap-1.5">
-                  <ArrowLeft className="size-4" />
-                  Back to flows
-                </Link>
-              </Button>
-              <Bot className="size-5 text-primary" />
-              <InlineEditableTitle
-                value={isDefaultFlowName ? "" : canvasName}
-                placeholder="Untitled flow"
-                className="font-heading text-2xl font-semibold"
-                disabled={!canvasName}
-                onSave={(name) => renameCanvasMutate({ canvasId, name })}
-              />
-              <Badge variant={hasLiveVersion ? "default" : "secondary"}>
-                {!hasLiveVersion
-                  ? "Not live yet"
-                  : publishedState?.publishedAt
-                    ? `Live since ${formatLiveDate(publishedState.publishedAt)}`
-                    : "Live"}
-              </Badge>
-              {hasLiveVersion && draftChanges?.hasUnpublishedChanges && (
-                <Badge
-                  variant="outline"
-                  className="border-amber-300 bg-amber-50 text-amber-800"
-                >
-                  {changeCount > 0
-                    ? `${changeCount} change${changeCount === 1 ? "" : "s"} not live yet`
-                    : "Changes not live yet"}
-                </Badge>
-              )}
-            </div>
+        <header className="flex shrink-0 flex-wrap items-center gap-2 border-b bg-white px-4 py-2">
+          <Button asChild variant="ghost" size="sm" className="cursor-pointer">
+            <Link href="/bot/flows" className="flex items-center gap-1.5">
+              <ArrowLeft className="size-4" />
+              Flows
+            </Link>
+          </Button>
+          <div className="min-w-0">
+            <InlineEditableTitle
+              value={isDefaultFlowName ? "" : canvasName}
+              placeholder="Untitled flow"
+              className="font-heading text-xl font-semibold"
+              disabled={!canvasName}
+              onSave={(name) => renameCanvasMutate({ canvasId, name })}
+            />
             {isDefaultFlowName && !hasSeenRenameHint && (
-              <p className="mt-1 flex items-center gap-2 text-xs text-primary">
+              <p className="flex items-center gap-2 text-xs text-primary">
                 Click the name to give this flow a name your team will
                 recognise.
                 <button
@@ -2348,12 +2812,31 @@ function FlowsBuilder() {
                 </button>
               </p>
             )}
-            <p className="mt-1 max-w-[320px] text-sm text-muted-foreground">
-              Build WhatsApp automation visually. Changes save automatically;
-              customers see them once you go live.
-            </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          {flowStatus.href ? (
+            <Link href={flowStatus.href} className="hover:opacity-80">
+              {statusPill}
+            </Link>
+          ) : liveSince || flowStatus.numbers?.length ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span tabIndex={0}>{statusPill}</span>
+              </TooltipTrigger>
+              <TooltipContent>
+                {[
+                  flowStatus.numbers?.length
+                    ? `Answers on ${flowStatus.numbers.join(", ")}`
+                    : "",
+                  liveSince ? `Live since ${liveSince}` : ""
+                ]
+                  .filter(Boolean)
+                  .join(". ")}
+              </TooltipContent>
+            </Tooltip>
+          ) : (
+            statusPill
+          )}
+          <div className="ml-auto flex flex-wrap items-center gap-2">
             <span className="text-xs text-muted-foreground" aria-live="polite">
               {saveState === "saving" ? (
                 <span className="flex items-center gap-1.5">
@@ -2375,6 +2858,32 @@ function FlowsBuilder() {
                 `Saved ${lastSavedAt}`
               ) : null}
             </span>
+            <Button
+              variant="outline"
+              disabled={!visibleNodes.length}
+              onClick={() => setFlowPreviewOpen(true)}
+            >
+              <Play className="size-4" />
+              Test
+            </Button>
+            <Button
+              onClick={() => void goLive()}
+              disabled={
+                isGoingLive ||
+                isLiveView ||
+                isCanvasLoading ||
+                primaryAction.disabled
+              }
+            >
+              {isGoingLive ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : primaryAction.disabled ? (
+                <Check className="size-4" />
+              ) : (
+                <Send className="size-4" />
+              )}
+              {primaryAction.label}
+            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -2393,19 +2902,29 @@ function FlowsBuilder() {
                   <Eye className="size-4" />
                   View live version
                 </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={!canDiscard || isLiveView}
+                  onSelect={() => setDiscardOpen(true)}
+                >
+                  <Undo2 className="size-4" />
+                  Discard changes
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={!canvasName}
+                  onSelect={() => {
+                    setRenameValue(isDefaultFlowName ? "" : canvasName);
+                    setRenameOpen(true);
+                  }}
+                >
+                  <Pencil className="size-4" />
+                  Rename
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setVersionsOpen(true)}>
+                  <History className="size-4" />
+                  Version history
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            <Button
-              onClick={() => void goLive()}
-              disabled={isGoingLive || isLiveView || isCanvasLoading}
-            >
-              {isGoingLive ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <Send className="size-4" />
-              )}
-              {neverLive ? "Go live" : "Update live flow"}
-            </Button>
           </div>
         </header>
 
@@ -2436,71 +2955,15 @@ function FlowsBuilder() {
           Some panels may be hard to use here.
         </div>
 
-        <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[250px_minmax(0,1fr)_320px]">
+        <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[250px_minmax(0,1fr)_340px]">
           <aside className="overflow-y-auto border-r bg-muted/30 p-3 [scrollbar-color:hsl(var(--border))_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border">
-            <div className="mb-3 rounded-xl border bg-white p-3">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold">Autosave</p>
-                <Badge
-                  variant={saveState === "error" ? "destructive" : "secondary"}
-                >
-                  {saveState === "saving"
-                    ? "Saving"
-                    : saveState === "saved"
-                      ? "Saved"
-                      : saveState === "error"
-                        ? "Couldn't save"
-                        : "Idle"}
-                </Badge>
-              </div>
-              <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                Changes save 2.5 seconds after you stop
-                {lastSavedAt ? `, last at ${lastSavedAt}` : ""}.
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <p className="text-sm font-semibold">Component Library</p>
-              {blockTypes.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <button
-                    key={item.type}
-                    type="button"
-                    draggable={!isLiveView}
-                    onDragStart={(event) => {
-                      if (isLiveView) return;
-                      event.dataTransfer.setData(
-                        "application/whatching-block",
-                        item.type
-                      );
-                      event.dataTransfer.effectAllowed = "move";
-                    }}
-                    onClick={() =>
-                      item.type === "automatic_follow_up"
-                        ? addAutomaticFollowUp()
-                        : addBlock(item.type)
-                    }
-                    className={cn(
-                      "flex w-full items-start gap-2.5 rounded-xl border bg-white p-2.5 text-left shadow-xs transition hover:border-primary/40 hover:bg-primary/5",
-                      isLiveView
-                        ? "cursor-not-allowed opacity-55"
-                        : "cursor-grab"
-                    )}
-                  >
-                    <Icon className="mt-0.5 size-[18px] shrink-0 text-primary" />
-                    <span>
-                      <span className="block text-sm font-medium">
-                        {item.label}
-                      </span>
-                      <span className="mt-0.5 block text-xs text-muted-foreground">
-                        {item.description}
-                      </span>
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+            <FlowBlockLibrary
+              readOnly={isLiveView}
+              nodes={visibleNodes}
+              selectedNodeId={selectedNodeId}
+              onAdd={(type) => addBlock(type)}
+              onSelectNode={(nodeId) => focusNode(nodeId)}
+            />
           </aside>
 
           <main
@@ -2523,6 +2986,12 @@ function FlowsBuilder() {
                 onNodesChange={isLiveView ? undefined : handleNodesChange}
                 onEdgesChange={isLiveView ? undefined : onEdgesChange}
                 onConnect={onConnect}
+                onNodeDragStart={() => {
+                  isDraggingRef.current = true;
+                }}
+                onNodeDragStop={() => {
+                  isDraggingRef.current = false;
+                }}
                 connectionLineType={ConnectionLineType.SmoothStep}
                 defaultEdgeOptions={{
                   type: "smoothstep",
@@ -2531,19 +3000,16 @@ function FlowsBuilder() {
                 onlyRenderVisibleElements
                 onNodeClick={(_, node) => {
                   setSelectedEdgeId(null);
-                  if (node.id !== selectedNodeId) setPreviewNodeId(node.id);
                   setSelectedNodeId(node.id);
                   setRightPanelOpen(true);
                 }}
                 onPaneClick={() => {
                   setSelectedNodeId(null);
                   setSelectedEdgeId(null);
-                  setPreviewNodeId(null);
                 }}
                 onEdgeClick={(_, edge) => {
                   setSelectedEdgeId(edge.id);
                   setSelectedNodeId(null);
-                  setPreviewNodeId(null);
                 }}
                 fitView
                 minZoom={0.2}
@@ -2558,31 +3024,33 @@ function FlowsBuilder() {
                 }
               >
                 <Background />
-                <Controls />
-                <MiniMap
-                  zoomable
-                  pannable
-                  nodeStrokeWidth={3}
-                  style={{ width: 116, height: 82 }}
-                  className="!rounded-lg !border !bg-white/90 !shadow-sm"
+                <FlowCanvasToolbar
+                  readOnly={isLiveView}
+                  canUndo={historyState.canUndo}
+                  canRedo={historyState.canRedo}
+                  onUndo={() => stepHistory("undo")}
+                  onRedo={() => stepHistory("redo")}
+                  onZoomIn={() => void reactFlow?.zoomIn({ duration: 200 })}
+                  onZoomOut={() => void reactFlow?.zoomOut({ duration: 200 })}
+                  onFit={() =>
+                    void reactFlow?.fitView({ padding: 0.2, duration: 300 })
+                  }
+                  onArrange={() => void autoArrange()}
+                  isArranging={isArranging}
+                  wiresVisible={wiresVisible}
+                  onToggleWires={() => setWiresVisible((value) => !value)}
+                  minimapVisible={minimapVisible}
+                  onToggleMinimap={() => setMinimapVisible((value) => !value)}
                 />
-                <ViewportPortal>
-                  {previewNode && (
-                    <div
-                      className="nodrag nopan nowheel absolute z-[1000] w-[292px] max-w-[calc(100vw-2rem)]"
-                      style={{
-                        transform: `translate(${previewNode.position.x - 36}px, ${previewNode.position.y - 18}px) translateY(-100%)`
-                      }}
-                    >
-                      <WhatsAppFlowBlockPreview
-                        blockType={previewNode.data.blockType}
-                        content={previewNode.data.content}
-                        actions={previewNode.data.actions}
-                        onClose={() => setPreviewNodeId(null)}
-                      />
-                    </div>
-                  )}
-                </ViewportPortal>
+                {minimapVisible && (
+                  <MiniMap
+                    zoomable
+                    pannable
+                    nodeStrokeWidth={3}
+                    style={{ width: 160, height: 110 }}
+                    className="!rounded-lg !border !bg-white/90 !shadow-sm"
+                  />
+                )}
               </ReactFlow>
             )}
             {isLiveView && (
@@ -2595,27 +3063,12 @@ function FlowsBuilder() {
                 </Button>
               </div>
             )}
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className={cn(
-                "absolute right-4 z-10 bg-white/95 shadow-xs backdrop-blur",
-                isLiveView ? "top-16" : "top-4"
-              )}
-              tooltip="Open a read-only diagram of every block and connection"
-              disabled={!visibleNodes.length}
-              onClick={() => setFlowPreviewOpen(true)}
-            >
-              <Workflow className="size-4" />
-              Preview flow
-            </Button>
             {selectedEdgeId && !isLiveView && (
               <Button
                 type="button"
                 size="sm"
                 variant="outline"
-                className="absolute right-4 top-16 z-10 border-destructive/30 bg-white/95 text-destructive shadow-xs"
+                className="absolute right-4 top-4 z-10 border-destructive/30 bg-white/95 text-destructive shadow-xs"
                 tooltip="Delete selected connection"
                 onClick={() => {
                   setEdges((current) =>
@@ -2634,6 +3087,7 @@ function FlowsBuilder() {
                 open={issuesOpen}
                 onOpenChange={setIssuesOpen}
                 onSelect={focusIssue}
+                className={minimapVisible ? "right-48" : "right-4"}
               />
             )}
           </main>
@@ -2650,13 +3104,6 @@ function FlowsBuilder() {
                 removeEdgesForAction(current, selectedNode.id, actionId)
               );
             }}
-            deleteNode={deleteSelectedNode}
-            previewOpen={previewNodeId === selectedNode?.id}
-            togglePreview={() =>
-              setPreviewNodeId((current) =>
-                current === selectedNode?.id ? null : selectedNode?.id || null
-              )
-            }
             setDefaultNode={(nodeId) => {
               setNodes((current) =>
                 current.map((item) => ({
@@ -2680,6 +3127,22 @@ function FlowsBuilder() {
             removeAutomaticFollowUp={removeAutomaticFollowUp}
             focusRequest={focusRequest}
             status={status}
+            blockChoices={blockChoices}
+            targets={selectedTargets}
+            connectOption={(actionId, targetId) =>
+              selectedNode && connectOption(selectedNode.id, actionId, targetId)
+            }
+            createConnectedBlock={(actionId, type) =>
+              selectedNode &&
+              createConnectedBlock(selectedNode.id, actionId, type)
+            }
+            entryPoints={
+              selectedNode
+                ? analysis?.[selectedNode.id]?.entryPoints
+                : undefined
+            }
+            onDuplicate={() => selectedNode && duplicateNode(selectedNode.id)}
+            onDelete={deleteSelectedNode}
           />
         </div>
       </div>
@@ -2733,11 +3196,81 @@ function FlowsBuilder() {
       <FlowDiagramPreviewDialog
         open={flowPreviewOpen}
         onOpenChange={setFlowPreviewOpen}
-        title="WhatsApp flow preview"
+        title="Test this flow"
         platform="WhatsApp"
         nodes={visibleNodes}
-        edges={visibleEdges}
+        edges={rawVisibleEdges}
+        defaultMode="try"
+        alternateStart={testStart}
       />
+      <FlowVersionHistoryDialog
+        open={versionsOpen}
+        onOpenChange={setVersionsOpen}
+        canvasId={canvasId}
+        readOnly={false}
+        onViewLive={enterLiveView}
+        onRestore={(version) =>
+          replaceDraft({ kind: "restore", versionId: version._id })
+        }
+      />
+      <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Rename flow</DialogTitle>
+          </DialogHeader>
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const name = renameValue.trim();
+              if (!name) return;
+              renameCanvasMutate({ canvasId, name });
+              setRenameOpen(false);
+            }}
+          >
+            <Input
+              autoFocus
+              value={renameValue}
+              placeholder="Flow name"
+              aria-label="Flow name"
+              onChange={(event) => setRenameValue(event.target.value)}
+            />
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setRenameOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={!renameValue.trim()}>
+                Save
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+      <AlertDialog open={discardOpen} onOpenChange={setDiscardOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Go back to the live version?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {changeCount > 0
+                ? `Your ${changeCount} change${changeCount === 1 ? "" : "s"} will be lost.`
+                : "Your changes will be lost."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-white hover:bg-destructive/90"
+              onClick={() => void replaceDraft({ kind: "discard" })}
+            >
+              Discard changes
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <AlertDialog
         open={Boolean(nodeDeletionRequest)}
         onOpenChange={(open) => !open && setNodeDeletionRequest(null)}
@@ -2745,13 +3278,27 @@ function FlowsBuilder() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this block?</AlertDialogTitle>
-            <AlertDialogDescription>
-              &quot;{nodeDeletionRequest?.label}&quot; and any routes pointing
-              to it will be removed.
-              {nodeDeletionRequest?.cascadesFollowUp
-                ? " Its auto-linked follow-up block will be deleted along with it."
-                : ""}{" "}
-              This can&apos;t be undone from here.
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <p>
+                  &quot;{nodeDeletionRequest?.label}&quot; and any wires
+                  pointing to it will be removed.
+                  {nodeDeletionRequest?.cascadesFollowUp
+                    ? " Its follow-up message will be deleted along with it."
+                    : ""}
+                </p>
+                {nodeDeletionRequest?.reachedFrom &&
+                  nodeDeletionRequest.reachedFrom.length > 0 && (
+                    <div>
+                      <p>These will stop leading anywhere:</p>
+                      <ul className="mt-1 list-disc space-y-0.5 pl-5">
+                        {nodeDeletionRequest.reachedFrom.map((line) => (
+                          <li key={line}>{line}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -2807,6 +3354,19 @@ function FlowsBuilder() {
   );
 }
 
+type NextStepOption = {
+  actionId: string;
+  label: string;
+  type: BotActionType;
+  url?: string;
+  /** Carousel buttons: where the button sits. */
+  cardIndex?: number;
+  buttonIndex?: number;
+};
+
+const actionTypeLabel = (type: BotActionType) =>
+  actionTypeOptions.find((option) => option.value === type)?.label || type;
+
 function PropertiesPanel({
   open,
   node,
@@ -2814,16 +3374,20 @@ function PropertiesPanel({
   readOnly,
   updateNode,
   removeEdgesForAction,
-  deleteNode,
-  previewOpen,
-  togglePreview,
   setDefaultNode,
   openMediaPicker,
   openLocationPicker,
   addAutomaticFollowUp,
   removeAutomaticFollowUp,
   focusRequest,
-  status
+  status,
+  blockChoices,
+  targets,
+  connectOption,
+  createConnectedBlock,
+  entryPoints,
+  onDuplicate,
+  onDelete
 }: {
   open: boolean;
   node: BuilderNode | null;
@@ -2834,9 +3398,6 @@ function PropertiesPanel({
     updater: (data: BuilderNodeData) => BuilderNodeData
   ) => void;
   removeEdgesForAction: (actionId: string) => void;
-  deleteNode: () => void;
-  previewOpen: boolean;
-  togglePreview: () => void;
   setDefaultNode: (nodeId: string) => void;
   openMediaPicker: (
     type: "IMAGE" | "DOCUMENT" | "VIDEO",
@@ -2851,13 +3412,25 @@ function PropertiesPanel({
     optOutFlowReady?: boolean;
     geminiConfigured?: boolean;
   };
+  /** Blocks an option can go to. */
+  blockChoices: Array<{ id: string; label: string }>;
+  /** Where each of this block's options is wired, by actionId. */
+  targets: Record<string, string>;
+  connectOption: (actionId: string, targetId: string | null) => void;
+  createConnectedBlock: (actionId: string, type: BotBlockType) => void;
+  /** From the last check; undefined until the block has been checked. */
+  entryPoints?: BotFlowEntryPoint[];
+  onDuplicate: () => void;
+  onDelete: () => void;
 }) {
   const panelRef = useRef<HTMLElement | null>(null);
   const handledFocusRef = useRef<number | null>(null);
+  const [tab, setTab] = useState<PanelTab>("message");
+  const [previewCollapsed, setPreviewCollapsed] = useState(false);
   const nodeId = node?.id;
 
-  // Clicking an issue selects its block; this scrolls to the field (or
-  // option) it is about and focuses it.
+  // Clicking an issue selects its block; this opens the tab holding the
+  // field (or option) it is about, scrolls to it and focuses it.
   useEffect(() => {
     if (
       !focusRequest ||
@@ -2866,30 +3439,36 @@ function PropertiesPanel({
     ) {
       return;
     }
+    const wanted = tabForFocus(focusRequest);
+    if (tab !== wanted) {
+      setTab(wanted);
+      return;
+    }
     handledFocusRef.current = focusRequest.nonce;
     const frame = window.requestAnimationFrame(() => {
       const root = panelRef.current;
       if (!root) return;
       const target = findIssueTarget(root, focusRequest);
       if (!target) {
-        root.scrollTo({ top: 0, behavior: "smooth" });
+        root
+          .querySelector("[data-panel-scroll]")
+          ?.scrollTo({ top: 0, behavior: "smooth" });
         return;
       }
       target.scrollIntoView({ block: "center", behavior: "smooth" });
       target.focus({ preventScroll: true });
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [focusRequest, nodeId]);
+  }, [focusRequest, nodeId, tab]);
 
   if (!open) return <aside className="hidden border-l bg-white lg:block" />;
   if (!node) {
     return (
       <aside className="overflow-y-auto border-l bg-white p-4 [scrollbar-color:hsl(var(--border))_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border">
-        <p className="text-sm font-semibold">Properties</p>
-        <div className="mt-4 rounded-xl border border-dashed bg-muted/30 p-6 text-center text-sm text-muted-foreground">
+        <div className="rounded-xl border border-dashed bg-muted/30 p-6 text-center text-sm text-muted-foreground">
           {readOnly
             ? "You're viewing the live version. Go back to editing to make changes."
-            : "Select a block to edit content, actions, routes, and media."}
+            : "Select a block to edit its message and where it leads."}
         </div>
         <div className="mt-4 rounded-xl border bg-white p-3">
           <p className="text-xs font-medium text-muted-foreground">
@@ -2919,6 +3498,12 @@ function PropertiesPanel({
   }
 
   const content = node.data.content;
+  const blockType = node.data.blockType;
+  const isStart = Boolean(
+    (node.data.metadata as Record<string, unknown> | undefined)?.isDefault
+  );
+  const isSystemBlock =
+    node.data.triggerKey === "OPT_IN" || node.data.triggerKey === "OPT_OUT";
   const updateContent = (patch: BotCanvasNodeContent) =>
     updateNode(node.id, (data) => ({
       ...data,
@@ -2967,6 +3552,7 @@ function PropertiesPanel({
   const hasAutomaticFollowUp = Boolean(
     node.data.followUp?.enabled && followUpNode
   );
+  const canHaveFollowUp = !isSystemBlock && blockType !== "handoff_to_agent";
   const updateFollowUpContent = (patch: BotCanvasNodeContent) => {
     if (!followUpNode) return;
     updateNode(followUpNode.id, (data) => ({
@@ -2975,183 +3561,1129 @@ function PropertiesPanel({
     }));
   };
 
+  // ---- Next steps: one row per option, whatever kind of block it is.
+  const nextOptions: NextStepOption[] = (() => {
+    if (blockType === "list") {
+      return getNodeOptions("list", content, node.data.actions).map(
+        (option) => ({
+          actionId: option.actionId,
+          label: option.label,
+          type: option.type
+        })
+      );
+    }
+    if (blockType === "generic_carousel") {
+      return getCarouselCards(content).flatMap((card, cardIndex) =>
+        ((card.buttons || []) as Array<Record<string, unknown>>).map(
+          (button, buttonIndex) => ({
+            actionId: String(button.actionId || ""),
+            label: `${String(card.title || "").trim() || `Card ${cardIndex + 1}`} · ${
+              String(button.label || button.title || "").trim() || "Button"
+            }`,
+            type: getOptionActionType("generic_carousel", button),
+            url: typeof button.url === "string" ? button.url : "",
+            cardIndex,
+            buttonIndex
+          })
+        )
+      );
+    }
+    return node.data.actions.map((action) => ({
+      actionId: action.actionId,
+      label: action.label?.trim() || "Untitled option",
+      type: action.type,
+      url: action.url
+    }));
+  })().filter((option) => option.actionId);
+
+  const setOptionType = (option: NextStepOption, nextType: BotActionType) => {
+    if (blockType === "list") {
+      updateListSections(
+        getListSections(content).map((section) => ({
+          ...section,
+          rows: (section.rows || []).map((row) =>
+            row.actionId === option.actionId
+              ? {
+                  ...row,
+                  type: nextType === "go_to_trigger" ? undefined : nextType
+                }
+              : row
+          )
+        }))
+      );
+      return;
+    }
+    if (
+      blockType === "generic_carousel" &&
+      option.cardIndex !== undefined &&
+      option.buttonIndex !== undefined
+    ) {
+      updateContent({
+        cards: setCarouselOptionType(
+          getCarouselCards(content),
+          option.cardIndex,
+          option.buttonIndex,
+          nextType
+        )
+      });
+      return;
+    }
+    const switchingUrlMode =
+      (option.type === "open_url") !== (nextType === "open_url");
+    if (blockType !== "buttons" || !switchingUrlMode) {
+      updateAction(option.actionId, { type: nextType });
+      return;
+    }
+    // A website button can't sit next to reply buttons: switching modes
+    // turns the block into one website button, or all reply buttons.
+    node.data.actions.forEach((item) => removeEdgesForAction(item.actionId));
+    updateNode(node.id, (data) => ({
+      ...data,
+      actions:
+        nextType === "open_url"
+          ? data.actions
+              .filter((item) => item.actionId === option.actionId)
+              .map((item) => ({
+                ...item,
+                type: "open_url" as const,
+                replyId: undefined,
+                nextTriggerKey: undefined,
+                url: item.url || ""
+              }))
+          : data.actions.map((item) => ({
+              ...item,
+              type: nextType,
+              url: undefined,
+              replyId:
+                item.replyId ||
+                newOptionReplyId(
+                  data.actions.map((other) => other.replyId || "")
+                )
+            }))
+    }));
+  };
+
+  const setOptionUrl = (option: NextStepOption, url: string) => {
+    if (
+      blockType === "generic_carousel" &&
+      option.cardIndex !== undefined &&
+      option.buttonIndex !== undefined
+    ) {
+      updateContent({
+        cards: getCarouselCards(content).map((card, cardIndex) =>
+          cardIndex === option.cardIndex
+            ? {
+                ...card,
+                buttons: (
+                  (card.buttons || []) as Array<Record<string, unknown>>
+                ).map((button, buttonIndex) =>
+                  buttonIndex === option.buttonIndex
+                    ? { ...button, url }
+                    : button
+                )
+              }
+            : card
+        )
+      });
+      return;
+    }
+    updateAction(option.actionId, { url });
+  };
+
+  const targetChoices = blockChoices.map((choice) => ({
+    value: choice.id,
+    label:
+      choice.id === node.id ? `${choice.label} (this block)` : choice.label,
+    searchText: choice.label
+  }));
+  const isWebsiteMode =
+    blockType === "buttons" &&
+    node.data.actions.some((action) => action.type === "open_url");
+
   return (
     <aside
       ref={panelRef}
-      className="overflow-y-auto border-l bg-white p-4 [scrollbar-color:hsl(var(--border))_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border"
+      className="flex min-h-0 flex-col overflow-hidden border-l bg-white"
     >
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold">Properties</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {readOnly
-              ? "The live version is read-only."
-              : "Edits save automatically."}
-          </p>
+      <Tabs
+        value={tab}
+        onValueChange={(value) => setTab(value as PanelTab)}
+        className="flex min-h-0 flex-1 flex-col gap-0"
+      >
+        <div className="shrink-0 border-b px-4 py-2">
+          <TabsList className="w-full">
+            <TabsTrigger value="message">Message</TabsTrigger>
+            <TabsTrigger value="next">Next steps</TabsTrigger>
+            <TabsTrigger value="settings">Settings</TabsTrigger>
+          </TabsList>
+          {readOnly && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              The live version is read-only.
+            </p>
+          )}
         </div>
-        <Button
-          size="icon"
-          variant="ghost"
-          className={cn(
-            "text-destructive",
-            node.data.locked && "text-muted-foreground"
-          )}
-          disabled={readOnly}
-          onClick={deleteNode}
-        >
-          {node.data.locked ? (
-            <Lock className="size-4" />
-          ) : (
-            <Trash2 className="size-4" />
-          )}
-        </Button>
-      </div>
 
-      <div className="mt-4 space-y-4">
-        <Button
-          type="button"
-          variant={previewOpen ? "secondary" : "outline"}
-          className="w-full"
-          tooltip={
-            previewOpen
-              ? "Hide the live WhatsApp message preview"
-              : "Preview this block with its current WhatsApp message data"
-          }
-          onClick={togglePreview}
+        <TabsContent
+          value="message"
+          data-panel-scroll
+          className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 [scrollbar-color:hsl(var(--border))_transparent] [scrollbar-width:thin]"
         >
-          <Eye className="size-4" />
-          {previewOpen ? "Hide preview" : "Show preview"}
-        </Button>
-
-        {!hasAutomaticFollowUp &&
-          !["OPT_IN", "OPT_OUT"].includes(node.data.triggerKey) &&
-          node.data.blockType !== "handoff_to_agent" && (
-            <Button
+          <div className="sticky top-0 z-10 -mx-4 border-b bg-white/95 px-4 py-2 backdrop-blur">
+            <button
               type="button"
-              variant="outline"
-              className="w-full"
-              disabled={readOnly}
-              onClick={() => addAutomaticFollowUp()}
+              className="flex w-full cursor-pointer items-center justify-between text-xs font-medium text-muted-foreground"
+              aria-expanded={!previewCollapsed}
+              onClick={() => setPreviewCollapsed((value) => !value)}
             >
-              <Timer className="size-4" />
-              Add automatic follow-up
-            </Button>
-          )}
-
-        {hasAutomaticFollowUp && followUpNode && (
-          <div className="space-y-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <Timer className="size-4 text-primary" />
-                <p className="text-sm font-semibold">Automatic follow-up</p>
+              Preview
+              {previewCollapsed ? (
+                <ChevronDown className="size-4" />
+              ) : (
+                <ChevronUp className="size-4" />
+              )}
+            </button>
+            {!previewCollapsed && (
+              <div className="mt-2 max-h-[38vh] overflow-y-auto">
+                <WhatsAppFlowBlockPreview
+                  blockType={blockType}
+                  content={content}
+                  actions={node.data.actions}
+                  showClose={false}
+                />
               </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="size-8 text-destructive"
-                disabled={readOnly}
-                tooltip="Remove automatic follow-up"
-                onClick={removeAutomaticFollowUp}
-              >
-                <Trash2 className="size-4" />
-              </Button>
-            </div>
-            <FollowUpDelayField
-              node={node}
-              readOnly={readOnly}
-              updateNode={updateNode}
-            />
-            <Field label="Message type">
-              <Select
-                value={followUpNode.data.blockType}
-                disabled={readOnly}
-                onValueChange={(value) => {
-                  const blockType = value as BotBlockType;
-                  updateNode(followUpNode.id, (data) => ({
-                    ...data,
-                    blockType,
-                    content: defaultContent(blockType),
-                    actions: []
-                  }));
-                }}
-              >
-                <SelectTrigger className="w-full bg-white">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {[
-                    ["text", "Text"],
-                    ["image", "Image"],
-                    ["video", "Video"],
-                    ["document", "Document"]
-                  ].map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-            {followUpNode.data.blockType === "text" ? (
-              <Field label="Follow-up message">
-                <Textarea
-                  className="min-h-28 bg-white"
-                  data-issue-field="followUp.text"
-                  value={String(followUpNode.data.content.text || "")}
+            )}
+          </div>
+
+          <div className="mt-4 space-y-4">
+            {node.data.blockType === "list" && (
+              <Field label="Optional header">
+                <Input
+                  value={String(content.headerText || "")}
                   disabled={readOnly}
-                  placeholder="Write the message to send automatically"
+                  maxLength={HEADER_FOOTER_MAX}
+                  placeholder="Choose Shipping Option"
+                  data-issue-field="content.headerText"
                   onChange={(event) =>
-                    updateFollowUpContent({ text: event.target.value })
+                    updateContent({ headerText: event.target.value })
                   }
+                />
+                <CharCounter
+                  value={content.headerText}
+                  max={HEADER_FOOTER_MAX}
                 />
               </Field>
-            ) : (
-              <>
-                <MediaField
-                  node={followUpNode}
-                  readOnly={readOnly}
-                  openMediaPicker={(type) =>
-                    openMediaPicker(type, {
-                      kind: "node",
-                      nodeId: followUpNode.id
-                    })
+            )}
+
+            {(node.data.blockType === "text" ||
+              node.data.blockType === "buttons" ||
+              node.data.blockType === "list") && (
+              <Field
+                label={
+                  node.data.blockType === "text" ? "Message" : "Body message"
+                }
+              >
+                <Textarea
+                  className="min-h-28"
+                  value={String(content.text || content.bodyText || "")}
+                  disabled={readOnly}
+                  data-issue-field={
+                    node.data.blockType === "text"
+                      ? "content.text"
+                      : "content.bodyText"
+                  }
+                  onChange={(event) =>
+                    updateContent(
+                      node.data.blockType === "text"
+                        ? { text: event.target.value }
+                        : { bodyText: event.target.value }
+                    )
                   }
                 />
-                <Field label="Optional caption">
-                  <Textarea
-                    className="min-h-20 bg-white"
-                    value={String(followUpNode.data.content.caption || "")}
+                <CharCounter
+                  value={content.text || content.bodyText}
+                  max={
+                    node.data.blockType === "text"
+                      ? TEXT_MESSAGE_MAX
+                      : INTERACTIVE_BODY_MAX
+                  }
+                />
+                {formatHint}
+              </Field>
+            )}
+
+            {node.data.blockType === "list" && (
+              <div className="space-y-3">
+                <Field label="List button text">
+                  <Input
+                    value={String(content.buttonText || "")}
                     disabled={readOnly}
+                    maxLength={LIST_BUTTON_TEXT_MAX}
+                    placeholder="Open menu"
+                    data-issue-field="content.buttonText"
                     onChange={(event) =>
-                      updateFollowUpContent({ caption: event.target.value })
+                      updateContent({ buttonText: event.target.value })
+                    }
+                  />
+                  <CharCounter
+                    value={content.buttonText}
+                    max={LIST_BUTTON_TEXT_MAX}
+                  />
+                </Field>
+                <Field label="Optional footer">
+                  <Input
+                    value={String(content.footerText || "")}
+                    disabled={readOnly}
+                    maxLength={HEADER_FOOTER_MAX}
+                    placeholder="Your business name"
+                    data-issue-field="content.footerText"
+                    onChange={(event) =>
+                      updateContent({ footerText: event.target.value })
+                    }
+                  />
+                  <CharCounter
+                    value={content.footerText}
+                    max={HEADER_FOOTER_MAX}
+                  />
+                </Field>
+                <ListSectionsEditor
+                  sections={getListSections(content)}
+                  readOnly={readOnly}
+                  onChange={updateListSections}
+                />
+              </div>
+            )}
+
+            {node.data.blockType === "buttons" && (
+              <div className="rounded-lg border p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold">
+                      Optional media header
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Reply button messages can include image, video, or
+                      document headers.
+                    </p>
+                  </div>
+                  {content.mediaId && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={readOnly}
+                      onClick={() =>
+                        updateContent({
+                          mediaType: undefined,
+                          mediaId: undefined,
+                          mediaName: undefined,
+                          mediaUrl: undefined,
+                          filename: undefined,
+                          media: undefined
+                        })
+                      }
+                    >
+                      Clear
+                    </Button>
+                  )}
+                </div>
+                <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
+                  <Select
+                    value={String(content.mediaType || "image")}
+                    disabled={readOnly}
+                    onValueChange={(value) =>
+                      updateContent({
+                        mediaType: value as "image" | "document" | "video",
+                        mediaId: "",
+                        mediaName: "",
+                        mediaUrl: "",
+                        filename: ""
+                      })
+                    }
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="image">Image</SelectItem>
+                      <SelectItem value="video">Video</SelectItem>
+                      <SelectItem value="document">Document</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={readOnly}
+                    onClick={() =>
+                      openMediaPicker(
+                        String(content.mediaType || "image").toUpperCase() as
+                          | "IMAGE"
+                          | "DOCUMENT"
+                          | "VIDEO"
+                      )
+                    }
+                  >
+                    Select media
+                  </Button>
+                </div>
+                <p className="mt-2 truncate text-xs text-muted-foreground">
+                  {content.mediaName || content.mediaId || "No media selected"}
+                </p>
+                <MediaPreview
+                  mediaType={String(content.mediaType || "")}
+                  url={getMediaPreviewUrl(content)}
+                  label={String(content.mediaName || "")}
+                />
+              </div>
+            )}
+
+            {["image", "document", "video"].includes(node.data.blockType) && (
+              <MediaField
+                node={node}
+                openMediaPicker={openMediaPicker}
+                readOnly={readOnly}
+              />
+            )}
+
+            {node.data.blockType === "location" && (
+              <div className="grid gap-3">
+                <Field label="Location name">
+                  <Input
+                    value={String(content.name || content.locationName || "")}
+                    disabled={readOnly}
+                    data-issue-field="content.name"
+                    onChange={(event) =>
+                      updateContent({ name: event.target.value })
                     }
                   />
                 </Field>
+                {!hasLocation(content) && (
+                  <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    Pick the location on the map.
+                  </p>
+                )}
+                <Button
+                  type="button"
+                  disabled={readOnly}
+                  data-issue-field="content.latitude"
+                  onClick={openLocationPicker}
+                >
+                  <MapPin className="size-4" />
+                  Choose on map
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={readOnly}
+                  onClick={() => {
+                    if (!navigator.geolocation) {
+                      toast.error(
+                        "Geolocation is not available in this browser."
+                      );
+                      return;
+                    }
+                    navigator.geolocation.getCurrentPosition(
+                      (position) => {
+                        updateContent({
+                          latitude: Number(position.coords.latitude.toFixed(6)),
+                          longitude: Number(
+                            position.coords.longitude.toFixed(6)
+                          )
+                        });
+                        toast.success("Current location added.");
+                      },
+                      () => toast.error("Unable to read current location.")
+                    );
+                  }}
+                >
+                  <MapPin className="size-4" />
+                  Use my current location
+                </Button>
+                <div className="grid grid-cols-2 gap-2">
+                  <Field label="Latitude">
+                    <Input
+                      type="number"
+                      value={
+                        typeof content.latitude === "number"
+                          ? content.latitude
+                          : ""
+                      }
+                      disabled={readOnly}
+                      onChange={(event) =>
+                        updateContent({
+                          latitude:
+                            event.target.value === ""
+                              ? undefined
+                              : Number(event.target.value)
+                        })
+                      }
+                    />
+                  </Field>
+                  <Field label="Longitude">
+                    <Input
+                      type="number"
+                      value={
+                        typeof content.longitude === "number"
+                          ? content.longitude
+                          : ""
+                      }
+                      disabled={readOnly}
+                      data-issue-field="content.longitude"
+                      onChange={(event) =>
+                        updateContent({
+                          longitude:
+                            event.target.value === ""
+                              ? undefined
+                              : Number(event.target.value)
+                        })
+                      }
+                    />
+                  </Field>
+                </div>
+                <Field label="Address">
+                  <Textarea
+                    value={String(
+                      content.address || content.locationAddress || ""
+                    )}
+                    disabled={readOnly}
+                    data-issue-field="content.address"
+                    onChange={(event) =>
+                      updateContent({ address: event.target.value })
+                    }
+                  />
+                </Field>
+              </div>
+            )}
+
+            {(node.data.blockType === "location_request" ||
+              node.data.blockType === "address_request") && (
+              <div className="grid gap-3">
+                <Field
+                  label={
+                    node.data.blockType === "location_request"
+                      ? "Location request message"
+                      : "Address request message"
+                  }
+                >
+                  <Textarea
+                    className="min-h-28"
+                    value={String(content.bodyText || "")}
+                    disabled={readOnly}
+                    maxLength={INTERACTIVE_BODY_MAX}
+                    data-issue-field="content.bodyText"
+                    onChange={(event) =>
+                      updateContent({ bodyText: event.target.value })
+                    }
+                  />
+                  <CharCounter
+                    value={content.bodyText}
+                    max={INTERACTIVE_BODY_MAX}
+                  />
+                </Field>
+                {node.data.blockType === "address_request" && (
+                  <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">
+                    Meta address request messages currently support India only.
+                    This block always sends{" "}
+                    <span className="font-semibold">country: IN</span>.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {node.data.blockType === "handoff_to_agent" && (
+              <div className="grid gap-3">
+                <Field label="Message before handing to your team">
+                  <Textarea
+                    className="min-h-28"
+                    value={String(content.message || content.text || "")}
+                    disabled={readOnly}
+                    maxLength={TEXT_MESSAGE_MAX}
+                    data-issue-field="content.message"
+                    onChange={(event) =>
+                      updateContent({ message: event.target.value })
+                    }
+                  />
+                  {formatHint}
+                </Field>
+              </div>
+            )}
+
+            {node.data.blockType === "contacts" && (
+              <div className="space-y-3 rounded-lg border p-3">
+                <p className="text-sm font-semibold">Contact card</p>
+                <Field label="Name shown on the contact card">
+                  <Input
+                    data-issue-field="content.contacts.0.name.formatted_name"
+                    value={String(
+                      (
+                        (
+                          content.contacts as
+                            | Array<Record<string, unknown>>
+                            | undefined
+                        )?.[0]?.name as Record<string, unknown> | undefined
+                      )?.formatted_name || ""
+                    )}
+                    disabled={readOnly}
+                    onChange={(event) => {
+                      const currentContact =
+                        ((
+                          content.contacts as
+                            | Array<Record<string, unknown>>
+                            | undefined
+                        )?.[0] as Record<string, unknown> | undefined) || {};
+                      const currentName =
+                        (currentContact.name as
+                          | Record<string, unknown>
+                          | undefined) || {};
+                      updateContent({
+                        contacts: [
+                          {
+                            ...currentContact,
+                            name: {
+                              ...currentName,
+                              formatted_name: event.target.value,
+                              first_name:
+                                String(currentName.first_name || "").trim() ||
+                                event.target.value.split(" ")[0] ||
+                                event.target.value
+                            }
+                          }
+                        ]
+                      });
+                    }}
+                  />
+                </Field>
+                <Field label="Phone number">
+                  <ContactPhoneField
+                    content={content}
+                    disabled={readOnly}
+                    onChange={(phone) => {
+                      const currentContact =
+                        ((
+                          content.contacts as
+                            | Array<Record<string, unknown>>
+                            | undefined
+                        )?.[0] as Record<string, unknown> | undefined) || {};
+                      const currentPhones =
+                        (currentContact.phones as
+                          | Array<Record<string, unknown>>
+                          | undefined) || [];
+                      updateContent({
+                        contacts: [
+                          {
+                            ...currentContact,
+                            phones: [
+                              {
+                                ...(currentPhones[0] || {}),
+                                phone,
+                                type: "WORK"
+                              }
+                            ]
+                          }
+                        ]
+                      });
+                    }}
+                  />
+                </Field>
+                <Field label="Email (optional)">
+                  <Input
+                    type="email"
+                    value={String(
+                      ((
+                        (
+                          content.contacts as
+                            | Array<Record<string, unknown>>
+                            | undefined
+                        )?.[0]?.emails as
+                          | Array<Record<string, unknown>>
+                          | undefined
+                      )?.[0]?.email as string | undefined) || ""
+                    )}
+                    disabled={readOnly}
+                    placeholder="support@example.com"
+                    onChange={(event) => {
+                      const currentContact =
+                        ((
+                          content.contacts as
+                            | Array<Record<string, unknown>>
+                            | undefined
+                        )?.[0] as Record<string, unknown> | undefined) || {};
+                      const currentEmails =
+                        (currentContact.emails as
+                          | Array<Record<string, unknown>>
+                          | undefined) || [];
+                      updateContent({
+                        contacts: [
+                          {
+                            ...currentContact,
+                            emails: [
+                              {
+                                ...(currentEmails[0] || {}),
+                                email: event.target.value,
+                                type: "WORK"
+                              }
+                            ]
+                          }
+                        ]
+                      });
+                    }}
+                  />
+                </Field>
+                <Field label="Website (optional)">
+                  <Input
+                    type="url"
+                    value={String(
+                      ((
+                        (
+                          content.contacts as
+                            | Array<Record<string, unknown>>
+                            | undefined
+                        )?.[0]?.urls as
+                          | Array<Record<string, unknown>>
+                          | undefined
+                      )?.[0]?.url as string | undefined) || ""
+                    )}
+                    disabled={readOnly}
+                    placeholder="https://example.com"
+                    onChange={(event) => {
+                      const currentContact =
+                        ((
+                          content.contacts as
+                            | Array<Record<string, unknown>>
+                            | undefined
+                        )?.[0] as Record<string, unknown> | undefined) || {};
+                      const currentUrls =
+                        (currentContact.urls as
+                          | Array<Record<string, unknown>>
+                          | undefined) || [];
+                      updateContent({
+                        contacts: [
+                          {
+                            ...currentContact,
+                            urls: [
+                              {
+                                ...(currentUrls[0] || {}),
+                                url: event.target.value,
+                                type: "WORK"
+                              }
+                            ]
+                          }
+                        ]
+                      });
+                    }}
+                  />
+                </Field>
+              </div>
+            )}
+
+            {node.data.blockType === "product_carousel" && (
+              <div className="space-y-3">
+                <Field label="Catalog ID">
+                  <Input
+                    data-issue-field="content.catalogId"
+                    value={String(content.catalogId || "")}
+                    disabled={readOnly}
+                    onChange={(event) =>
+                      updateContent({ catalogId: event.target.value })
+                    }
+                  />
+                </Field>
+                <JsonEditor
+                  label="Product sections JSON"
+                  value={content.sections || []}
+                  onChange={(sections) =>
+                    updateContent({
+                      sections: sections as Array<Record<string, unknown>>
+                    })
+                  }
+                  readOnly={readOnly}
+                />
+              </div>
+            )}
+
+            {node.data.blockType === "generic_carousel" && (
+              <div className="space-y-3">
+                <Field label="Intro message">
+                  <Textarea
+                    value={String(content.bodyText || "")}
+                    disabled={readOnly}
+                    data-issue-field="content.bodyText"
+                    onChange={(event) =>
+                      updateContent({ bodyText: event.target.value })
+                    }
+                  />
+                  <CharCounter
+                    value={content.bodyText}
+                    max={INTERACTIVE_BODY_MAX}
+                  />
+                  {formatHint}
+                </Field>
+                <GenericCarouselEditor
+                  cards={getCarouselCards(content)}
+                  onChange={(cards) => updateContent({ cards })}
+                  openMediaPicker={openMediaPicker}
+                  readOnly={readOnly}
+                />
+              </div>
+            )}
+
+            {(blockType === "buttons" || blockType === "product_carousel") && (
+              <div className="space-y-3 rounded-lg border p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold">
+                      {blockType === "buttons" ? "Buttons" : "Options"}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {isWebsiteMode
+                        ? "One website button. Change it under Next steps."
+                        : blockType === "buttons"
+                          ? "Up to 3 reply buttons. Choose what each does under Next steps."
+                          : "Choose what each option does under Next steps."}
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={
+                      readOnly ||
+                      isWebsiteMode ||
+                      (blockType === "buttons" && node.data.actions.length >= 3)
+                    }
+                    onClick={() =>
+                      updateNode(node.id, (data) => ({
+                        ...data,
+                        actions: [
+                          ...data.actions,
+                          makeAction(
+                            `Option ${data.actions.length + 1}`,
+                            data.actions.map((action) => action.replyId || "")
+                          )
+                        ]
+                      }))
+                    }
+                  >
+                    <Plus className="size-4" />
+                    Add
+                  </Button>
+                </div>
+
+                {node.data.actions.map((action) => (
+                  <div
+                    key={action.actionId}
+                    className="space-y-1 rounded-md bg-muted/40 p-2"
+                  >
+                    <div className="flex gap-2">
+                      <Input
+                        value={action.label || ""}
+                        placeholder="Button label"
+                        disabled={readOnly}
+                        data-action-id={action.actionId}
+                        maxLength={
+                          blockType === "buttons"
+                            ? REPLY_BUTTON_LABEL_MAX
+                            : LIST_ROW_TITLE_MAX
+                        }
+                        onChange={(event) =>
+                          updateAction(action.actionId, {
+                            label: event.target.value
+                          })
+                        }
+                      />
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="shrink-0 text-destructive"
+                        aria-label={`Remove ${action.label || "button"}`}
+                        disabled={readOnly}
+                        onClick={() => removeAction(action.actionId)}
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    </div>
+                    <CharCounter
+                      value={action.label}
+                      max={
+                        blockType === "buttons"
+                          ? REPLY_BUTTON_LABEL_MAX
+                          : LIST_ROW_TITLE_MAX
+                      }
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </TabsContent>
+
+        <TabsContent
+          value="next"
+          data-panel-scroll
+          className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 [scrollbar-color:hsl(var(--border))_transparent] [scrollbar-width:thin]"
+        >
+          {nextOptions.length ? (
+            <div className="space-y-2">
+              {nextOptions.map((option) => (
+                <div
+                  key={option.actionId}
+                  className="space-y-2 rounded-lg border p-3"
+                >
+                  <p className="truncate text-sm font-medium">
+                    &ldquo;{option.label}&rdquo;
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      When tapped:
+                    </span>
+                    <Select
+                      value={option.type}
+                      disabled={readOnly}
+                      onValueChange={(value) =>
+                        setOptionType(option, value as BotActionType)
+                      }
+                    >
+                      <SelectTrigger
+                        className="h-8 w-full"
+                        data-action-id={option.actionId}
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {allowedActionTypes(blockType).map((type) => (
+                          <SelectItem key={type} value={type}>
+                            {actionTypeLabel(type)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {option.type === "go_to_trigger" && (
+                    <div className="flex gap-2">
+                      <Combobox
+                        value={targets[option.actionId] || ""}
+                        options={targetChoices}
+                        placeholder="Choose a block"
+                        className="h-8 min-w-0 flex-1 text-xs"
+                        disabled={readOnly}
+                        onChange={(targetId) =>
+                          connectOption(option.actionId, targetId || null)
+                        }
+                      />
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 shrink-0"
+                            disabled={readOnly}
+                          >
+                            <Plus className="size-3.5" />
+                            New block
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-52">
+                          {blockPalette.map((group) => (
+                            <DropdownMenuGroup key={group.group}>
+                              <DropdownMenuLabel className="text-xs text-muted-foreground">
+                                {group.group}
+                              </DropdownMenuLabel>
+                              {group.items.map((item) => (
+                                <DropdownMenuItem
+                                  key={item.type}
+                                  onSelect={() =>
+                                    createConnectedBlock(
+                                      option.actionId,
+                                      item.type
+                                    )
+                                  }
+                                >
+                                  <item.icon className="size-4" />
+                                  {item.label}
+                                </DropdownMenuItem>
+                              ))}
+                            </DropdownMenuGroup>
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  )}
+                  {option.type === "open_url" && (
+                    <Input
+                      value={option.url || ""}
+                      placeholder="https://example.com"
+                      disabled={readOnly}
+                      data-issue-field={
+                        option.cardIndex !== undefined
+                          ? `content.cards.${option.cardIndex}.buttons.${option.buttonIndex}.url`
+                          : `action.${option.actionId}.url`
+                      }
+                      onChange={(event) =>
+                        setOptionUrl(option, event.target.value)
+                      }
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+              {blockType === "handoff_to_agent"
+                ? "The chat goes to your team after this message."
+                : "This message has nothing to tap, so it doesn't lead anywhere by itself."}
+            </p>
+          )}
+
+          <div className="space-y-3 rounded-lg border p-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="flex items-center gap-2 text-sm font-semibold">
+                <Timer className="size-4 text-primary" />
+                Follow-up
+              </p>
+              {hasAutomaticFollowUp && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 text-destructive"
+                  disabled={readOnly}
+                  tooltip="Remove follow-up"
+                  aria-label="Remove follow-up"
+                  onClick={removeAutomaticFollowUp}
+                >
+                  <Trash2 className="size-4" />
+                </Button>
+              )}
+            </div>
+            {!canHaveFollowUp ? (
+              <p className="text-xs text-muted-foreground">
+                This block can&apos;t send a follow-up.
+              </p>
+            ) : !hasAutomaticFollowUp || !followUpNode ? (
+              <>
+                <p className="text-xs text-muted-foreground">
+                  Send another message if the customer doesn&apos;t reply.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={readOnly}
+                  data-issue-field="followUp"
+                  onClick={() => addAutomaticFollowUp()}
+                >
+                  <Plus className="size-4" />
+                  Add follow-up
+                </Button>
+              </>
+            ) : (
+              <>
+                <FollowUpDelayField
+                  node={node}
+                  readOnly={readOnly}
+                  updateNode={updateNode}
+                />
+                <Field label="Message type">
+                  <Select
+                    value={followUpNode.data.blockType}
+                    disabled={readOnly}
+                    onValueChange={(value) => {
+                      const nextBlockType = value as BotBlockType;
+                      updateNode(followUpNode.id, (data) => ({
+                        ...data,
+                        blockType: nextBlockType,
+                        content: defaultContent(nextBlockType),
+                        actions: []
+                      }));
+                    }}
+                  >
+                    <SelectTrigger className="w-full bg-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[
+                        ["text", "Text"],
+                        ["image", "Image"],
+                        ["video", "Video"],
+                        ["document", "Document"]
+                      ].map(([value, label]) => (
+                        <SelectItem key={value} value={value}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+                {followUpNode.data.blockType === "text" ? (
+                  <Field label="Follow-up message">
+                    <Textarea
+                      className="min-h-28 bg-white"
+                      data-issue-field="followUp.text"
+                      value={String(followUpNode.data.content.text || "")}
+                      disabled={readOnly}
+                      placeholder="Write the message to send automatically"
+                      onChange={(event) =>
+                        updateFollowUpContent({ text: event.target.value })
+                      }
+                    />
+                    <CharCounter
+                      value={followUpNode.data.content.text}
+                      max={TEXT_MESSAGE_MAX}
+                    />
+                    {formatHint}
+                  </Field>
+                ) : (
+                  <>
+                    <MediaField
+                      node={followUpNode}
+                      readOnly={readOnly}
+                      openMediaPicker={(type) =>
+                        openMediaPicker(type, {
+                          kind: "node",
+                          nodeId: followUpNode.id
+                        })
+                      }
+                    />
+                    <Field label="Optional caption">
+                      <Textarea
+                        className="min-h-20 bg-white"
+                        value={String(followUpNode.data.content.caption || "")}
+                        disabled={readOnly}
+                        onChange={(event) =>
+                          updateFollowUpContent({
+                            caption: event.target.value
+                          })
+                        }
+                      />
+                    </Field>
+                  </>
+                )}
               </>
             )}
           </div>
-        )}
+        </TabsContent>
 
-        <Field label="Block name">
-          {/* Only the name changes: the internal key was set when the block
-              was created, and templates, broadcasts, follow-ups and sent
-              buttons point at it. */}
-          <Input
-            value={node.data.label}
-            disabled={readOnly}
-            data-issue-field="name"
-            onChange={(event) =>
-              updateNode(node.id, (data) => ({
-                ...data,
-                label: event.target.value
-              }))
-            }
-          />
-        </Field>
+        <TabsContent
+          value="settings"
+          data-panel-scroll
+          className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 [scrollbar-color:hsl(var(--border))_transparent] [scrollbar-width:thin]"
+        >
+          <Field label="Block name">
+            {/* Only the name changes: the internal key was set when the
+                block was created, and templates, broadcasts, follow-ups and
+                sent buttons point at it. */}
+            <Input
+              value={node.data.label}
+              disabled={readOnly}
+              data-issue-field="name"
+              onChange={(event) =>
+                updateNode(node.id, (data) => ({
+                  ...data,
+                  label: event.target.value
+                }))
+              }
+            />
+          </Field>
 
-        {node.data.triggerKey !== "OPT_IN" &&
-          node.data.triggerKey !== "OPT_OUT" && (
+          {!isSystemBlock && (
             <div className="rounded-lg border bg-muted/30 p-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
@@ -3162,10 +4694,7 @@ function PropertiesPanel({
                   </p>
                 </div>
                 <Switch
-                  checked={Boolean(
-                    (node.data.metadata as Record<string, unknown> | undefined)
-                      ?.isDefault
-                  )}
+                  checked={isStart}
                   disabled={readOnly}
                   onCheckedChange={(checked) => {
                     if (checked) setDefaultNode(node.id);
@@ -3175,726 +4704,98 @@ function PropertiesPanel({
             </div>
           )}
 
-        {node.data.blockType === "list" && (
-          <Field label="Optional header">
-            <Input
-              value={String(content.headerText || "")}
-              disabled={readOnly}
-              maxLength={HEADER_FOOTER_MAX}
-              placeholder="Choose Shipping Option"
-              data-issue-field="content.headerText"
-              onChange={(event) =>
-                updateContent({ headerText: event.target.value })
-              }
-            />
-            <CharCounter value={content.headerText} max={HEADER_FOOTER_MAX} />
-          </Field>
-        )}
-
-        {(node.data.blockType === "text" ||
-          node.data.blockType === "buttons" ||
-          node.data.blockType === "list") && (
-          <Field
-            label={node.data.blockType === "text" ? "Message" : "Body message"}
-          >
-            <Textarea
-              className="min-h-28"
-              value={String(content.text || content.bodyText || "")}
-              disabled={readOnly}
-              data-issue-field={
-                node.data.blockType === "text"
-                  ? "content.text"
-                  : "content.bodyText"
-              }
-              onChange={(event) =>
-                updateContent(
-                  node.data.blockType === "text"
-                    ? { text: event.target.value }
-                    : { bodyText: event.target.value }
-                )
-              }
-            />
-            <CharCounter
-              value={content.text || content.bodyText}
-              max={
-                node.data.blockType === "text"
-                  ? TEXT_MESSAGE_MAX
-                  : INTERACTIVE_BODY_MAX
-              }
-            />
-          </Field>
-        )}
-
-        {node.data.blockType === "list" && (
-          <div className="space-y-3">
-            <Field label="List button text">
+          <Field label="Internal key">
+            <div className="flex gap-2">
               <Input
-                value={String(content.buttonText || "")}
-                disabled={readOnly}
-                maxLength={LIST_BUTTON_TEXT_MAX}
-                placeholder="Open menu"
-                data-issue-field="content.buttonText"
-                onChange={(event) =>
-                  updateContent({ buttonText: event.target.value })
-                }
+                readOnly
+                value={node.data.triggerKey}
+                className="font-mono text-xs"
+                aria-label="Internal key"
               />
-              <CharCounter
-                value={content.buttonText}
-                max={LIST_BUTTON_TEXT_MAX}
-              />
-            </Field>
-            <Field label="Optional footer">
-              <Input
-                value={String(content.footerText || "")}
-                disabled={readOnly}
-                maxLength={HEADER_FOOTER_MAX}
-                placeholder="Your business name"
-                data-issue-field="content.footerText"
-                onChange={(event) =>
-                  updateContent({ footerText: event.target.value })
-                }
-              />
-              <CharCounter value={content.footerText} max={HEADER_FOOTER_MAX} />
-            </Field>
-            <ListSectionsEditor
-              sections={getListSections(content)}
-              readOnly={readOnly}
-              onChange={updateListSections}
-            />
-          </div>
-        )}
-
-        {node.data.blockType === "buttons" && (
-          <div className="rounded-lg border p-3">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold">Optional media header</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Reply button messages can include image, video, or document
-                  headers.
-                </p>
-              </div>
-              {content.mediaId && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  disabled={readOnly}
-                  onClick={() =>
-                    updateContent({
-                      mediaType: undefined,
-                      mediaId: undefined,
-                      mediaName: undefined,
-                      mediaUrl: undefined,
-                      filename: undefined,
-                      media: undefined
-                    })
-                  }
-                >
-                  Clear
-                </Button>
-              )}
-            </div>
-            <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
-              <Select
-                value={String(content.mediaType || "image")}
-                disabled={readOnly}
-                onValueChange={(value) =>
-                  updateContent({
-                    mediaType: value as "image" | "document" | "video",
-                    mediaId: "",
-                    mediaName: "",
-                    mediaUrl: "",
-                    filename: ""
-                  })
-                }
+              <Button
+                type="button"
+                size="icon"
+                variant="outline"
+                className="shrink-0"
+                aria-label="Copy internal key"
+                tooltip="Copy"
+                onClick={() => {
+                  void navigator.clipboard
+                    ?.writeText(node.data.triggerKey)
+                    .then(() => toast.success("Internal key copied."))
+                    .catch(() => toast.error("Couldn't copy the key."));
+                }}
               >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="image">Image</SelectItem>
-                  <SelectItem value="video">Video</SelectItem>
-                  <SelectItem value="document">Document</SelectItem>
-                </SelectContent>
-              </Select>
+                <Copy className="size-4" />
+              </Button>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Templates, broadcasts and follow-ups use this key. It never
+              changes.
+            </p>
+          </Field>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-muted-foreground">
+              Reached from
+            </Label>
+            {entryPoints === undefined ? (
+              <p className="text-sm text-muted-foreground">
+                Shown after the next save.
+              </p>
+            ) : entryPoints.length === 0 ? (
+              <p className="text-sm text-amber-800">Nothing leads here yet.</p>
+            ) : (
+              <ul className="space-y-1 text-sm">
+                {entryPoints.map((entry, index) => (
+                  <li key={index} className="flex gap-2">
+                    <span className="mt-2 size-1 shrink-0 rounded-full bg-muted-foreground" />
+                    {describeEntryPoint(entry)}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div className="space-y-2 border-t pt-4">
+            <div className="flex flex-wrap gap-2">
               <Button
                 type="button"
                 variant="outline"
                 disabled={readOnly}
-                onClick={() =>
-                  openMediaPicker(
-                    String(content.mediaType || "image").toUpperCase() as
-                      | "IMAGE"
-                      | "DOCUMENT"
-                      | "VIDEO"
-                  )
-                }
+                tooltip={`Duplicate (${typeof navigator !== "undefined" && /Mac/.test(navigator.platform) ? "⌘D" : "Ctrl+D"})`}
+                onClick={onDuplicate}
               >
-                Select media
+                <CopyPlus className="size-4" />
+                Duplicate block
               </Button>
-            </div>
-            <p className="mt-2 truncate text-xs text-muted-foreground">
-              {content.mediaName || content.mediaId || "No media selected"}
-            </p>
-            <MediaPreview
-              mediaType={String(content.mediaType || "")}
-              url={getMediaPreviewUrl(content)}
-              label={String(content.mediaName || "")}
-            />
-          </div>
-        )}
-
-        {["image", "document", "video"].includes(node.data.blockType) && (
-          <MediaField
-            node={node}
-            openMediaPicker={openMediaPicker}
-            readOnly={readOnly}
-          />
-        )}
-
-        {node.data.blockType === "location" && (
-          <div className="grid gap-3">
-            <Field label="Location name">
-              <Input
-                value={String(content.name || content.locationName || "")}
-                disabled={readOnly}
-                data-issue-field="content.name"
-                onChange={(event) =>
-                  updateContent({ name: event.target.value })
-                }
-              />
-            </Field>
-            {!hasLocation(content) && (
-              <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                Pick the location on the map.
-              </p>
-            )}
-            <Button
-              type="button"
-              disabled={readOnly}
-              data-issue-field="content.latitude"
-              onClick={openLocationPicker}
-            >
-              <MapPin className="size-4" />
-              Choose on map
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={readOnly}
-              onClick={() => {
-                if (!navigator.geolocation) {
-                  toast.error("Geolocation is not available in this browser.");
-                  return;
-                }
-                navigator.geolocation.getCurrentPosition(
-                  (position) => {
-                    updateContent({
-                      latitude: Number(position.coords.latitude.toFixed(6)),
-                      longitude: Number(position.coords.longitude.toFixed(6))
-                    });
-                    toast.success("Current location added.");
-                  },
-                  () => toast.error("Unable to read current location.")
-                );
-              }}
-            >
-              <MapPin className="size-4" />
-              Use my current location
-            </Button>
-            <div className="grid grid-cols-2 gap-2">
-              <Field label="Latitude">
-                <Input
-                  type="number"
-                  value={
-                    typeof content.latitude === "number" ? content.latitude : ""
-                  }
-                  disabled={readOnly}
-                  onChange={(event) =>
-                    updateContent({
-                      latitude:
-                        event.target.value === ""
-                          ? undefined
-                          : Number(event.target.value)
-                    })
-                  }
-                />
-              </Field>
-              <Field label="Longitude">
-                <Input
-                  type="number"
-                  value={
-                    typeof content.longitude === "number"
-                      ? content.longitude
-                      : ""
-                  }
-                  disabled={readOnly}
-                  data-issue-field="content.longitude"
-                  onChange={(event) =>
-                    updateContent({
-                      longitude:
-                        event.target.value === ""
-                          ? undefined
-                          : Number(event.target.value)
-                    })
-                  }
-                />
-              </Field>
-            </div>
-            <Field label="Address">
-              <Textarea
-                value={String(content.address || content.locationAddress || "")}
-                disabled={readOnly}
-                data-issue-field="content.address"
-                onChange={(event) =>
-                  updateContent({ address: event.target.value })
-                }
-              />
-            </Field>
-          </div>
-        )}
-
-        {(node.data.blockType === "location_request" ||
-          node.data.blockType === "address_request") && (
-          <div className="grid gap-3">
-            <Field
-              label={
-                node.data.blockType === "location_request"
-                  ? "Location request message"
-                  : "Address request message"
-              }
-            >
-              <Textarea
-                className="min-h-28"
-                value={String(content.bodyText || "")}
-                disabled={readOnly}
-                maxLength={INTERACTIVE_BODY_MAX}
-                data-issue-field="content.bodyText"
-                onChange={(event) =>
-                  updateContent({ bodyText: event.target.value })
-                }
-              />
-              <CharCounter
-                value={content.bodyText}
-                max={INTERACTIVE_BODY_MAX}
-              />
-            </Field>
-            {node.data.blockType === "address_request" && (
-              <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">
-                Meta address request messages currently support India only. This
-                block always sends{" "}
-                <span className="font-semibold">country: IN</span>.
-              </div>
-            )}
-          </div>
-        )}
-
-        {node.data.blockType === "handoff_to_agent" && (
-          <div className="grid gap-3">
-            <Field label="Agent handoff message">
-              <Textarea
-                className="min-h-28"
-                value={String(content.message || content.text || "")}
-                disabled={readOnly}
-                maxLength={TEXT_MESSAGE_MAX}
-                data-issue-field="content.message"
-                onChange={(event) =>
-                  updateContent({ message: event.target.value })
-                }
-              />
-            </Field>
-          </div>
-        )}
-
-        {node.data.blockType === "contacts" && (
-          <div className="space-y-3 rounded-lg border p-3">
-            <p className="text-sm font-semibold">Contact card</p>
-            <Field label="Name shown on the contact card">
-              <Input
-                data-issue-field="content.contacts.0.name.formatted_name"
-                value={String(
-                  (
-                    (
-                      content.contacts as
-                        | Array<Record<string, unknown>>
-                        | undefined
-                    )?.[0]?.name as Record<string, unknown> | undefined
-                  )?.formatted_name || ""
-                )}
-                disabled={readOnly}
-                onChange={(event) => {
-                  const currentContact =
-                    ((
-                      content.contacts as
-                        | Array<Record<string, unknown>>
-                        | undefined
-                    )?.[0] as Record<string, unknown> | undefined) || {};
-                  const currentName =
-                    (currentContact.name as
-                      | Record<string, unknown>
-                      | undefined) || {};
-                  updateContent({
-                    contacts: [
-                      {
-                        ...currentContact,
-                        name: {
-                          ...currentName,
-                          formatted_name: event.target.value,
-                          first_name:
-                            String(currentName.first_name || "").trim() ||
-                            event.target.value.split(" ")[0] ||
-                            event.target.value
-                        }
-                      }
-                    ]
-                  });
-                }}
-              />
-            </Field>
-            <Field label="Phone number">
-              <ContactPhoneField
-                content={content}
-                disabled={readOnly}
-                onChange={(phone) => {
-                  const currentContact =
-                    ((
-                      content.contacts as
-                        | Array<Record<string, unknown>>
-                        | undefined
-                    )?.[0] as Record<string, unknown> | undefined) || {};
-                  const currentPhones =
-                    (currentContact.phones as
-                      | Array<Record<string, unknown>>
-                      | undefined) || [];
-                  updateContent({
-                    contacts: [
-                      {
-                        ...currentContact,
-                        phones: [
-                          {
-                            ...(currentPhones[0] || {}),
-                            phone,
-                            type: "WORK"
-                          }
-                        ]
-                      }
-                    ]
-                  });
-                }}
-              />
-            </Field>
-            <Field label="Email (optional)">
-              <Input
-                type="email"
-                value={String(
-                  ((
-                    (
-                      content.contacts as
-                        | Array<Record<string, unknown>>
-                        | undefined
-                    )?.[0]?.emails as Array<Record<string, unknown>> | undefined
-                  )?.[0]?.email as string | undefined) || ""
-                )}
-                disabled={readOnly}
-                placeholder="support@example.com"
-                onChange={(event) => {
-                  const currentContact =
-                    ((
-                      content.contacts as
-                        | Array<Record<string, unknown>>
-                        | undefined
-                    )?.[0] as Record<string, unknown> | undefined) || {};
-                  const currentEmails =
-                    (currentContact.emails as
-                      | Array<Record<string, unknown>>
-                      | undefined) || [];
-                  updateContent({
-                    contacts: [
-                      {
-                        ...currentContact,
-                        emails: [
-                          {
-                            ...(currentEmails[0] || {}),
-                            email: event.target.value,
-                            type: "WORK"
-                          }
-                        ]
-                      }
-                    ]
-                  });
-                }}
-              />
-            </Field>
-            <Field label="Website (optional)">
-              <Input
-                type="url"
-                value={String(
-                  ((
-                    (
-                      content.contacts as
-                        | Array<Record<string, unknown>>
-                        | undefined
-                    )?.[0]?.urls as Array<Record<string, unknown>> | undefined
-                  )?.[0]?.url as string | undefined) || ""
-                )}
-                disabled={readOnly}
-                placeholder="https://example.com"
-                onChange={(event) => {
-                  const currentContact =
-                    ((
-                      content.contacts as
-                        | Array<Record<string, unknown>>
-                        | undefined
-                    )?.[0] as Record<string, unknown> | undefined) || {};
-                  const currentUrls =
-                    (currentContact.urls as
-                      | Array<Record<string, unknown>>
-                      | undefined) || [];
-                  updateContent({
-                    contacts: [
-                      {
-                        ...currentContact,
-                        urls: [
-                          {
-                            ...(currentUrls[0] || {}),
-                            url: event.target.value,
-                            type: "WORK"
-                          }
-                        ]
-                      }
-                    ]
-                  });
-                }}
-              />
-            </Field>
-          </div>
-        )}
-
-        {node.data.blockType === "product_carousel" && (
-          <div className="space-y-3">
-            <Field label="Catalog ID">
-              <Input
-                data-issue-field="content.catalogId"
-                value={String(content.catalogId || "")}
-                disabled={readOnly}
-                onChange={(event) =>
-                  updateContent({ catalogId: event.target.value })
-                }
-              />
-            </Field>
-            <JsonEditor
-              label="Product sections JSON"
-              value={content.sections || []}
-              onChange={(sections) =>
-                updateContent({
-                  sections: sections as Array<Record<string, unknown>>
-                })
-              }
-              readOnly={readOnly}
-            />
-          </div>
-        )}
-
-        {node.data.blockType === "generic_carousel" && (
-          <div className="space-y-3">
-            <Field label="Intro message">
-              <Textarea
-                value={String(content.bodyText || "")}
-                disabled={readOnly}
-                data-issue-field="content.bodyText"
-                onChange={(event) =>
-                  updateContent({ bodyText: event.target.value })
-                }
-              />
-              <CharCounter
-                value={content.bodyText}
-                max={INTERACTIVE_BODY_MAX}
-              />
-            </Field>
-            <GenericCarouselEditor
-              cards={getCarouselCards(content)}
-              onChange={(cards) => updateContent({ cards })}
-              openMediaPicker={openMediaPicker}
-              readOnly={readOnly}
-            />
-          </div>
-        )}
-
-        {(node.data.blockType === "buttons" ||
-          node.data.blockType === "product_carousel") && (
-          <div className="space-y-3 rounded-lg border p-3">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold">Button / item actions</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {node.data.blockType === "buttons"
-                    ? node.data.actions.some(
-                        (action) => action.type === "open_url"
-                      )
-                      ? "Website mode supports exactly one URL button."
-                      : "Quick reply mode supports up to 3 buttons."
-                    : "Configure route actions for this block."}
-                </p>
-              </div>
               <Button
-                size="sm"
+                type="button"
                 variant="outline"
-                disabled={readOnly}
-                onClick={() => {
-                  if (
-                    node.data.blockType === "buttons" &&
-                    node.data.actions.some(
-                      (action) => action.type === "open_url"
-                    )
-                  ) {
-                    toast.error(
-                      "Website button mode supports only one button."
-                    );
-                    return;
-                  }
-                  if (
-                    node.data.blockType === "buttons" &&
-                    node.data.actions.length >= 3
-                  ) {
-                    toast.error(
-                      "WhatsApp reply button messages support at most 3 buttons."
-                    );
-                    return;
-                  }
-                  updateNode(node.id, (data) => ({
-                    ...data,
-                    actions: [
-                      ...data.actions,
-                      makeAction(
-                        `Option ${data.actions.length + 1}`,
-                        data.actions.map((action) => action.replyId || "")
-                      )
-                    ]
-                  }));
-                }}
+                className="text-destructive"
+                disabled={readOnly || node.data.locked || isStart}
+                onClick={onDelete}
               >
-                <Plus className="size-4" />
-                Add
+                {node.data.locked ? (
+                  <Lock className="size-4" />
+                ) : (
+                  <Trash2 className="size-4" />
+                )}
+                Delete block
               </Button>
             </div>
-
-            {node.data.actions.map((action) => (
-              <div
-                key={action.actionId}
-                className="space-y-2 rounded-md bg-muted/40 p-2"
-              >
-                <Input
-                  value={action.label || ""}
-                  placeholder="Button or item label"
-                  disabled={readOnly}
-                  data-action-id={action.actionId}
-                  maxLength={
-                    node.data.blockType === "buttons"
-                      ? REPLY_BUTTON_LABEL_MAX
-                      : LIST_ROW_TITLE_MAX
-                  }
-                  onChange={(event) =>
-                    updateAction(action.actionId, {
-                      label: event.target.value
-                    })
-                  }
-                />
-                <CharCounter
-                  value={action.label}
-                  max={
-                    node.data.blockType === "buttons"
-                      ? REPLY_BUTTON_LABEL_MAX
-                      : LIST_ROW_TITLE_MAX
-                  }
-                />
-                <Select
-                  value={action.type}
-                  disabled={readOnly}
-                  onValueChange={(value) => {
-                    const nextType = value as BotActionType;
-                    const switchingUrlMode =
-                      (action.type === "open_url") !==
-                      (nextType === "open_url");
-                    if (!switchingUrlMode) {
-                      updateAction(action.actionId, { type: nextType });
-                      return;
-                    }
-
-                    node.data.actions.forEach((item) =>
-                      removeEdgesForAction(item.actionId)
-                    );
-                    updateNode(node.id, (data) => ({
-                      ...data,
-                      actions:
-                        nextType === "open_url"
-                          ? [
-                              {
-                                ...action,
-                                type: "open_url",
-                                replyId: undefined,
-                                nextTriggerKey: undefined,
-                                url: action.url || ""
-                              }
-                            ]
-                          : data.actions.map((item) => ({
-                              ...item,
-                              type: nextType,
-                              url: undefined,
-                              replyId:
-                                item.replyId ||
-                                newOptionReplyId(
-                                  data.actions.map(
-                                    (other) => other.replyId || ""
-                                  )
-                                )
-                            }))
-                    }));
-                  }}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(node.data.blockType === "buttons"
-                      ? buttonActionTypeOptions
-                      : actionTypeOptions
-                    ).map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {action.type === "open_url" && (
-                  <Input
-                    value={action.url || ""}
-                    placeholder="https://example.com"
-                    disabled={readOnly}
-                    data-issue-field={`action.${action.actionId}.url`}
-                    onChange={(event) =>
-                      updateAction(action.actionId, {
-                        url: event.target.value
-                      })
-                    }
-                  />
-                )}
-                <div className="flex justify-end">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 text-destructive"
-                    disabled={readOnly}
-                    onClick={() => removeAction(action.actionId)}
-                  >
-                    Remove
-                  </Button>
-                </div>
-              </div>
-            ))}
+            {node.data.locked ? (
+              <p className="text-xs text-muted-foreground">
+                System blocks can&apos;t be deleted.
+              </p>
+            ) : isStart ? (
+              <p className="text-xs text-muted-foreground">
+                Make another block the start block to delete this one.
+              </p>
+            ) : null}
           </div>
-        )}
-      </div>
+        </TabsContent>
+      </Tabs>
     </aside>
   );
 }
@@ -4357,33 +5258,6 @@ function GenericCarouselEditor({
       })
     );
   };
-  const updateButtonTypeForAllCards = (
-    buttonIndex: number,
-    type: "quick_reply" | "url"
-  ) => {
-    const used = usedReplyIds();
-    onChange(
-      cards.map((card) => {
-        const buttons = [
-          ...((card.buttons || []) as Array<Record<string, unknown>>)
-        ];
-        const current = buttons[buttonIndex] || {};
-        let replyId = String(current.replyId || current.id || "");
-        if (type === "quick_reply" && !replyId) {
-          replyId = newOptionReplyId(used);
-          used.push(replyId);
-        }
-        buttons[buttonIndex] = {
-          ...current,
-          type,
-          ...(type === "url"
-            ? { url: "", replyId: undefined, id: undefined }
-            : { id: replyId, replyId, url: undefined })
-        };
-        return { ...card, buttons };
-      })
-    );
-  };
   const addCard = () => {
     if (cards.length >= 10) {
       toast.error("Carousel messages support at most 10 cards.");
@@ -4596,39 +5470,11 @@ function GenericCarouselEditor({
                         value={button.label}
                         max={REPLY_BUTTON_LABEL_MAX}
                       />
-                      <Select
-                        value={type}
-                        disabled={readOnly}
-                        onValueChange={(value) =>
-                          updateButtonTypeForAllCards(
-                            buttonIndex,
-                            value as "quick_reply" | "url"
-                          )
-                        }
-                      >
-                        <SelectTrigger className="w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="quick_reply">
-                            Quick reply
-                          </SelectItem>
-                          <SelectItem value="url">URL button</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      {type === "url" ? (
-                        <Input
-                          value={String(button.url || "")}
-                          placeholder="https://example.com"
-                          disabled={readOnly}
-                          data-issue-field={`content.cards.${index}.buttons.${buttonIndex}.url`}
-                          onChange={(event) =>
-                            updateButton(index, buttonIndex, {
-                              url: event.target.value
-                            })
-                          }
-                        />
-                      ) : null}
+                      {type === "url" && (
+                        <p className="text-[11px] text-muted-foreground">
+                          Website button. Set its link under Next steps.
+                        </p>
+                      )}
                     </div>
                   );
                 }

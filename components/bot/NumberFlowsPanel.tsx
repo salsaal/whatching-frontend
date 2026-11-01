@@ -180,7 +180,11 @@ export function NumberFlowsPanel() {
   });
 
   return (
-    <section className="space-y-4 rounded-lg bg-white p-5 shadow-xs">
+    // The flow editor's "Live, but no number uses it" links here.
+    <section
+      id="flows-per-number"
+      className="scroll-mt-4 space-y-4 rounded-lg bg-white p-5 shadow-xs"
+    >
       <div>
         <div className="flex items-center gap-2">
           <Radio className="size-4 text-primary" />
