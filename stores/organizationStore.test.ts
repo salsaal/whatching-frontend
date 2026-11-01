@@ -103,3 +103,54 @@ describe("clearOrganizations", () => {
     expect(state.ownerUserId).toBeNull();
   });
 });
+
+describe("rehydrating from storage on a full page load", () => {
+  const saveOrgState = (state: Record<string, unknown>) =>
+    localStorage.setItem(
+      "whatching-organizations",
+      JSON.stringify({ state, version: 0 })
+    );
+
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it("keeps the saved organisation when the owner was never stored but the signed-in user is known", async () => {
+    localStorage.setItem(
+      "whatching-auth",
+      JSON.stringify({ state: { user: { _id: "u1" } }, version: 0 })
+    );
+    saveOrgState({
+      organizations: [org("a")],
+      activeOrganization: org("a"),
+      ownerUserId: null
+    });
+    await useOrganizationStore.persist.rehydrate();
+    const state = useOrganizationStore.getState();
+    expect(state.activeOrganization?._id).toBe("a");
+    expect(state.ownerUserId).toBe("u1");
+    expect(state.hasHydrated).toBe(true);
+  });
+
+  it("still clears saved organisations that belong to no known user", async () => {
+    saveOrgState({
+      organizations: [org("a")],
+      activeOrganization: org("a"),
+      ownerUserId: null
+    });
+    await useOrganizationStore.persist.rehydrate();
+    expect(useOrganizationStore.getState().activeOrganization).toBeNull();
+    expect(useOrganizationStore.getState().organizations).toEqual([]);
+  });
+
+  it("restores the active organisation from the orgId key when the selection was lost", async () => {
+    localStorage.setItem("orgId", "b");
+    saveOrgState({
+      organizations: [org("a"), org("b")],
+      activeOrganization: null,
+      ownerUserId: "u1"
+    });
+    await useOrganizationStore.persist.rehydrate();
+    expect(useOrganizationStore.getState().activeOrganization?._id).toBe("b");
+  });
+});

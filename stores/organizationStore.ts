@@ -114,6 +114,17 @@ interface OrganizationState {
   setHasHydrated: (hasHydrated: boolean) => void;
 }
 
+const readPersistedAuthUserId = (): string | null => {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem("whatching-auth");
+    const id = raw ? JSON.parse(raw)?.state?.user?._id : null;
+    return typeof id === "string" && id ? id : null;
+  } catch {
+    return null;
+  }
+};
+
 export const useOrganizationStore = create<OrganizationState>()(
   persist(
     (set) => ({
@@ -205,12 +216,31 @@ export const useOrganizationStore = create<OrganizationState>()(
         selectedWhatsAppPhoneNumberByOrg: state.selectedWhatsAppPhoneNumberByOrg
       }),
       onRehydrateStorage: () => (state) => {
-        if (
-          state &&
-          !state.ownerUserId &&
-          (state.activeOrganization || state.organizations.length)
-        ) {
-          state.clearOrganizations();
+        if (state) {
+          // Saved organisations only belong to a known user. Older sessions
+          // never stored an owner, which wiped the active organisation on
+          // every full page load (and sent direct URLs to /organisations).
+          // Login already clears state that belonged to someone else, so the
+          // signed-in user saved by the auth store is the right owner.
+          if (
+            !state.ownerUserId &&
+            (state.activeOrganization || state.organizations.length)
+          ) {
+            const authUserId = readPersistedAuthUserId();
+            if (authUserId) state.setOrganizationOwner(authUserId);
+            else state.clearOrganizations();
+          }
+
+          // The active organisation is stored in the "orgId" key too (what
+          // API requests send). If the persisted selection was lost but that
+          // key and the list survived, pick it back up.
+          if (!state.activeOrganization && typeof window !== "undefined") {
+            const savedId = localStorage.getItem("orgId");
+            const saved = savedId
+              ? state.organizations.find((item) => item._id === savedId)
+              : null;
+            if (saved) state.setActiveOrganization(saved);
+          }
         }
 
         state?.setHasHydrated(true);

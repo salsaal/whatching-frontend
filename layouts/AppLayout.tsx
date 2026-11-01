@@ -21,11 +21,12 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   getIntegrationStatus,
+  getMyOrganizations,
   getOrganization
 } from "@/client-api/functions/organizations";
 import { UserAvatar, UserMenu } from "@/components/account/UserMenu";
@@ -92,6 +93,7 @@ export default function AppLayout({
     hasHydrated,
     setIntegration,
     setActiveOrganization,
+    setOrganizations,
     upsertOrganization
   } = useOrganizationStore();
 
@@ -212,11 +214,50 @@ export default function AppLayout({
     }
   }, [integrationData, setIntegration]);
 
+  // A full page load (typing /broadcasts) must not bounce to /organisations
+  // just because the selection wasn't in the store yet. Wait for both
+  // persisted stores, try to restore the last organisation (from the saved
+  // list, else the server), and only then redirect.
+  const authHydrated = useAuthStore((state) => state.hasHydrated);
+  const hasToken = useAuthStore((state) => Boolean(state.token));
+  const restoreAttemptedRef = useRef(false);
   useEffect(() => {
-    if (hasHydrated && !activeOrganization) {
-      router.replace("/organisations");
+    if (!hasHydrated || !authHydrated || activeOrganization) return;
+    if (restoreAttemptedRef.current) return;
+    restoreAttemptedRef.current = true;
+
+    const savedId =
+      typeof window !== "undefined" ? localStorage.getItem("orgId") : null;
+    const fromList = savedId
+      ? organizations.find((item) => item._id === savedId)
+      : null;
+    if (fromList) {
+      setActiveOrganization(fromList);
+      return;
     }
-  }, [activeOrganization, hasHydrated, router]);
+    if (!savedId || !hasToken) {
+      router.replace("/organisations");
+      return;
+    }
+    getMyOrganizations()
+      .then((response) => {
+        const list = response.data.organizations;
+        const found = list.find((item) => item._id === savedId);
+        setOrganizations(list);
+        if (found) setActiveOrganization(found);
+        else router.replace("/organisations");
+      })
+      .catch(() => router.replace("/organisations"));
+  }, [
+    activeOrganization,
+    authHydrated,
+    hasHydrated,
+    hasToken,
+    organizations,
+    router,
+    setActiveOrganization,
+    setOrganizations
+  ]);
 
   const renderNavLinks = (mobile = false) => (
     <nav className={cn("space-y-1", mobile ? "px-0" : "px-3 pt-8 pb-4")}>
