@@ -96,6 +96,8 @@ export interface BotCanvasDraftState {
 
 export interface BotCanvasRecord {
   _id: string;
+  /** Bumps on every draft write; send it back as baseRevision. */
+  draftRevision?: number;
   orgId: string;
   name: string;
   status: "active" | "inactive" | "archived";
@@ -106,6 +108,80 @@ export interface BotCanvasRecord {
   activePublishedVersionId?: string;
   createdAt?: string;
   updatedAt?: string;
+}
+
+/** What differs between the draft and the live version (layout moves don't count). */
+export interface BotDraftChanges {
+  neverPublished: boolean;
+  hasUnpublishedChanges: boolean;
+  changedBlockCount: number;
+  addedBlockIds: string[];
+  removedBlockIds: string[];
+  changedBlockIds: string[];
+  startChanged: boolean;
+}
+
+export interface BotCanvasLiveInfo {
+  hasLiveVersion: boolean;
+  /** Answers numbers that have no flow of their own. */
+  isOrgDefault: boolean;
+  phoneNumbers: Array<{
+    _id: string;
+    displayPhoneNumber?: string;
+    verifiedName?: string;
+    source: "assigned" | "org_default";
+  }>;
+  botEnabled: boolean;
+}
+
+export type BotFlowIssueSeverity = "error" | "warning";
+
+/** One problem found by the backend; `message` is shown as-is. */
+export interface BotFlowIssue {
+  severity: BotFlowIssueSeverity;
+  code: string;
+  message: string;
+  nodeId?: string;
+  blockName?: string;
+  /** Which option the problem is about. */
+  actionId?: string;
+  /** e.g. "content.cards.2.bodyText", "content.sections.0.rows.3.title", "followUp". */
+  field?: string;
+}
+
+export type BotFlowEntryPoint =
+  | { kind: "start" | "opt_in" | "opt_out" | "ai" }
+  | {
+      kind: "option";
+      fromNodeId: string;
+      fromBlockName: string;
+      label?: string;
+    }
+  | {
+      kind: "follow_up";
+      fromNodeId: string;
+      fromBlockName: string;
+      delayMinutes: number;
+    }
+  | { kind: "template"; templateName: string; label: string }
+  | { kind: "broadcast"; broadcastName: string; label: string };
+
+export interface BotCanvasValidation {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+  issues: BotFlowIssue[];
+  analysis?: Record<
+    string,
+    { reachable: boolean; entryPoints: BotFlowEntryPoint[] }
+  >;
+}
+
+/** details of a 409 DRAFT_CONFLICT: someone saved after you loaded. */
+export interface BotDraftConflictDetails {
+  draftRevision: number;
+  updatedAt?: string;
+  updatedBy?: { _id: string; name: string } | null;
 }
 
 export interface BotCanvasTrigger {
@@ -236,6 +312,14 @@ export type BotCanvasResponse = ApiResponse<{
   };
   draftState?: BotCanvasDraftState;
   publishedState?: BotCanvasDraftState | null;
+  draftRevision?: number;
+  draftChanges?: BotDraftChanges;
+  live?: BotCanvasLiveInfo;
+  /** Present on a successful go-live. */
+  validation?: BotCanvasValidation;
+}>;
+export type BotCanvasValidateResponse = ApiResponse<{
+  validation: BotCanvasValidation;
 }>;
 export type BotCanvasesResponse = ApiResponse<{
   canvases: BotCanvasRecord[];

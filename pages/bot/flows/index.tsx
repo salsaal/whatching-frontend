@@ -236,7 +236,7 @@ function FlowsPageContent() {
                       <Badge
                         variant={hasPublishedVersion ? "default" : "secondary"}
                       >
-                        {hasPublishedVersion ? "Published" : "Draft"}
+                        {hasPublishedVersion ? "Live" : "Not live yet"}
                       </Badge>
                     </div>
 
@@ -260,7 +260,7 @@ function FlowsPageContent() {
                       </p>
                       {!hasPublishedVersion && (
                         <p className="text-xs text-muted-foreground">
-                          Publish to make it live
+                          Open it and click Go live to start using it
                         </p>
                       )}
                       <p className="text-muted-foreground">
@@ -376,8 +376,8 @@ function FlowsPageContent() {
             <AlertDialogTitle>Delete flow?</AlertDialogTitle>
             <AlertDialogDescription>
               This deletes {deleteCanvas?.name} -- permanently removed in 30
-              days. Published versions and active automation should be moved to
-              another canvas before deleting.
+              days. If it&apos;s live, switch your numbers to another flow
+              before deleting.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

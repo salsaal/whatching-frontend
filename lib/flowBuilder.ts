@@ -1,12 +1,13 @@
-import { Edge } from "@xyflow/react";
+import type { Edge } from "@xyflow/react";
 
 import {
+  BotAction,
   BotActionType,
   BotBlockType,
   BotCanvasNode,
   BotCanvasNodeContent
 } from "@/client-api/types/bot.type";
-import {
+import type {
   BotFlowNodeData,
   BotFlowReactNode
 } from "@/components/flows/BotFlowNode";
@@ -29,6 +30,7 @@ export type GenericCarouselCard = {
 export type ListRow = {
   id?: string;
   replyId?: string;
+  actionId?: string;
   title?: string;
   label?: string;
   description?: string;
@@ -42,6 +44,8 @@ export type ListSection = {
   [key: string]: unknown;
 };
 
+// WhatsApp's limits, as the backend checks them (characters as people see
+// them: an emoji counts as 1).
 export const REPLY_BUTTON_LABEL_MAX = 20;
 export const LIST_ROW_TITLE_MAX = 24;
 export const LIST_ROW_DESCRIPTION_MAX = 72;
@@ -49,7 +53,15 @@ export const LIST_ROW_ID_MAX = 200;
 export const LIST_SECTION_TITLE_MAX = 24;
 export const LIST_BUTTON_TEXT_MAX = 20;
 export const LIST_MAX_SECTIONS = 10;
-export const LIST_MAX_ROWS_PER_SECTION = 10;
+/** Across all sections, not per section. */
+export const LIST_MAX_OPTIONS = 10;
+export const TEXT_MESSAGE_MAX = 4096;
+export const INTERACTIVE_BODY_MAX = 1024;
+export const HEADER_FOOTER_MAX = 60;
+export const CAROUSEL_CARD_TEXT_MAX = 160;
+export const CAROUSEL_CARD_MAX_LINE_BREAKS = 2;
+/** WhatsApp only allows messages within 24 h of the customer's last one. */
+export const FOLLOW_UP_MAX_MINUTES = 23 * 60;
 
 export const slugifyTrigger = (value: string) =>
   value
@@ -58,11 +70,60 @@ export const slugifyTrigger = (value: string) =>
     .replace(/^_+|_+$/g, "")
     .toUpperCase() || "FLOW_NODE";
 
-export const makeListRow = (label = "Option 1", index = 0): ListRow => ({
-  id: slugifyTrigger(label || `ITEM_${index + 1}`),
-  replyId: slugifyTrigger(label || `ITEM_${index + 1}`),
-  title: label,
-  description: ""
+export const newId = (prefix: string) =>
+  `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+
+/**
+ * A reply ID for a new option, e.g. "opt_k3x9q2". Never derived from the
+ * label: "Option N" names repeat after a delete and add.
+ */
+export const newOptionReplyId = (used: Iterable<string> = []) => {
+  const taken = new Set(used);
+  let replyId = "";
+  do {
+    replyId = `opt_${Math.random().toString(36).slice(2, 8).padEnd(6, "0")}`;
+  } while (taken.has(replyId));
+  return replyId;
+};
+
+export const makeListRow = (
+  label = "Option 1",
+  usedReplyIds: Iterable<string> = []
+): ListRow => {
+  const replyId = newOptionReplyId(usedReplyIds);
+  return {
+    id: replyId,
+    replyId,
+    actionId: newId("opt"),
+    title: label,
+    description: ""
+  };
+};
+
+export const makeCarouselButton = (
+  label = "Learn more",
+  usedReplyIds: Iterable<string> = []
+): Record<string, unknown> => {
+  const replyId = newOptionReplyId(usedReplyIds);
+  return {
+    type: "quick_reply",
+    id: replyId,
+    replyId,
+    actionId: newId("opt"),
+    label,
+    title: label
+  };
+};
+
+export const makeCarouselCard = (
+  index: number,
+  usedReplyIds: Iterable<string> = []
+): GenericCarouselCard => ({
+  title: `Card ${index + 1}`,
+  bodyText: "Card description",
+  mediaType: "image",
+  mediaId: "",
+  buttons: [makeCarouselButton("Learn more", usedReplyIds)]
 });
 
 export const getListSections = (
@@ -129,14 +190,8 @@ export const defaultContent = (
   if (blockType === "image") return { mediaType: "image", mediaId: "" };
   if (blockType === "document") return { mediaType: "document", mediaId: "" };
   if (blockType === "video") return { mediaType: "video", mediaId: "" };
-  if (blockType === "location") {
-    return {
-      latitude: 0,
-      longitude: 0,
-      name: "",
-      address: ""
-    };
-  }
+  // No coordinates until a location is picked: 0,0 is a real place.
+  if (blockType === "location") return { name: "", address: "" };
   if (blockType === "location_request") {
     return {
       bodyText: "Please share your current location."
@@ -191,443 +246,405 @@ export const defaultContent = (
       sections: [{ title: "Products", productRetailerIds: [] }]
     };
   }
+  const firstCard = makeCarouselCard(0);
+  const firstReplyId = String(firstCard.buttons?.[0]?.replyId || "");
   return {
     bodyText: "Browse these options:",
-    cards: [
-      {
-        title: "Card 1",
-        bodyText: "Card description",
-        mediaType: "image",
-        mediaId: "",
-        buttons: [
-          { type: "quick_reply", replyId: "CARD_1", label: "Learn more" }
-        ]
-      },
-      {
-        title: "Card 2",
-        bodyText: "Card description",
-        mediaType: "image",
-        mediaId: "",
-        buttons: [
-          { type: "quick_reply", replyId: "CARD_2", label: "Learn more" }
-        ]
-      }
-    ]
+    cards: [firstCard, makeCarouselCard(1, [firstReplyId])]
   };
 };
 
+let fallbackCarouselCards: GenericCarouselCard[] | null = null;
+
 export const getCarouselCards = (
   content: BotCanvasNodeContent
-): GenericCarouselCard[] =>
-  Array.isArray(content.cards)
-    ? (content.cards as GenericCarouselCard[])
-    : (defaultContent("generic_carousel").cards as GenericCarouselCard[]);
+): GenericCarouselCard[] => {
+  if (Array.isArray(content.cards)) {
+    return content.cards as GenericCarouselCard[];
+  }
+  // Built once so the fallback keeps the same IDs across renders.
+  fallbackCarouselCards ??= defaultContent("generic_carousel")
+    .cards as GenericCarouselCard[];
+  return fallbackCarouselCards;
+};
 
-export const localValidate = (nodes: BuilderNode[], edges: Edge[]) => {
-  const invalidIds = new Set<string>();
-  const messages: string[] = [];
-  const byHandle = new Set(
-    edges.map((edge) => `${edge.source}:${edge.sourceHandle}`)
+// ---------------------------------------------------------------------------
+// Option identity
+//
+// Every option (reply button, list row, carousel button) keeps an actionId on
+// its own object. Handles and wires use that ID, so deleting a card or row
+// never moves another option's wire. replyIds are what WhatsApp sends back
+// when a customer taps, so an existing one is never changed.
+// ---------------------------------------------------------------------------
+
+type OptionRecord = Record<string, unknown>;
+
+const trimmed = (value: unknown) =>
+  typeof value === "string" ? value.trim() : "";
+
+const isUrlButton = (button: OptionRecord) =>
+  String(button.type || (button.url ? "url" : "quick_reply")) === "url";
+
+/** The reply ID an option already has; URL buttons fall back to their URL. */
+const optionKey = (option: OptionRecord, isUrl: boolean) =>
+  trimmed(option.replyId) ||
+  trimmed(option.id) ||
+  (isUrl ? trimmed(option.url) : "");
+
+/**
+ * Only for content that never went through assignOptionIds. Keyed by the
+ * reply ID, so it survives reordering and deletion.
+ */
+const fallbackActionId = (replyId: string) => `option_${replyId}`;
+
+type OptionVisitor = (option: OptionRecord, isUrl: boolean) => OptionRecord;
+
+const mapContentOptions = (
+  blockType: BotBlockType,
+  content: BotCanvasNodeContent,
+  visit: OptionVisitor
+): BotCanvasNodeContent => {
+  if (blockType === "list" && Array.isArray(content.sections)) {
+    return {
+      ...content,
+      sections: content.sections.map((section) => {
+        const rows = (section as ListSection).rows;
+        return Array.isArray(rows)
+          ? { ...section, rows: rows.map((row) => visit(row, false)) }
+          : section;
+      })
+    };
+  }
+  if (blockType === "generic_carousel" && Array.isArray(content.cards)) {
+    return {
+      ...content,
+      cards: content.cards.map((card) => {
+        const buttons = (card as GenericCarouselCard).buttons;
+        return Array.isArray(buttons)
+          ? {
+              ...card,
+              buttons: buttons.map((button) =>
+                visit(button, isUrlButton(button))
+              )
+            }
+          : card;
+      })
+    };
+  }
+  return content;
+};
+
+/**
+ * Gives every list row and carousel button a stable actionId and a unique
+ * replyId. Existing values are kept; a missing actionId is taken from the
+ * saved action with the same reply ID (older flows kept it only there), and
+ * generated only when there is none. A reply ID repeated within the block is
+ * an error on WhatsApp, so the later copy gets a new one.
+ */
+export const assignOptionIds = (
+  blockType: BotBlockType,
+  content: BotCanvasNodeContent,
+  existingActions: BotAction[] = []
+): BotCanvasNodeContent => {
+  const actionIdByReplyId = new Map<string, string>();
+  existingActions.forEach((action) => {
+    const replyId = trimmed(action.replyId);
+    if (replyId && !actionIdByReplyId.has(replyId)) {
+      actionIdByReplyId.set(replyId, action.actionId);
+    }
+  });
+
+  const reservedReplyIds = new Set<string>();
+  mapContentOptions(blockType, content, (option, isUrl) => {
+    if (!isUrl) {
+      const replyId = optionKey(option, false);
+      if (replyId) reservedReplyIds.add(replyId);
+    }
+    return option;
+  });
+
+  const usedReplyIds = new Set<string>();
+  const usedActionIds = new Set<string>();
+  return mapContentOptions(blockType, content, (option, isUrl) => {
+    const next: OptionRecord = { ...option };
+    if (!isUrl) {
+      let replyId = optionKey(option, false);
+      if (!replyId || usedReplyIds.has(replyId)) {
+        replyId = newOptionReplyId(reservedReplyIds);
+        reservedReplyIds.add(replyId);
+        next.id = replyId;
+      } else if (!trimmed(option.id)) {
+        next.id = replyId;
+      }
+      next.replyId = replyId;
+      usedReplyIds.add(replyId);
+    }
+
+    let actionId = trimmed(option.actionId);
+    if (!actionId || usedActionIds.has(actionId)) {
+      const adopted = actionIdByReplyId.get(optionKey(next, isUrl));
+      actionId =
+        adopted && !usedActionIds.has(adopted) ? adopted : newId("opt");
+    }
+    usedActionIds.add(actionId);
+    next.actionId = actionId;
+    return next;
+  });
+};
+
+/**
+ * Reply buttons live on the block's actions. Gives a repeated or missing
+ * reply ID a new one; every other reply ID stays as it is.
+ */
+export const assignActionReplyIds = (actions: BotAction[]): BotAction[] => {
+  const reserved = new Set(
+    actions.map((action) => trimmed(action.replyId)).filter(Boolean)
   );
-  const triggerKeys = new Set(nodes.map((node) => node.data.triggerKey));
-  const triggerCounts = nodes.reduce((counts, node) => {
-    counts.set(
-      node.data.triggerKey,
-      (counts.get(node.data.triggerKey) || 0) + 1
+  const used = new Set<string>();
+  return actions.map((action) => {
+    if (action.type === "open_url") return action;
+    const replyId = trimmed(action.replyId);
+    if (replyId && !used.has(replyId)) {
+      used.add(replyId);
+      return action;
+    }
+    const nextReplyId = newOptionReplyId(reserved);
+    reserved.add(nextReplyId);
+    used.add(nextReplyId);
+    return { ...action, replyId: nextReplyId };
+  });
+};
+
+/** The actions behind a block's options, each with its stored actionId. */
+export const getContentActions = (
+  blockType: BotBlockType,
+  content: BotCanvasNodeContent
+): BotAction[] => {
+  const actions: BotAction[] = [];
+  const addAction = (
+    option: OptionRecord,
+    type: BotActionType,
+    metadata: Record<string, unknown> = {}
+  ) => {
+    const replyId = optionKey(option, type === "open_url");
+    if (!replyId) return;
+    const label = option.label || option.title;
+    actions.push({
+      actionId: trimmed(option.actionId) || fallbackActionId(replyId),
+      type,
+      replyId,
+      label: typeof label === "string" ? label : replyId,
+      url: typeof option.url === "string" ? option.url : undefined,
+      metadata
+    });
+  };
+
+  if (blockType === "buttons" && Array.isArray(content.buttons)) {
+    content.buttons.forEach((button) =>
+      addAction(button as OptionRecord, "go_to_trigger")
     );
-    return counts;
-  }, new Map<string, number>());
-
-  if (!triggerKeys.has("DEFAULT")) {
-    messages.push("Main Menu must keep trigger key DEFAULT.");
-    invalidIds.add(nodes[0]?.id || "");
-  }
-  if (!triggerKeys.has("OPT_OUT")) {
-    messages.push("Opt-out block must keep trigger key OPT_OUT.");
-    invalidIds.add(nodes[0]?.id || "");
-  }
-  if (!triggerKeys.has("OPT_IN")) {
-    messages.push("Opt-in block must keep trigger key OPT_IN.");
-    invalidIds.add(nodes[0]?.id || "");
   }
 
-  nodes.forEach((node) => {
-    const content = node.data.content;
-    const title = node.data.label;
-    if ((triggerCounts.get(node.data.triggerKey) || 0) > 1) {
-      invalidIds.add(node.id);
-      messages.push(
-        `${title}: trigger key "${node.data.triggerKey}" is duplicated.`
+  if (blockType === "list" && Array.isArray(content.sections)) {
+    content.sections.forEach((section) => {
+      const rows = (section as ListSection).rows;
+      if (!Array.isArray(rows)) return;
+      rows.forEach((row) =>
+        addAction(row, String(row.type || "go_to_trigger") as BotActionType, {
+          description:
+            typeof row.description === "string" ? row.description : "",
+          sectionTitle:
+            typeof section.title === "string" ? String(section.title) : ""
+        })
       );
-    }
-    if (!node.data.label?.trim() || !node.data.triggerKey.trim()) {
-      invalidIds.add(node.id);
-      messages.push(`${title || "Block"}: name and trigger key are required.`);
-    }
-    if (node.data.blockType === "text" && !String(content.text || "").trim()) {
-      invalidIds.add(node.id);
-      messages.push(`${title}: message text is required.`);
-    }
-    if (
-      node.data.blockType === "buttons" &&
-      !String(content.bodyText || "").trim()
-    ) {
-      invalidIds.add(node.id);
-      messages.push(`${title}: message body is required.`);
-    }
-    if (
-      node.data.blockType === "list" &&
-      (!String(content.bodyText || "").trim() ||
-        !String(content.buttonText || "").trim())
-    ) {
-      invalidIds.add(node.id);
-      messages.push(`${title}: list body and button text are required.`);
-    }
-    if (
-      ["image", "document", "video"].includes(node.data.blockType) &&
-      !String(content.mediaId || "").trim()
-    ) {
-      invalidIds.add(node.id);
-      messages.push(`${title}: select media from the properties panel.`);
-    }
-    if (
-      node.data.blockType === "location" &&
-      (content.latitude === undefined || content.longitude === undefined)
-    ) {
-      invalidIds.add(node.id);
-      messages.push(`${title}: pick a location on the map.`);
-    }
-    if (
-      node.data.blockType === "location_request" &&
-      !String(content.bodyText || "").trim()
-    ) {
-      invalidIds.add(node.id);
-      messages.push(`${title}: location request message is required.`);
-    }
-    if (
-      node.data.blockType === "handoff_to_agent" &&
-      !String(content.message || content.text || "").trim()
-    ) {
-      invalidIds.add(node.id);
-      messages.push(`${title}: agent handoff message is required.`);
-    }
-    if (node.data.blockType === "address_request") {
-      if (!String(content.bodyText || "").trim()) {
-        invalidIds.add(node.id);
-        messages.push(`${title}: address request message is required.`);
-      }
-      if (
-        String(content.country || "IN")
-          .trim()
-          .toUpperCase() !== "IN"
-      ) {
-        invalidIds.add(node.id);
-        messages.push(`${title}: address request supports country IN only.`);
-      }
-    }
-    if (node.data.blockType === "contacts") {
-      const contacts = Array.isArray(content.contacts)
-        ? (content.contacts as Array<Record<string, unknown>>)
-        : [];
-      const hasNamedContact = contacts.some((contact) => {
-        const name = contact.name as Record<string, unknown> | undefined;
-        return String(name?.formatted_name || "").trim();
-      });
-      const hasValidPhone = contacts.some((contact) => {
-        const phones = contact.phones as
-          | Array<Record<string, unknown>>
-          | undefined;
-        return String(phones?.[0]?.phone || "").replace(/\D/g, "").length >= 7;
-      });
-      if (!hasNamedContact) {
-        invalidIds.add(node.id);
-        messages.push(
-          `${title}: add at least one contact with a formatted name.`
-        );
-      }
-      if (!hasValidPhone) {
-        invalidIds.add(node.id);
-        messages.push(
-          `${title}: select a country code and enter a valid phone number.`
-        );
-      }
-    }
-    if (
-      node.data.blockType === "product_carousel" &&
-      !String(content.catalogId || "").trim()
-    ) {
-      invalidIds.add(node.id);
-      messages.push(`${title}: catalog ID is required.`);
-    }
-    if (node.data.blockType === "buttons" && node.data.actions.length > 3) {
-      invalidIds.add(node.id);
-      messages.push(
-        `${title}: WhatsApp reply button messages support at most 3 buttons.`
+    });
+  }
+
+  if (blockType === "generic_carousel" && Array.isArray(content.cards)) {
+    content.cards.forEach((card) => {
+      const buttons = (card as GenericCarouselCard).buttons;
+      if (!Array.isArray(buttons)) return;
+      buttons.forEach((button) =>
+        addAction(button, isUrlButton(button) ? "open_url" : "go_to_trigger")
       );
-    }
-    if (node.data.blockType === "buttons" && content.mediaType) {
-      if (!String(content.mediaId || "").trim()) {
-        invalidIds.add(node.id);
-        messages.push(
-          `${title}: media header requires media from the library.`
-        );
-      }
-      if (!["image", "document", "video"].includes(String(content.mediaType))) {
-        invalidIds.add(node.id);
-        messages.push(
-          `${title}: media header must be image, document, or video.`
-        );
-      }
-    }
-    if (node.data.blockType === "buttons") {
-      node.data.actions.forEach((action) => {
-        const label = String(action.label || "").trim();
-        if (label.length < 1 || label.length > REPLY_BUTTON_LABEL_MAX) {
-          invalidIds.add(node.id);
-          messages.push(
-            `${title}: button "${label || "Untitled"}" must be 1-${REPLY_BUTTON_LABEL_MAX} characters.`
-          );
-        }
-      });
-    }
-    if (node.data.blockType === "list") {
-      const sections = getListSections(content);
-      const rowCount = getListRowCount(sections);
-      const rowIds = new Set<string>();
-      if (sections.length > LIST_MAX_SECTIONS) {
-        invalidIds.add(node.id);
-        messages.push(
-          `${title}: WhatsApp list messages support at most ${LIST_MAX_SECTIONS} sections.`
-        );
-      }
-      if (rowCount < 1) {
-        invalidIds.add(node.id);
-        messages.push(`${title}: list block requires at least 1 row.`);
-      }
-      sections.forEach((section, sectionIndex) => {
-        if ((section.rows || []).length > LIST_MAX_ROWS_PER_SECTION) {
-          invalidIds.add(node.id);
-          messages.push(
-            `${title}: section ${sectionIndex + 1} supports at most ${LIST_MAX_ROWS_PER_SECTION} rows.`
-          );
-        }
-      });
-      if (String(content.buttonText || "").length > LIST_BUTTON_TEXT_MAX) {
-        invalidIds.add(node.id);
-        messages.push(
-          `${title}: list button text must be ${LIST_BUTTON_TEXT_MAX} characters or less.`
-        );
-      }
-      sections.forEach((section, sectionIndex) => {
-        const sectionTitle = String(section.title || "").trim();
-        if (
-          sectionTitle.length < 1 ||
-          sectionTitle.length > LIST_SECTION_TITLE_MAX
-        ) {
-          invalidIds.add(node.id);
-          messages.push(
-            `${title}: section ${sectionIndex + 1} title must be 1-${LIST_SECTION_TITLE_MAX} characters.`
-          );
-        }
-        (section.rows || []).forEach((row) => {
-          const label = String(row.title || row.label || "").trim();
-          const rowId = String(row.id || row.replyId || "").trim();
-          const description = String(row.description || "");
-          if (label.length < 1 || label.length > LIST_ROW_TITLE_MAX) {
-            invalidIds.add(node.id);
-            messages.push(
-              `${title}: list row "${label || "Untitled"}" must be 1-${LIST_ROW_TITLE_MAX} characters.`
-            );
-          }
-          if (rowId.length < 1 || rowId.length > LIST_ROW_ID_MAX) {
-            invalidIds.add(node.id);
-            messages.push(
-              `${title}: list row "${label || "Untitled"}" id must be 1-${LIST_ROW_ID_MAX} characters.`
-            );
-          }
-          if (rowIds.has(rowId)) {
-            invalidIds.add(node.id);
-            messages.push(`${title}: list row id "${rowId}" is duplicated.`);
-          }
-          rowIds.add(rowId);
-          if (description.length > LIST_ROW_DESCRIPTION_MAX) {
-            invalidIds.add(node.id);
-            messages.push(
-              `${title}: list row "${label || "Untitled"}" description must be ${LIST_ROW_DESCRIPTION_MAX} characters or less.`
-            );
-          }
+    });
+  }
+
+  return actions;
+};
+
+/** One row on the canvas node: an option and where it leads. */
+export type FlowNodeOption = {
+  actionId: string;
+  type: BotActionType;
+  label: string;
+  /** List section title, or the carousel card's name. */
+  group?: string;
+  description?: string;
+};
+
+/**
+ * The options a block shows on the canvas, in order. List rows come from the
+ * sections (so each appears once) and carousel buttons carry their card name.
+ */
+export const getNodeOptions = (
+  blockType: BotBlockType,
+  content: BotCanvasNodeContent | undefined,
+  actions: BotAction[]
+): FlowNodeOption[] => {
+  const options: FlowNodeOption[] = [];
+  const handleFor = (option: OptionRecord, isUrl: boolean) => {
+    const replyId = optionKey(option, isUrl);
+    return (
+      trimmed(option.actionId) || (replyId ? fallbackActionId(replyId) : "")
+    );
+  };
+
+  if (blockType === "list" && Array.isArray(content?.sections)) {
+    content.sections.forEach((section, sectionIndex) => {
+      const rows = (section as ListSection).rows;
+      if (!Array.isArray(rows)) return;
+      const group = trimmed(section.title) || `Section ${sectionIndex + 1}`;
+      rows.forEach((row) => {
+        const actionId = handleFor(row, false);
+        if (!actionId) return;
+        options.push({
+          actionId,
+          type: "go_to_trigger",
+          label: trimmed(row.title) || trimmed(row.label) || "Untitled option",
+          group,
+          description: trimmed(row.description) || undefined
         });
       });
-    }
-    if (node.data.blockType === "generic_carousel") {
-      const cards = getCarouselCards(content);
-      if (cards.length < 2 || cards.length > 10) {
-        invalidIds.add(node.id);
-        messages.push(`${title}: carousel must include 2-10 cards.`);
-      }
-      const firstButtons = (cards[0]?.buttons || []) as Array<
-        Record<string, unknown>
-      >;
-      const firstTypes = firstButtons.map((button) =>
-        String(button.type || (button.url ? "url" : "quick_reply"))
-      );
-      cards.forEach((card, cardIndex) => {
-        if (!String(card.bodyText || "").trim()) {
-          invalidIds.add(node.id);
-          messages.push(`${title}: card ${cardIndex + 1} needs body text.`);
-        }
-        if (!["image", "video"].includes(String(card.mediaType || ""))) {
-          invalidIds.add(node.id);
-          messages.push(
-            `${title}: card ${cardIndex + 1} needs image or video media.`
-          );
-        }
-        if (!String(card.mediaId || "").trim()) {
-          invalidIds.add(node.id);
-          messages.push(
-            `${title}: card ${cardIndex + 1} needs media selected from the library.`
-          );
-        }
-        const buttons = (card.buttons || []) as Array<Record<string, unknown>>;
-        if (!buttons.length) {
-          invalidIds.add(node.id);
-          messages.push(
-            `${title}: card ${cardIndex + 1} needs at least one button.`
-          );
-        }
-        buttons.forEach((button) => {
-          const label = String(button.label || button.title || "").trim();
-          if (label.length < 1 || label.length > REPLY_BUTTON_LABEL_MAX) {
-            invalidIds.add(node.id);
-            messages.push(
-              `${title}: carousel button "${label || "Untitled"}" must be 1-${REPLY_BUTTON_LABEL_MAX} characters.`
-            );
-          }
-        });
-        if (
-          buttons.length !== firstTypes.length ||
-          buttons.some(
-            (button, buttonIndex) =>
-              String(button.type || (button.url ? "url" : "quick_reply")) !==
-              firstTypes[buttonIndex]
-          )
-        ) {
-          invalidIds.add(node.id);
-          messages.push(
-            `${title}: carousel button count and type must match on every card.`
-          );
-        }
-      });
-    }
+    });
+    return options;
+  }
 
-    node.data.actions
-      .filter((action) => action.type === "go_to_trigger")
-      .forEach((action) => {
-        if (
-          node.data.triggerKey === "OPT_IN" ||
-          node.data.triggerKey === "OPT_OUT"
-        ) {
-          return;
-        }
-        const possibleHandleIds = [action.actionId, action.replyId].filter(
-          Boolean
-        );
-        const isConnected = possibleHandleIds.some((handleId) =>
-          byHandle.has(`${node.id}:${handleId}`)
-        );
-        if (!isConnected) {
-          invalidIds.add(node.id);
-          messages.push(
-            `${title}: route "${action.label || "option"}" is not connected.`
-          );
-        }
+  if (blockType === "generic_carousel" && Array.isArray(content?.cards)) {
+    content.cards.forEach((card, cardIndex) => {
+      const buttons = (card as GenericCarouselCard).buttons;
+      if (!Array.isArray(buttons)) return;
+      const group = trimmed(card.title) || `Card ${cardIndex + 1}`;
+      buttons.forEach((button) => {
+        const isUrl = isUrlButton(button);
+        const actionId = handleFor(button, isUrl);
+        if (!actionId) return;
+        options.push({
+          actionId,
+          type: isUrl ? "open_url" : "go_to_trigger",
+          label: trimmed(button.label) || trimmed(button.title) || "Button",
+          group
+        });
       });
-    node.data.actions
-      .filter((action) => action.type === "open_url")
-      .forEach((action) => {
-        if (
-          node.data.blockType !== "generic_carousel" &&
-          node.data.blockType !== "buttons"
-        ) {
-          invalidIds.add(node.id);
-          messages.push(
-            `${title}: Open Website is only supported by button and carousel blocks.`
-          );
-        } else if (!/^https?:\/\//i.test(String(action.url || "").trim())) {
-          invalidIds.add(node.id);
-          messages.push(
-            `${title}: URL action "${action.label || "button"}" needs a valid http(s) URL.`
-          );
-        }
-      });
-    if (node.data.blockType === "buttons") {
-      const websiteButtons = node.data.actions.filter(
-        (action) => action.type === "open_url"
-      );
-      const replyButtons = node.data.actions.filter(
-        (action) => action.type !== "open_url"
-      );
-      if (websiteButtons.length && replyButtons.length) {
-        invalidIds.add(node.id);
-        messages.push(
-          `${title}: website buttons cannot be mixed with quick replies.`
-        );
-      }
-      if (websiteButtons.length > 1) {
-        invalidIds.add(node.id);
-        messages.push(`${title}: only one website button is supported.`);
-      }
+    });
+    return options;
+  }
+
+  return actions.map((action) => ({
+    actionId: action.actionId,
+    type: action.type,
+    label: trimmed(action.label) || "Untitled option"
+  }));
+};
+
+// ---------------------------------------------------------------------------
+// Wires
+// ---------------------------------------------------------------------------
+
+const outputHandles = (actions: BotAction[]) =>
+  actions
+    .filter((action) => action.type === "go_to_trigger")
+    .map((action) => action.actionId);
+
+/**
+ * Handles a block no longer has after an edit: options that were removed, or
+ * that stopped going to a block (e.g. now "Hand to team").
+ */
+export const removedOutputHandles = (
+  previousActions: BotAction[],
+  nextActions: BotAction[]
+) => {
+  const remaining = new Set(outputHandles(nextActions));
+  return outputHandles(previousActions).filter(
+    (handle) => !remaining.has(handle)
+  );
+};
+
+/** Removes the wires of exactly these options of this one block. */
+export const removeEdgesForActions = <E extends Edge>(
+  edges: E[],
+  nodeId: string,
+  actionIds: Iterable<string>
+): E[] => {
+  const handles = new Set(actionIds);
+  if (!handles.size) return edges;
+  return edges.filter(
+    (edge) =>
+      !(
+        edge.source === nodeId &&
+        edge.sourceHandle &&
+        handles.has(edge.sourceHandle)
+      )
+  );
+};
+
+export const removeEdgesForAction = <E extends Edge>(
+  edges: E[],
+  nodeId: string,
+  actionId: string
+): E[] => removeEdgesForActions(edges, nodeId, [actionId]);
+
+/**
+ * Where each option's wire leads, keyed by `${sourceNodeId}:${handle}`.
+ * Handle IDs repeat across blocks, so the source is part of the key.
+ */
+export const buildTargetByAction = (
+  edges: Edge[],
+  nodes: Array<{ id: string; data: { triggerKey: string } }>
+) => {
+  const triggerKeyById = new Map(
+    nodes.map((node) => [node.id, node.data.triggerKey])
+  );
+  const targetByAction = new Map<string, string>();
+  edges.forEach((edge) => {
+    if (!edge.sourceHandle) return;
+    const triggerKey = triggerKeyById.get(edge.target);
+    if (triggerKey) {
+      targetByAction.set(`${edge.source}:${edge.sourceHandle}`, triggerKey);
     }
   });
+  return targetByAction;
+};
 
-  // Orphan detection is a warning, not a blocker (added to `messages` only,
-  // never `invalidIds`) -- an unreachable block may still be a work-in-progress
-  // draft the user hasn't wired up yet, so it shouldn't block save/publish.
-  const reachable = new Set<string>();
-  const entryNode = nodes.find((node) => node.data.triggerKey === "DEFAULT");
-  if (entryNode) {
-    const queue = [entryNode.id];
-    reachable.add(entryNode.id);
-    while (queue.length) {
-      const currentId = queue.shift()!;
-      edges
-        .filter((edge) => edge.source === currentId)
-        .forEach((edge) => {
-          if (!reachable.has(edge.target)) {
-            reachable.add(edge.target);
-            queue.push(edge.target);
-          }
-        });
-      const currentNode = nodes.find((node) => node.id === currentId);
-      const followUpTargetId = currentNode?.data.followUp?.enabled
-        ? nodes.find(
-            (candidate) =>
-              candidate.data.triggerKey ===
-              currentNode.data.followUp?.targetTriggerKey
-          )?.id
-        : undefined;
-      if (followUpTargetId && !reachable.has(followUpTargetId)) {
-        reachable.add(followUpTargetId);
-        queue.push(followUpTargetId);
-      }
-    }
-  }
-  nodes.forEach((node) => {
-    if (
-      node.data.triggerKey === "OPT_IN" ||
-      node.data.triggerKey === "OPT_OUT" ||
-      node.data.locked ||
-      reachable.has(node.id)
-    ) {
-      return;
-    }
-    messages.push(
-      `${node.data.label}: unreachable — no route from Main Menu leads to this block.`
-    );
-  });
+// ---------------------------------------------------------------------------
+// Counting and formatting
+// ---------------------------------------------------------------------------
 
-  if (invalidIds.size && messages.length === 0) {
-    messages.push("Some blocks are missing required content.");
+const graphemeSegmenter =
+  typeof Intl !== "undefined" && "Segmenter" in Intl
+    ? new Intl.Segmenter(undefined, { granularity: "grapheme" })
+    : null;
+
+/** Characters as people see them: an emoji counts as 1. */
+export const countChars = (value: unknown) => {
+  const text = typeof value === "string" ? value : "";
+  if (!text) return 0;
+  if (!graphemeSegmenter) return Array.from(text).length;
+  let count = 0;
+  for (const segment of graphemeSegmenter.segment(text)) {
+    if (segment) count += 1;
   }
-  return { invalidIds, messages };
+  return count;
+};
+
+export const countLineBreaks = (value: unknown) =>
+  typeof value === "string" ? (value.match(/\n/g) || []).length : 0;
+
+/** "45 min", "1 h", "1 h 30 min". */
+export const formatDelay = (minutes: number) => {
+  const total = Math.max(0, Math.round(minutes));
+  const hours = Math.floor(total / 60);
+  const rest = total % 60;
+  if (!hours) return `${rest} min`;
+  return rest ? `${hours} h ${rest} min` : `${hours} h`;
 };

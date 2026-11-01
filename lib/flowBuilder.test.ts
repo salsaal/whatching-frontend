@@ -1,67 +1,65 @@
 import { Edge } from "@xyflow/react";
 import { describe, expect, it } from "vitest";
 
-import { BotAction } from "@/client-api/types/bot.type";
+import { BotAction, BotCanvasNodeContent } from "@/client-api/types/bot.type";
 import {
-  BuilderNode,
-  BuilderNodeData,
+  assignActionReplyIds,
+  assignOptionIds,
+  buildTargetByAction,
+  countChars,
+  countLineBreaks,
   defaultContent,
+  formatDelay,
   getCarouselCards,
+  getContentActions,
   getListRowCount,
   getListSections,
-  localValidate,
+  getNodeOptions,
+  makeListRow,
+  newOptionReplyId,
+  removedOutputHandles,
+  removeEdgesForAction,
+  removeEdgesForActions,
   slugifyTrigger
 } from "./flowBuilder";
 
-const action = (overrides: Partial<BotAction> = {}): BotAction => ({
-  actionId: "action_1",
-  type: "go_to_trigger",
-  label: "Option 1",
-  replyId: "OPTION_1",
-  ...overrides
-});
-
-const buildNode = (
+const edge = (
   id: string,
-  overrides: Partial<BuilderNodeData> = {}
-): BuilderNode => ({
-  id,
-  type: "botBlock",
-  position: { x: 0, y: 0 },
-  data: {
-    label: "Block",
-    triggerKey: id,
-    blockType: "text",
-    actions: [],
-    content: { text: "Hello there" },
-    locked: false,
-    metadata: {},
-    ...overrides
-  }
+  source: string,
+  sourceHandle: string,
+  target: string
+): Edge => ({ id, source, sourceHandle, target, targetHandle: "in" });
+
+const quickReply = (actionId: string, replyId: string, label = "Go") => ({
+  type: "quick_reply",
+  actionId,
+  id: replyId,
+  replyId,
+  label
 });
 
-// The three system nodes every canvas requires -- most tests start from this
-// base set and layer their own node(s)/edges on top.
-const requiredNodes = (): BuilderNode[] => [
-  buildNode("node_default", {
-    label: "Main Menu",
-    triggerKey: "DEFAULT",
-    blockType: "buttons",
-    content: { bodyText: "Welcome" },
-    actions: [action({ actionId: "a1", replyId: "GO_NEXT" })],
-    locked: true
-  }),
-  buildNode("node_opt_in", {
-    label: "Opt In",
-    triggerKey: "OPT_IN",
-    locked: true
-  }),
-  buildNode("node_opt_out", {
-    label: "Opt Out",
-    triggerKey: "OPT_OUT",
-    locked: true
-  })
-];
+// Three cards whose buttons each lead somewhere different.
+const threeCardCarousel = (): BotCanvasNodeContent => ({
+  cards: [
+    { title: "Plans", buttons: [quickReply("a1", "r1", "See plans")] },
+    { title: "Pricing", buttons: [quickReply("a2", "r2", "See prices")] },
+    { title: "Support", buttons: [quickReply("a3", "r3", "Get help")] }
+  ]
+});
+
+const fourRowList = (): BotCanvasNodeContent => ({
+  sections: [
+    {
+      title: "Menu",
+      rows: [
+        { actionId: "row1", id: "R1", replyId: "R1", title: "One" },
+        { actionId: "row2", id: "R2", replyId: "R2", title: "Two" },
+        { actionId: "row3", id: "R3", replyId: "R3", title: "Three" },
+        { actionId: "row4", id: "R4", replyId: "R4", title: "Four" }
+      ]
+    }
+  ]
+});
 
 describe("slugifyTrigger", () => {
   it("uppercases and underscore-joins, falling back when nothing alphanumeric remains", () => {
@@ -96,229 +94,338 @@ describe("defaultContent / getCarouselCards", () => {
     });
   });
 
+  it("starts a location empty instead of at 0,0", () => {
+    const content = defaultContent("location");
+    expect(content.latitude).toBeUndefined();
+    expect(content.longitude).toBeUndefined();
+  });
+
+  it("gives a new carousel's buttons their own IDs", () => {
+    const cards = defaultContent("generic_carousel").cards as Array<{
+      buttons: Array<{ actionId: string; replyId: string }>;
+    }>;
+    const [first, second] = cards.map((card) => card.buttons[0]);
+    expect(first.actionId).not.toBe(second.actionId);
+    expect(first.replyId).not.toBe(second.replyId);
+  });
+
   it("getCarouselCards passes through real cards and falls back to the 2-card default otherwise", () => {
     expect(getCarouselCards({ cards: [{ title: "A" }] })).toEqual([
       { title: "A" }
     ]);
     expect(getCarouselCards({})).toHaveLength(2);
+    expect(getCarouselCards({})).toBe(getCarouselCards({}));
   });
 });
 
-describe("localValidate: required system nodes", () => {
-  it("flags a canvas missing the DEFAULT/OPT_IN/OPT_OUT trigger keys", () => {
-    const { invalidIds, messages } = localValidate(
-      [buildNode("n1", { triggerKey: "SOMETHING_ELSE" })],
+describe("newOptionReplyId", () => {
+  it("is random, not derived from a label, and avoids IDs already used", () => {
+    const replyId = newOptionReplyId();
+    expect(replyId).toMatch(/^opt_[a-z0-9]{6}$/);
+    const used = Array.from({ length: 50 }, () => newOptionReplyId());
+    const next = newOptionReplyId(used);
+    expect(used).not.toContain(next);
+  });
+
+  it("re-adding an option after a delete gets a fresh reply ID", () => {
+    const first = makeListRow("Option 1");
+    const second = makeListRow("Option 2", [String(first.replyId)]);
+    // The old scheme gave the re-added row "OPTION_2" again.
+    const readded = makeListRow("Option 2", [String(second.replyId)]);
+    expect(readded.replyId).not.toBe(second.replyId);
+    expect(readded.actionId).not.toBe(second.actionId);
+  });
+});
+
+describe("assignOptionIds", () => {
+  it("keeps the actionId and replyId an option already has", () => {
+    const content = fourRowList();
+    expect(assignOptionIds("list", content)).toEqual(content);
+  });
+
+  it("takes a missing actionId from the saved action with the same reply ID", () => {
+    // Older flows stored positional IDs only on the block's actions.
+    const content = {
+      sections: [
+        { title: "Menu", rows: [{ id: "R1", title: "One" }, { id: "R2" }] }
+      ]
+    };
+    const saved: BotAction[] = [
+      { actionId: "content_action_2", type: "go_to_trigger", replyId: "R2" },
+      { actionId: "content_action_1", type: "go_to_trigger", replyId: "R1" }
+    ];
+    const rows = (
+      assignOptionIds("list", content, saved).sections as Array<{
+        rows: Array<Record<string, unknown>>;
+      }>
+    )[0].rows;
+    expect(rows.map((row) => row.actionId)).toEqual([
+      "content_action_1",
+      "content_action_2"
+    ]);
+    expect(rows.map((row) => row.replyId)).toEqual(["R1", "R2"]);
+  });
+
+  it("generates IDs only for options that have none", () => {
+    const content = {
+      cards: [{ buttons: [quickReply("a1", "r1"), { label: "New" }] }]
+    };
+    const buttons = (
+      assignOptionIds("generic_carousel", content).cards as Array<{
+        buttons: Array<Record<string, unknown>>;
+      }>
+    )[0].buttons;
+    expect(buttons[0]).toMatchObject({ actionId: "a1", replyId: "r1" });
+    expect(buttons[1].actionId).toEqual(expect.any(String));
+    expect(buttons[1].replyId).toMatch(/^opt_/);
+    expect(buttons[1].id).toBe(buttons[1].replyId);
+  });
+
+  it("is stable: running it again changes nothing", () => {
+    const once = assignOptionIds("generic_carousel", {
+      cards: [{ buttons: [{ label: "A" }] }, { buttons: [{ label: "B" }] }]
+    });
+    expect(assignOptionIds("generic_carousel", once)).toEqual(once);
+  });
+
+  it("gives only the later copy of a repeated reply ID a new one", () => {
+    const content = {
+      sections: [
+        {
+          title: "Menu",
+          rows: [
+            { actionId: "x", id: "SAME", replyId: "SAME", title: "One" },
+            { actionId: "y", id: "SAME", replyId: "SAME", title: "Two" }
+          ]
+        }
+      ]
+    };
+    const rows = (
+      assignOptionIds("list", content).sections as Array<{
+        rows: Array<Record<string, unknown>>;
+      }>
+    )[0].rows;
+    expect(rows[0].replyId).toBe("SAME");
+    expect(rows[1].replyId).not.toBe("SAME");
+    expect(rows[1].actionId).toBe("y");
+  });
+
+  it("gives website buttons an actionId but no reply ID", () => {
+    const content = {
+      cards: [
+        { buttons: [{ type: "url", url: "https://a.example", label: "Open" }] }
+      ]
+    };
+    const button = (
+      assignOptionIds("generic_carousel", content).cards as Array<{
+        buttons: Array<Record<string, unknown>>;
+      }>
+    )[0].buttons[0];
+    expect(button.actionId).toEqual(expect.any(String));
+    expect(button.replyId).toBeUndefined();
+  });
+});
+
+describe("assignActionReplyIds", () => {
+  it("fixes a repeated reply-button ID and leaves the rest alone", () => {
+    const actions: BotAction[] = [
+      { actionId: "a", type: "go_to_trigger", replyId: "OPTION_2" },
+      { actionId: "b", type: "go_to_trigger", replyId: "OPTION_2" },
+      { actionId: "c", type: "go_to_trigger", replyId: "OPTION_3" }
+    ];
+    const result = assignActionReplyIds(actions);
+    expect(result[0].replyId).toBe("OPTION_2");
+    expect(result[1].replyId).toMatch(/^opt_/);
+    expect(result[2].replyId).toBe("OPTION_3");
+  });
+});
+
+describe("getContentActions", () => {
+  it("reads each option's stored actionId instead of its position", () => {
+    const content = threeCardCarousel();
+    expect(
+      getContentActions("generic_carousel", content).map(
+        (action) => action.actionId
+      )
+    ).toEqual(["a1", "a2", "a3"]);
+
+    // Delete card 2: card 3 keeps its own ID (it used to become
+    // content_action_2 and inherit card 2's wire).
+    const cards = content.cards as Array<Record<string, unknown>>;
+    const withoutCard2 = { cards: [cards[0], cards[2]] };
+    expect(
+      getContentActions("generic_carousel", withoutCard2).map((action) => [
+        action.actionId,
+        action.replyId
+      ])
+    ).toEqual([
+      ["a1", "r1"],
+      ["a3", "r3"]
+    ]);
+  });
+
+  it("keeps list row IDs when an earlier row is deleted", () => {
+    const content = fourRowList();
+    const section = (content.sections as Array<{ rows: unknown[] }>)[0];
+    const withoutFirst = {
+      sections: [{ ...section, rows: section.rows.slice(1) }]
+    };
+    expect(
+      getContentActions("list", withoutFirst).map((action) => action.actionId)
+    ).toEqual(["row2", "row3", "row4"]);
+  });
+});
+
+describe("wire removal", () => {
+  it("deleting a carousel card removes only that card's wires", () => {
+    const content = threeCardCarousel();
+    const before = getContentActions("generic_carousel", content);
+    const cards = content.cards as Array<Record<string, unknown>>;
+    const after = getContentActions("generic_carousel", {
+      cards: [cards[0], cards[2]]
+    });
+    const edges = [
+      edge("e1", "carousel", "a1", "plans"),
+      edge("e2", "carousel", "a2", "prices"),
+      edge("e3", "carousel", "a3", "help")
+    ];
+
+    const removed = removedOutputHandles(before, after);
+    expect(removed).toEqual(["a2"]);
+    const remaining = removeEdgesForActions(edges, "carousel", removed);
+    expect(remaining.map((item) => [item.sourceHandle, item.target])).toEqual(
+      [
+        ["a1", "plans"],
+        ["a3", "help"]
+      ]
+    );
+  });
+
+  it("deleting the first of 4 list rows keeps the other 3 wires and another list's wires", () => {
+    const content = fourRowList();
+    const section = (content.sections as Array<{ rows: unknown[] }>)[0];
+    const before = getContentActions("list", content);
+    const after = getContentActions("list", {
+      sections: [{ ...section, rows: section.rows.slice(1) }]
+    });
+    const edges = [
+      edge("e1", "menu", "row1", "one"),
+      edge("e2", "menu", "row2", "two"),
+      edge("e3", "menu", "row3", "three"),
+      edge("e4", "menu", "row4", "four"),
+      // A second list whose options happen to share the handle IDs.
+      edge("e5", "other_menu", "row1", "elsewhere"),
+      edge("e6", "other_menu", "row2", "elsewhere")
+    ];
+
+    const remaining = removeEdgesForActions(
+      edges,
+      "menu",
+      removedOutputHandles(before, after)
+    );
+    expect(remaining.map((item) => item.id)).toEqual([
+      "e2",
+      "e3",
+      "e4",
+      "e5",
+      "e6"
+    ]);
+  });
+
+  it("removeEdgesForAction only touches the given block", () => {
+    const edges = [
+      edge("e1", "block_a", "opt_1", "x"),
+      edge("e2", "block_b", "opt_1", "y")
+    ];
+    expect(
+      removeEdgesForAction(edges, "block_a", "opt_1").map((item) => item.id)
+    ).toEqual(["e2"]);
+  });
+
+  it("an option that stops going to a block loses its handle", () => {
+    const before: BotAction[] = [
+      { actionId: "a", type: "go_to_trigger", replyId: "A" },
+      { actionId: "b", type: "go_to_trigger", replyId: "B" }
+    ];
+    const after: BotAction[] = [
+      { actionId: "a", type: "escalate_to_agent", replyId: "A" },
+      { actionId: "b", type: "go_to_trigger", replyId: "B" }
+    ];
+    expect(removedOutputHandles(before, after)).toEqual(["a"]);
+  });
+});
+
+describe("buildTargetByAction", () => {
+  it("keys targets by source block and handle, so equal handle IDs don't collide", () => {
+    const nodes = [
+      { id: "a", data: { triggerKey: "A" } },
+      { id: "b", data: { triggerKey: "B" } },
+      { id: "x", data: { triggerKey: "X" } },
+      { id: "y", data: { triggerKey: "Y" } }
+    ];
+    const targets = buildTargetByAction(
+      [edge("e1", "a", "opt_1", "x"), edge("e2", "b", "opt_1", "y")],
+      nodes
+    );
+    expect(targets.get("a:opt_1")).toBe("X");
+    expect(targets.get("b:opt_1")).toBe("Y");
+  });
+});
+
+describe("getNodeOptions", () => {
+  it("lists each list row once, with its section", () => {
+    const options = getNodeOptions(
+      "list",
+      {
+        sections: [
+          {
+            title: "Sales",
+            rows: [{ actionId: "r1", replyId: "R1", title: "Pricing" }]
+          },
+          {
+            title: "Help",
+            rows: [{ actionId: "r2", replyId: "R2", title: "Support" }]
+          }
+        ]
+      },
       []
     );
-    expect(messages).toContain("Main Menu must keep trigger key DEFAULT.");
-    expect(messages).toContain("Opt-out block must keep trigger key OPT_OUT.");
-    expect(messages).toContain("Opt-in block must keep trigger key OPT_IN.");
-    expect(invalidIds.size).toBeGreaterThan(0);
+    expect(
+      options.map((option) => [option.actionId, option.group, option.label])
+    ).toEqual([
+      ["r1", "Sales", "Pricing"],
+      ["r2", "Help", "Support"]
+    ]);
   });
 
-  it("passes a minimal valid canvas with no unresolved messages", () => {
-    const nodes = requiredNodes();
-    const edges: Edge[] = [
+  it("names carousel options by card, falling back to the card number", () => {
+    const options = getNodeOptions(
+      "generic_carousel",
       {
-        id: "e1",
-        source: "node_default",
-        target: "node_opt_out",
-        sourceHandle: "a1",
-        targetHandle: "in"
-      }
-    ];
-    const { invalidIds, messages } = localValidate(nodes, edges);
-    expect(invalidIds.size).toBe(0);
-    expect(messages).toEqual([]);
-  });
-});
-
-describe("localValidate: per-block content requirements", () => {
-  it("flags an empty text block message", () => {
-    const nodes = [
-      ...requiredNodes(),
-      buildNode("n1", { content: { text: "" } })
-    ];
-    const { invalidIds, messages } = localValidate(nodes, []);
-    expect(invalidIds.has("n1")).toBe(true);
-    expect(messages).toContain("Block: message text is required.");
-  });
-
-  it("flags a duplicated trigger key across two nodes", () => {
-    const nodes = [
-      ...requiredNodes(),
-      buildNode("n1", { triggerKey: "DUPE" }),
-      buildNode("n2", { triggerKey: "DUPE" })
-    ];
-    const { messages } = localValidate(nodes, []);
-    expect(messages.some((message) => message.includes("is duplicated"))).toBe(
-      true
-    );
-  });
-
-  it("flags a buttons block with more than 3 reply actions", () => {
-    const nodes = [
-      ...requiredNodes(),
-      buildNode("n1", {
-        blockType: "buttons",
-        content: { bodyText: "Pick one" },
-        actions: [
-          action({ actionId: "a" }),
-          action({ actionId: "b" }),
-          action({ actionId: "c" }),
-          action({ actionId: "d" })
+        cards: [
+          { title: "Plans", buttons: [quickReply("a1", "r1", "See")] },
+          { title: "", buttons: [quickReply("a2", "r2", "More")] }
         ]
-      })
-    ];
-    const { messages } = localValidate(nodes, []);
-    expect(
-      messages.some((message) => message.includes("at most 3 buttons"))
-    ).toBe(true);
-  });
-
-  it("flags a list block with a duplicated row id", () => {
-    const nodes = [
-      ...requiredNodes(),
-      buildNode("n1", {
-        blockType: "list",
-        content: {
-          bodyText: "Choose",
-          buttonText: "Open",
-          sections: [
-            {
-              title: "Menu",
-              rows: [
-                { id: "SAME", title: "One" },
-                { id: "SAME", title: "Two" }
-              ]
-            }
-          ]
-        }
-      })
-    ];
-    const { messages } = localValidate(nodes, []);
-    expect(messages.some((message) => message.includes("is duplicated"))).toBe(
-      true
+      },
+      []
     );
-  });
-
-  it("flags a generic_carousel with fewer than 2 cards and mismatched button shapes", () => {
-    const nodes = [
-      ...requiredNodes(),
-      buildNode("n1", {
-        blockType: "generic_carousel",
-        content: {
-          cards: [
-            {
-              bodyText: "Only card",
-              mediaType: "image",
-              mediaId: "media_1",
-              buttons: [{ type: "quick_reply", label: "Go" }]
-            }
-          ]
-        }
-      })
-    ];
-    const { messages } = localValidate(nodes, []);
-    expect(messages.some((message) => message.includes("2-10 cards"))).toBe(
-      true
-    );
-  });
-
-  it("flags an open_url action with an invalid URL", () => {
-    const nodes = [
-      ...requiredNodes(),
-      buildNode("n1", {
-        blockType: "buttons",
-        content: { bodyText: "Visit us" },
-        actions: [action({ type: "open_url", url: "not-a-url" })]
-      })
-    ];
-    const { messages } = localValidate(nodes, []);
-    expect(
-      messages.some((message) => message.includes("needs a valid http(s) URL"))
-    ).toBe(true);
+    expect(options.map((option) => option.group)).toEqual(["Plans", "Card 2"]);
   });
 });
 
-describe("localValidate: routing connectivity", () => {
-  it("flags a go_to_trigger action with no matching edge", () => {
-    const nodes = [
-      ...requiredNodes(),
-      buildNode("n1", {
-        blockType: "buttons",
-        content: { bodyText: "Pick" },
-        actions: [action({ actionId: "unrouted", replyId: "UNROUTED" })]
-      })
-    ];
-    const { messages } = localValidate(nodes, []);
-    expect(
-      messages.some((message) => message.includes("is not connected"))
-    ).toBe(true);
+describe("counting and formatting", () => {
+  it("counts characters as people see them", () => {
+    expect(countChars("hi 👋🏽")).toBe(4);
+    expect(countChars(undefined)).toBe(0);
   });
 
-  it("does not require OPT_IN/OPT_OUT routes to be connected", () => {
-    const nodes = requiredNodes();
-    // Strip the DEFAULT node's own action first -- otherwise its unrelated
-    // unrouted action (also present with no edges) would trip the same
-    // message and this test wouldn't isolate the OPT_OUT exemption at all.
-    nodes[0].data.actions = [];
-    nodes[2].data.actions = [
-      action({ actionId: "unrouted", replyId: "UNROUTED" })
-    ];
-    const { messages } = localValidate(nodes, []);
-    expect(
-      messages.some((message) => message.includes("is not connected"))
-    ).toBe(false);
-  });
-});
-
-describe("localValidate: orphan detection", () => {
-  it("warns (without invalidating) about a node unreachable from DEFAULT", () => {
-    const nodes = [
-      ...requiredNodes(),
-      buildNode("orphan", { label: "Orphan Block", triggerKey: "ORPHAN" })
-    ];
-    const { invalidIds, messages } = localValidate(nodes, []);
-    expect(invalidIds.has("orphan")).toBe(false);
-    expect(
-      messages.some((message) => message.includes("Orphan Block: unreachable"))
-    ).toBe(true);
+  it("counts line breaks", () => {
+    expect(countLineBreaks("a\nb\nc\nd")).toBe(3);
   });
 
-  it("treats a node reachable only via an enabled automatic follow-up as reachable", () => {
-    const nodes = [
-      ...requiredNodes(),
-      buildNode("source", {
-        label: "Source",
-        triggerKey: "SOURCE",
-        followUp: {
-          enabled: true,
-          delayMinutes: 30,
-          targetTriggerKey: "FOLLOW_UP_TARGET"
-        }
-      }),
-      buildNode("target", {
-        label: "Follow Up Target",
-        triggerKey: "FOLLOW_UP_TARGET"
-      })
-    ];
-    // SOURCE itself must be reachable via a normal edge for this to prove
-    // anything about the follow-up hop specifically.
-    const edges: Edge[] = [
-      {
-        id: "e1",
-        source: "node_default",
-        target: "source",
-        sourceHandle: "a1",
-        targetHandle: "in"
-      }
-    ];
-    const { messages } = localValidate(nodes, edges);
-    expect(
-      messages.some((message) =>
-        message.includes("Follow Up Target: unreachable")
-      )
-    ).toBe(false);
+  it("formats follow-up delays", () => {
+    expect(formatDelay(45)).toBe("45 min");
+    expect(formatDelay(60)).toBe("1 h");
+    expect(formatDelay(90)).toBe("1 h 30 min");
   });
 });

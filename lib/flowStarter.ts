@@ -1,6 +1,7 @@
 // Decides when the WhatsApp flow editor may swap a loaded draft for the
-// built-in starter. Getting this wrong overwrites real flows, so the checks
-// only match the exact shapes the backend and older builds created.
+// built-in starter, and when it may offer this browser's unsaved edits.
+// Getting either wrong overwrites real flows, so the checks only match the
+// exact shapes the backend and older builds created.
 
 // The starters never had more than DEFAULT, OPT_IN and OPT_OUT.
 const STARTER_MAX_NODES = 3;
@@ -50,32 +51,55 @@ export const shouldReplaceWithStarter = (
   isBackendDefaultCanvas(nodes, edges) ||
   isLegacyButtonStarterCanvas(nodes, edges);
 
-const draftTime = (draft: DraftLike) => {
-  const value = draft?.updatedAt ? Date.parse(draft.updatedAt) : 0;
-  return Number.isFinite(value) ? value : 0;
+/** This browser's copy of edits that hadn't reached the server yet. */
+export type CachedDraft<T> = {
+  draft: T;
+  /** The server draftRevision those edits were made on top of. */
+  baseRevision: number;
+  savedAt: string;
+};
+
+/** Reads the cache; anything in an older shape is treated as absent. */
+export const parseCachedDraft = <T extends DraftLike>(
+  raw: string | null | undefined
+): CachedDraft<T> | null => {
+  if (!raw) return null;
+  try {
+    const value = JSON.parse(raw) as Partial<CachedDraft<T>> | null;
+    if (
+      !value ||
+      typeof value !== "object" ||
+      !value.draft ||
+      typeof value.draft !== "object" ||
+      typeof value.baseRevision !== "number" ||
+      typeof value.savedAt !== "string"
+    ) {
+      return null;
+    }
+    return value as CachedDraft<T>;
+  } catch {
+    return null;
+  }
 };
 
 /**
- * The newer of the backend draft and this browser's cache, except that a
- * starter-sized cache (3 blocks or fewer) never shadows a bigger backend
- * draft: that cache most likely came from a starter swap, not a real edit.
- * Smaller caches from genuine deletions are still honoured otherwise.
+ * Offer the cached edits only when they differ from the server draft and
+ * were made on the revision the server still has. If anyone saved since,
+ * restoring them would silently undo that save. No clock comparison: client
+ * clocks can't be trusted.
  */
-export const pickDraftToLoad = <T extends DraftLike>(
-  backendDraft: T | null | undefined,
-  cachedDraft: T | null | undefined
-): T | null | undefined => {
-  if (!cachedDraft) return backendDraft;
-  if (!backendDraft) return cachedDraft;
-  const cachedCount = cachedDraft.nodes?.length || 0;
-  const backendCount = backendDraft.nodes?.length || 0;
-  if (cachedCount <= STARTER_MAX_NODES && backendCount > STARTER_MAX_NODES) {
-    return backendDraft;
-  }
-  return draftTime(cachedDraft) > draftTime(backendDraft)
-    ? cachedDraft
-    : backendDraft;
-};
+export const shouldOfferCachedDraft = <T extends DraftLike>(
+  cached: CachedDraft<T> | null,
+  serverRevision: number | undefined,
+  serverDraft: T | null | undefined
+) =>
+  Boolean(
+    cached &&
+      typeof serverRevision === "number" &&
+      cached.baseRevision === serverRevision &&
+      (!serverDraft ||
+        draftSignature(cached.draft) !== draftSignature(serverDraft))
+  );
 
 /** Compares drafts while ignoring the save timestamp. */
 export const draftSignature = (draft: object) =>

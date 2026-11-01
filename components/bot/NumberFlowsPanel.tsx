@@ -126,8 +126,8 @@ function NumberFlowRow({
         <p className="flex gap-1.5 text-xs text-amber-800">
           <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
           {defaultCanvas
-            ? `${staleName} isn't published, so ${defaultCanvas.name} is running instead.`
-            : `${staleName} isn't published, so nothing is running.`}
+            ? `${staleName} isn't live yet, so ${defaultCanvas.name} is running instead.`
+            : `${staleName} isn't live yet, so nothing is running.`}
         </p>
       )}
     </div>
@@ -197,7 +197,7 @@ export function NumberFlowsPanel() {
 
       {!publishedCanvases.length && (
         <p className="text-xs text-muted-foreground">
-          Publish a flow to pick it here.
+          Take a flow live to pick it here.
         </p>
       )}
 

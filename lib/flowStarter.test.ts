@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   draftSignature,
-  pickDraftToLoad,
+  parseCachedDraft,
+  shouldOfferCachedDraft,
   shouldReplaceWithStarter
 } from "./flowStarter";
 
@@ -47,28 +48,50 @@ describe("shouldReplaceWithStarter", () => {
   });
 });
 
-describe("pickDraftToLoad", () => {
-  const draft = (count: number, updatedAt: string) => ({
-    updatedAt,
-    nodes: Array.from({ length: count }, () => ({}))
+describe("parseCachedDraft", () => {
+  it("reads the { draft, baseRevision, savedAt } shape", () => {
+    const value = {
+      draft: { nodes: [1] },
+      baseRevision: 4,
+      savedAt: "2026-11-01T07:24:00Z"
+    };
+    expect(parseCachedDraft(JSON.stringify(value))).toEqual(value);
   });
 
-  it("never lets a starter-sized cache shadow a bigger backend draft", () => {
-    const backend = draft(32, "2026-10-01T00:00:00Z");
-    const cached = draft(3, "2026-10-29T00:00:00Z");
-    expect(pickDraftToLoad(backend, cached)).toBe(backend);
+  it("drops the older bare-draft cache and anything unreadable", () => {
+    expect(
+      parseCachedDraft(
+        JSON.stringify({ nodes: [1], updatedAt: "2026-10-29T00:00:00Z" })
+      )
+    ).toBeNull();
+    expect(parseCachedDraft("{not json")).toBeNull();
+    expect(parseCachedDraft(null)).toBeNull();
+  });
+});
+
+describe("shouldOfferCachedDraft", () => {
+  const server = { nodes: [1, 2], updatedAt: "2026-10-01T00:00:00Z" };
+  const cached = (baseRevision: number, nodes = [1, 2, 3]) => ({
+    draft: { nodes, updatedAt: "2026-11-01T00:00:00Z" },
+    baseRevision,
+    savedAt: "2026-11-01T07:24:00Z"
   });
 
-  it("prefers a newer cache with real edits", () => {
-    const backend = draft(32, "2026-10-01T00:00:00Z");
-    const cached = draft(30, "2026-10-29T00:00:00Z");
-    expect(pickDraftToLoad(backend, cached)).toBe(cached);
+  it("offers edits made on the revision the server still has", () => {
+    expect(shouldOfferCachedDraft(cached(7), 7, server)).toBe(true);
   });
 
-  it("falls back to whichever exists", () => {
-    const backend = draft(5, "2026-10-01T00:00:00Z");
-    expect(pickDraftToLoad(backend, null)).toBe(backend);
-    expect(pickDraftToLoad(null, backend)).toBe(backend);
+  it("drops edits made before someone else saved", () => {
+    expect(shouldOfferCachedDraft(cached(6), 7, server)).toBe(false);
+  });
+
+  it("drops a cache that matches the server draft", () => {
+    expect(shouldOfferCachedDraft(cached(7, [1, 2]), 7, server)).toBe(false);
+  });
+
+  it("drops it when the server sends no revision", () => {
+    expect(shouldOfferCachedDraft(cached(7), undefined, server)).toBe(false);
+    expect(shouldOfferCachedDraft(null, 7, server)).toBe(false);
   });
 });
 

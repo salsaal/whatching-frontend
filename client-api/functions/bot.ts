@@ -3,6 +3,10 @@ import { BOT_ENDPOINTS, BROADCAST_ENDPOINTS } from "../endpoints";
 import {
   BotCanvasDraftState,
   BotCanvasResponse,
+  BotCanvasValidateResponse,
+  BotCanvasValidation,
+  BotDraftConflictDetails,
+  BotFlowIssue,
   BotCanvasTriggersResponse,
   BotCanvasesResponse,
   BotSettingsPatch,
@@ -88,7 +92,7 @@ export const isNoPublishedFlowError = (error: unknown) =>
   404;
 
 export const NO_PUBLISHED_FLOW_MESSAGE =
-  "Publish a bot flow to route quick replies to it";
+  "Take a bot flow live to route quick replies to it";
 
 export const listBotCanvases = async (): Promise<BotCanvasesResponse> => {
   const res = await api.get<BotCanvasesResponse>(BOT_ENDPOINTS.CANVASES);
@@ -128,41 +132,89 @@ export const updateBotCanvas = async ({
   return res.data;
 };
 
+// Every write carries baseRevision (the draftRevision from the last load or
+// write). The backend answers 409 DRAFT_CONFLICT if someone saved in between.
 export const saveBotCanvasDraftById = async ({
   canvasId,
-  draftState
+  draftState,
+  baseRevision
 }: {
   canvasId: string;
   draftState: BotCanvasDraftState;
+  baseRevision?: number;
 }): Promise<BotCanvasResponse> => {
   const res = await api.put<BotCanvasResponse>(
     BOT_ENDPOINTS.CANVAS_DRAFT_BY_ID(canvasId),
-    { draftState }
+    { draftState, baseRevision }
   );
   return res.data;
 };
 
+// Checks the saved draft, not the one in the editor.
 export const validateBotCanvasById = async (
   canvasId: string
-): Promise<ApiResponse> => {
-  const res = await api.post<ApiResponse>(
+): Promise<BotCanvasValidateResponse> => {
+  const res = await api.post<BotCanvasValidateResponse>(
     BOT_ENDPOINTS.CANVAS_VALIDATE_BY_ID(canvasId)
   );
   return res.data;
 };
 
+// One call saves, checks and makes the flow live. A flow with problems comes
+// back as 400 FLOW_INVALID (see getFlowInvalid).
 export const publishBotCanvasDraftById = async ({
   canvasId,
-  draftState
+  draftState,
+  baseRevision
 }: {
   canvasId: string;
-  draftState?: BotCanvasDraftState;
+  draftState: BotCanvasDraftState;
+  baseRevision?: number;
 }): Promise<BotCanvasResponse> => {
   const res = await api.post<BotCanvasResponse>(
     BOT_ENDPOINTS.CANVAS_PUBLISH_BY_ID(canvasId),
-    draftState ? { draftState } : undefined
+    { draftState, baseRevision }
   );
   return res.data;
+};
+
+type ApiErrorBody = {
+  code?: string;
+  message?: string;
+  details?: unknown;
+};
+
+const getApiErrorBody = (error: unknown): ApiErrorBody | undefined =>
+  (error as { response?: { data?: ApiErrorBody } } | null)?.response?.data;
+
+export const getApiErrorMessage = (error: unknown, fallback: string) =>
+  getApiErrorBody(error)?.message || fallback;
+
+/** The 409 raised when someone else saved this flow after you loaded it. */
+export const getDraftConflict = (
+  error: unknown
+): { message: string; details: BotDraftConflictDetails } | null => {
+  const body = getApiErrorBody(error);
+  if (body?.code !== "DRAFT_CONFLICT") return null;
+  const details = body.details as Partial<BotDraftConflictDetails> | undefined;
+  if (typeof details?.draftRevision !== "number") return null;
+  return {
+    message: body.message || "Someone changed this flow after you opened it.",
+    details: details as BotDraftConflictDetails
+  };
+};
+
+/** The 400 raised when going live with problems; `issues` says what. */
+export const getFlowInvalid = (
+  error: unknown
+): { message: string; issues: BotFlowIssue[] } | null => {
+  const body = getApiErrorBody(error);
+  if (body?.code !== "FLOW_INVALID") return null;
+  const details = body.details as Partial<BotCanvasValidation> | undefined;
+  return {
+    message: body.message || "This flow can't go live yet.",
+    issues: Array.isArray(details?.issues) ? details.issues : []
+  };
 };
 
 export const updateBotCanvasStatus = async ({

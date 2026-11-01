@@ -612,7 +612,10 @@ export function WhatsAppFlowBlockPreview({
                   <p className="line-clamp-2 text-[10px] text-slate-500">
                     {stringValue(
                       content.address || content.locationAddress,
-                      `${content.latitude ?? 0}, ${content.longitude ?? 0}`
+                      typeof content.latitude === "number" &&
+                        typeof content.longitude === "number"
+                        ? `${content.latitude}, ${content.longitude}`
+                        : "Pick the location on the map"
                     )}
                   </p>
                 </div>
