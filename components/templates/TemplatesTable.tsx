@@ -1,6 +1,7 @@
 import {
   Copy,
   Edit3,
+  Eye,
   ImagePlus,
   Megaphone,
   MoreHorizontal,
@@ -31,11 +32,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger
-} from "@/components/ui/hover-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Tooltip,
@@ -126,11 +122,13 @@ function StatusCell({ template }: { template: MessageTemplate }) {
 function RowMenu({
   template,
   canManage,
-  actions
+  actions,
+  onPreview
 }: {
   template: MessageTemplate;
   canManage: boolean;
   actions: TemplateRowActions;
+  onPreview: (template: MessageTemplate) => void;
 }) {
   const draft = isDraft(template);
   const isApproved = template.status.toUpperCase() === "APPROVED";
@@ -151,6 +149,10 @@ function RowMenu({
         align="end"
         onClick={(event) => event.stopPropagation()}
       >
+        <DropdownMenuItem onSelect={() => onPreview(template)}>
+          <Eye className="size-4" />
+          Preview
+        </DropdownMenuItem>
         {isApproved && actions.onUseInBroadcast && (
           <DropdownMenuItem
             onSelect={() => actions.onUseInBroadcast?.(template)}
@@ -264,41 +266,10 @@ export default function TemplatesTable({
                   )}
                 >
                   <td className="max-w-80 px-4 py-3">
-                    {/* The preview anchors to this name block, not the whole
-                        row: a ~1,100px-wide anchor left no room beside it,
-                        so Radix flipped the card to the screen edge. */}
-                    <HoverCard openDelay={350} closeDelay={80}>
-                      <HoverCardTrigger asChild>
-                        <div>
-                          <p className="truncate font-medium">
-                            {template.name}
-                          </p>
-                          <p className="truncate text-xs text-muted-foreground">
-                            {templateBodyText(template)}
-                          </p>
-                        </div>
-                      </HoverCardTrigger>
-                      <HoverCardContent
-                        side="bottom"
-                        align="start"
-                        sideOffset={8}
-                        avoidCollisions
-                        sticky="always"
-                        // Left padding clears the 80px sidebar plus margin.
-                        collisionPadding={{
-                          left: 96,
-                          right: 16,
-                          top: 16,
-                          bottom: 16
-                        }}
-                        className="w-[340px] p-2"
-                      >
-                        <WhatsAppPreview
-                          components={template.components}
-                          compact
-                        />
-                      </HoverCardContent>
-                    </HoverCard>
+                    <p className="truncate font-medium">{template.name}</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {templateBodyText(template)}
+                    </p>
                   </td>
                   <td className="px-4 py-3">
                     <TemplateCategoryBadge category={template.category} />
@@ -320,6 +291,7 @@ export default function TemplatesTable({
                       template={template}
                       canManage={canManage}
                       actions={actions}
+                      onPreview={setPreviewTemplate}
                     />
                   </td>
                 </tr>
@@ -351,6 +323,7 @@ export default function TemplatesTable({
                   template={template}
                   canManage={canManage}
                   actions={actions}
+                  onPreview={setPreviewTemplate}
                 />
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -370,7 +343,7 @@ export default function TemplatesTable({
         open={Boolean(previewTemplate)}
         onOpenChange={(open) => !open && setPreviewTemplate(null)}
       >
-        <DialogContent className="sm:max-w-sm max-sm:top-auto max-sm:bottom-0 max-sm:translate-y-0 max-sm:rounded-b-none">
+        <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>{previewTemplate?.name}</DialogTitle>
           </DialogHeader>
