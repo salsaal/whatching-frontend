@@ -36,7 +36,10 @@ const formatWhen = (value: string) =>
 export const describeVersion = (version: BotCanvasVersion) =>
   [
     `Version ${version.versionNumber}`,
-    version.publishedAt ? `Live since ${formatWhen(version.publishedAt)}` : "",
+    // Only the version customers get now is still live.
+    version.publishedAt
+      ? `${version.isLive ? "Live since" : "Went live"} ${formatWhen(version.publishedAt)}`
+      : "",
     version.publishedBy?.name ? `by ${version.publishedBy.name}` : "",
     typeof version.blockCount === "number"
       ? `${version.blockCount} block${version.blockCount === 1 ? "" : "s"}`
