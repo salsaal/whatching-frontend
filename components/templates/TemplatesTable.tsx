@@ -254,59 +254,75 @@ export default function TemplatesTable({
                   ? template._id
                   : template.templateId;
               return (
-                <HoverCard
+                <tr
                   key={`${template.source}-${id}`}
-                  openDelay={350}
-                  closeDelay={80}
+                  onClick={() => actions.onOpen(template)}
+                  {...pressHandlers(template)}
+                  className={cn(
+                    "cursor-pointer border-b transition last:border-0 hover:bg-muted/40",
+                    deletingId === id && "opacity-50"
+                  )}
                 >
-                  <HoverCardTrigger asChild>
-                    <tr
-                      onClick={() => actions.onOpen(template)}
-                      className={cn(
-                        "cursor-pointer border-b transition last:border-0 hover:bg-muted/40",
-                        deletingId === id && "opacity-50"
-                      )}
-                    >
-                      <td className="max-w-80 px-4 py-3">
-                        <p className="truncate font-medium">{template.name}</p>
-                        <p className="truncate text-xs text-muted-foreground">
-                          {templateBodyText(template)}
-                        </p>
-                      </td>
-                      <td className="px-4 py-3">
-                        <TemplateCategoryBadge category={template.category} />
-                      </td>
-                      <td className="px-4 py-3">
-                        <StatusCell template={template} />
-                      </td>
-                      <td className="px-4 py-3">
-                        <TypeLabel template={template} />
-                      </td>
-                      <td className="px-4 py-3 text-xs text-muted-foreground">
-                        {template.language}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-muted-foreground">
-                        {formatRelative(
-                          template.updatedAt || template.createdAt
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <RowMenu
-                          template={template}
-                          canManage={canManage}
-                          actions={actions}
+                  <td className="max-w-80 px-4 py-3">
+                    {/* The preview anchors to this name block, not the whole
+                        row: a ~1,100px-wide anchor left no room beside it,
+                        so Radix flipped the card to the screen edge. */}
+                    <HoverCard openDelay={350} closeDelay={80}>
+                      <HoverCardTrigger asChild>
+                        <div>
+                          <p className="truncate font-medium">
+                            {template.name}
+                          </p>
+                          <p className="truncate text-xs text-muted-foreground">
+                            {templateBodyText(template)}
+                          </p>
+                        </div>
+                      </HoverCardTrigger>
+                      <HoverCardContent
+                        side="bottom"
+                        align="start"
+                        sideOffset={8}
+                        avoidCollisions
+                        sticky="always"
+                        // Left padding clears the 80px sidebar plus margin.
+                        collisionPadding={{
+                          left: 96,
+                          right: 16,
+                          top: 16,
+                          bottom: 16
+                        }}
+                        className="w-[340px] p-2"
+                      >
+                        <WhatsAppPreview
+                          components={template.components}
+                          compact
                         />
-                      </td>
-                    </tr>
-                  </HoverCardTrigger>
-                  <HoverCardContent
-                    side="right"
-                    align="start"
-                    className="w-[340px] p-2"
-                  >
-                    <WhatsAppPreview components={template.components} compact />
-                  </HoverCardContent>
-                </HoverCard>
+                      </HoverCardContent>
+                    </HoverCard>
+                  </td>
+                  <td className="px-4 py-3">
+                    <TemplateCategoryBadge category={template.category} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <StatusCell template={template} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <TypeLabel template={template} />
+                  </td>
+                  <td className="px-4 py-3 text-xs text-muted-foreground">
+                    {template.language}
+                  </td>
+                  <td className="px-4 py-3 text-xs text-muted-foreground">
+                    {formatRelative(template.updatedAt || template.createdAt)}
+                  </td>
+                  <td className="px-4 py-3">
+                    <RowMenu
+                      template={template}
+                      canManage={canManage}
+                      actions={actions}
+                    />
+                  </td>
+                </tr>
               );
             })}
           </tbody>
@@ -354,7 +370,7 @@ export default function TemplatesTable({
         open={Boolean(previewTemplate)}
         onOpenChange={(open) => !open && setPreviewTemplate(null)}
       >
-        <DialogContent className="sm:max-w-sm">
+        <DialogContent className="sm:max-w-sm max-sm:top-auto max-sm:bottom-0 max-sm:translate-y-0 max-sm:rounded-b-none">
           <DialogHeader>
             <DialogTitle>{previewTemplate?.name}</DialogTitle>
           </DialogHeader>
