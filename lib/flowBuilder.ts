@@ -616,6 +616,60 @@ export const buildTargetByAction = (
   return targetByAction;
 };
 
+/**
+ * Wires for options that have a saved target but no wire, so the canvas
+ * shows where they already go instead of "Choose next step". Only options
+ * with a handle on the block get one; the IDs are fixed so reloading the
+ * same flow gives the same wires.
+ */
+export const addMissingWires = (
+  nodes: Array<{
+    id: string;
+    data: {
+      triggerKey: string;
+      blockType: BotBlockType;
+      content?: BotCanvasNodeContent;
+      actions: BotAction[];
+    };
+  }>,
+  edges: Edge[]
+): Edge[] => {
+  const nodeIdByTriggerKey = new Map<string, string>();
+  nodes.forEach((node) => {
+    if (!nodeIdByTriggerKey.has(node.data.triggerKey)) {
+      nodeIdByTriggerKey.set(node.data.triggerKey, node.id);
+    }
+  });
+  const wired = new Set(
+    edges.map((edge) => `${edge.source}:${edge.sourceHandle}`)
+  );
+  const added: Edge[] = [];
+  nodes.forEach((node) => {
+    const handles = new Set(
+      getNodeOptions(node.data.blockType, node.data.content, node.data.actions)
+        .filter((option) => option.type === "go_to_trigger")
+        .map((option) => option.actionId)
+    );
+    node.data.actions.forEach((action) => {
+      if (action.type !== "go_to_trigger" || !action.nextTriggerKey) return;
+      const target = nodeIdByTriggerKey.get(action.nextTriggerKey);
+      const key = `${node.id}:${action.actionId}`;
+      if (!target || !handles.has(action.actionId) || wired.has(key)) return;
+      wired.add(key);
+      added.push({
+        id: `edge_saved_${node.id}_${action.actionId}`,
+        source: node.id,
+        sourceHandle: action.actionId,
+        target,
+        targetHandle: "in",
+        type: "smoothstep",
+        animated: false
+      });
+    });
+  });
+  return added.length ? [...edges, ...added] : edges;
+};
+
 // ---------------------------------------------------------------------------
 // Counting and formatting
 // ---------------------------------------------------------------------------

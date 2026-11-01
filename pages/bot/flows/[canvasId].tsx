@@ -78,6 +78,8 @@ import {
   BotCanvasEdge,
   BotCanvasNode,
   BotCanvasNodeContent,
+  BotCanvasResponse,
+  BotDraftChanges,
   BotDraftConflictDetails,
   BotFlowIssue
 } from "@/client-api/types/bot.type";
@@ -120,6 +122,7 @@ import {
 } from "@/lib/flowStarter";
 import { cn } from "@/lib/utils";
 import {
+  addMissingWires,
   assignActionReplyIds,
   assignOptionIds,
   buildTargetByAction,
@@ -1030,7 +1033,9 @@ const canvasEdgesToFlow = (
 };
 
 // Loads a saved draft into editor nodes and wires. A backend starter is
-// swapped for the built-in one (see lib/flowStarter).
+// swapped for the built-in one (see lib/flowStarter). Options with a saved
+// target but no wire get one, so the canvas shows where they go; this is
+// part of what loaded, so it never counts as an unsaved change.
 const buildEditorState = (draft?: BotCanvasDraftState | null) => {
   const loadedNodes = draft?.nodes?.length
     ? ensureUniqueNodeTriggers(
@@ -1047,7 +1052,7 @@ const buildEditorState = (draft?: BotCanvasDraftState | null) => {
   );
   const edges = useStarter
     ? defaultCanvasEdges()
-    : canvasEdgesToFlow(draft?.edges, nodes);
+    : addMissingWires(nodes, canvasEdgesToFlow(draft?.edges, nodes));
   return { nodes, edges, useStarter };
 };
 
@@ -1293,7 +1298,10 @@ function FlowsBuilder() {
       : [];
     return {
       publishedNodes: nextNodes,
-      publishedEdges: canvasEdgesToFlow(publishedState?.edges, nextNodes)
+      publishedEdges: addMissingWires(
+        nextNodes,
+        canvasEdgesToFlow(publishedState?.edges, nextNodes)
+      )
     };
   }, [publishedState]);
 
@@ -1493,6 +1501,24 @@ function FlowsBuilder() {
 
   useEffect(() => () => window.clearTimeout(validateTimerRef.current), []);
 
+  // A save returns the new change summary, so the change markers update
+  // without fetching the canvas again.
+  const applyDraftChanges = useCallback(
+    (changes: BotDraftChanges) => {
+      queryClient.setQueryData<BotCanvasResponse>(
+        ["bot-canvas", orgId, canvasId],
+        (current) =>
+          current
+            ? {
+                ...current,
+                data: { ...current.data, draftChanges: changes }
+              }
+            : current
+      );
+    },
+    [canvasId, orgId, queryClient]
+  );
+
   const markSaved = useCallback(
     (signature: string, revision: number | undefined) => {
       if (typeof revision === "number") draftRevisionRef.current = revision;
@@ -1538,7 +1564,14 @@ function FlowsBuilder() {
           signature,
           response.data?.draftRevision ?? response.data?.canvas?.draftRevision
         );
-        scheduleValidate();
+        const savedChanges = response.data?.draftChanges;
+        if (savedChanges) {
+          applyDraftChanges(savedChanges);
+          scheduleValidate(600, false);
+        } else {
+          // Older backends don't return draftChanges: refetch the canvas.
+          scheduleValidate();
+        }
         return true;
       } catch (error) {
         const draftConflict = getDraftConflict(error);
@@ -1556,7 +1589,7 @@ function FlowsBuilder() {
     } finally {
       if (saveInFlightRef.current === run) saveInFlightRef.current = null;
     }
-  }, [canvasId, markSaved, openConflict, scheduleValidate]);
+  }, [applyDraftChanges, canvasId, markSaved, openConflict, scheduleValidate]);
 
   const applyDraft = useCallback(
     (draft: BotCanvasDraftState | null | undefined) => {

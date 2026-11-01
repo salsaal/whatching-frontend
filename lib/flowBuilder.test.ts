@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { BotAction, BotCanvasNodeContent } from "@/client-api/types/bot.type";
 import {
+  addMissingWires,
   assignActionReplyIds,
   assignOptionIds,
   buildTargetByAction,
@@ -350,6 +351,89 @@ describe("wire removal", () => {
       { actionId: "b", type: "go_to_trigger", replyId: "B" }
     ];
     expect(removedOutputHandles(before, after)).toEqual(["a"]);
+  });
+});
+
+describe("addMissingWires", () => {
+  const block = (
+    id: string,
+    triggerKey: string,
+    actions: BotAction[] = [],
+    blockType: "buttons" | "list" | "text" = "buttons",
+    content: BotCanvasNodeContent = {}
+  ) => ({ id, data: { triggerKey, blockType, content, actions } });
+
+  it("wires an option that has a saved target but no wire", () => {
+    const nodes = [
+      block("menu", "MENU", [
+        {
+          actionId: "a1",
+          type: "go_to_trigger",
+          replyId: "R1",
+          nextTriggerKey: "PRICING"
+        }
+      ]),
+      block("pricing", "PRICING", [], "text")
+    ];
+    const wires = addMissingWires(nodes, []);
+    expect(wires).toEqual([
+      expect.objectContaining({
+        source: "menu",
+        sourceHandle: "a1",
+        target: "pricing",
+        targetHandle: "in"
+      })
+    ]);
+    // Same flow, same wire: reloading doesn't look like a change.
+    expect(addMissingWires(nodes, [])).toEqual(wires);
+  });
+
+  it("leaves wired options, missing targets and non-routing options alone", () => {
+    const nodes = [
+      block("menu", "MENU", [
+        {
+          actionId: "wired",
+          type: "go_to_trigger",
+          nextTriggerKey: "PRICING"
+        },
+        { actionId: "gone", type: "go_to_trigger", nextTriggerKey: "DELETED" },
+        {
+          actionId: "team",
+          type: "escalate_to_agent",
+          nextTriggerKey: "PRICING"
+        }
+      ]),
+      block("pricing", "PRICING", [], "text")
+    ];
+    const existing = [edge("e1", "menu", "wired", "pricing")];
+    expect(addMissingWires(nodes, existing)).toBe(existing);
+  });
+
+  it("skips actions with no handle on the block", () => {
+    // A leftover list action whose row was deleted has no handle to wire.
+    const nodes = [
+      block(
+        "menu",
+        "MENU",
+        [
+          { actionId: "row1", type: "go_to_trigger", nextTriggerKey: "A" },
+          { actionId: "orphan", type: "go_to_trigger", nextTriggerKey: "A" }
+        ],
+        "list",
+        {
+          sections: [
+            {
+              title: "Menu",
+              rows: [{ actionId: "row1", replyId: "R1", title: "One" }]
+            }
+          ]
+        }
+      ),
+      block("a", "A", [], "text")
+    ];
+    expect(addMissingWires(nodes, []).map((item) => item.sourceHandle)).toEqual(
+      ["row1"]
+    );
   });
 });
 
