@@ -60,6 +60,8 @@ export interface Organization {
   pendingRazorpaySubscriptionCheckoutUrl?: string | null;
   lastPlanChangeFailureReason?: string | null;
   lastPlanChangeFailureAt?: string | null;
+  paymentFailedAt?: string | null;
+  paymentGraceUntil?: string | null;
   trialPlanTier?: "basic" | "pro" | null;
   trialStartedAt?: string;
   trialEndsAt?: string;

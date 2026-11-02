@@ -6,6 +6,10 @@ import {
   canStartFreeTrial,
   formatCurrency,
   getDaysUntil,
+  getPaymentState,
+  getSubscriptionStatusLabel,
+  humanizeBillingMessage,
+  isAdminGrantedPlan,
   isSubscriptionCanceledWithAccess,
   plans,
   validateBillingProfile
@@ -115,6 +119,14 @@ describe("canStartFreeTrial", () => {
     // fallback -- this is the documented, intentional behavior, not a gap.
     expect(canStartFreeTrial(null)).toBe(true);
   });
+
+  it("never offers a trial to an org whose payment failed", () => {
+    expect(
+      canStartFreeTrial(
+        org({ planTier: "none", subscriptionStatus: "past_due" })
+      )
+    ).toBe(false);
+  });
 });
 
 describe("buildPlanAction", () => {
@@ -156,6 +168,143 @@ describe("buildPlanAction", () => {
       org({ planTier: "pro", subscriptionStatus: "active" })
     );
     expect(downgrading.label).toContain("Downgrade");
+  });
+
+  it("offers pay-again (subscribe) instead of a plan change while past_due", () => {
+    const pastDue = org({ planTier: "pro", subscriptionStatus: "past_due" });
+    const same = buildPlanAction(proPlan, pastDue);
+    expect(same.kind).toBe("subscribe");
+    expect(same.label).toBe("Pay now with another method");
+
+    const basicPlan = plans.find((plan) => plan.id === "basic")!;
+    const other = buildPlanAction(basicPlan, pastDue);
+    expect(other.kind).toBe("subscribe");
+    expect(other.label).toBe("Subscribe to Basic");
+
+    const ended = org({ planTier: "none", subscriptionStatus: "past_due" });
+    expect(buildPlanAction(proPlan, ended).kind).toBe("subscribe");
+  });
+
+  it("subscribes (not a trial) for a trialing org", () => {
+    expect(
+      buildPlanAction(
+        proPlan,
+        org({
+          planTier: "pro",
+          subscriptionStatus: "trialing",
+          trialConsumedAt: "2026-10-01"
+        })
+      ).kind
+    ).toBe("subscribe");
+  });
+});
+
+describe("getPaymentState", () => {
+  const day = 86_400_000;
+
+  it("is ok unless past_due", () => {
+    expect(getPaymentState(org({ subscriptionStatus: "active" }))).toBe("ok");
+    expect(getPaymentState(null)).toBe("ok");
+  });
+
+  it("is grace while the plan still works", () => {
+    expect(
+      getPaymentState(
+        org({
+          planTier: "pro",
+          subscriptionStatus: "past_due",
+          paymentGraceUntil: new Date(Date.now() + 3 * day).toISOString()
+        })
+      )
+    ).toBe("grace");
+    expect(
+      getPaymentState(org({ planTier: "pro", subscriptionStatus: "past_due" }))
+    ).toBe("grace");
+  });
+
+  it("is ended with no tier or a lapsed grace date", () => {
+    expect(
+      getPaymentState(org({ planTier: "none", subscriptionStatus: "past_due" }))
+    ).toBe("ended");
+    expect(
+      getPaymentState(
+        org({
+          planTier: "pro",
+          subscriptionStatus: "past_due",
+          paymentGraceUntil: new Date(Date.now() - day).toISOString()
+        })
+      )
+    ).toBe("ended");
+  });
+});
+
+describe("isAdminGrantedPlan", () => {
+  it("matches an active plan with no Razorpay subscription", () => {
+    expect(
+      isAdminGrantedPlan(org({ planTier: "pro", subscriptionStatus: "active" }))
+    ).toBe(true);
+    expect(
+      isAdminGrantedPlan(
+        org({ planTier: "enterprise", subscriptionStatus: "active" })
+      )
+    ).toBe(true);
+  });
+
+  it("ignores paying, trialing and no-plan orgs", () => {
+    expect(
+      isAdminGrantedPlan(
+        org({
+          planTier: "pro",
+          subscriptionStatus: "active",
+          razorpaySubscriptionId: "sub_1"
+        })
+      )
+    ).toBe(false);
+    expect(
+      isAdminGrantedPlan(
+        org({
+          planTier: "basic",
+          subscriptionStatus: "active",
+          pendingRazorpaySubscriptionId: "sub_2"
+        })
+      )
+    ).toBe(false);
+    expect(
+      isAdminGrantedPlan(
+        org({ planTier: "pro", subscriptionStatus: "trialing" })
+      )
+    ).toBe(false);
+    expect(
+      isAdminGrantedPlan(
+        org({ planTier: "none", subscriptionStatus: "active" })
+      )
+    ).toBe(false);
+  });
+});
+
+describe("getSubscriptionStatusLabel", () => {
+  it("maps every status to readable copy", () => {
+    expect(getSubscriptionStatusLabel("active")).toBe("Active");
+    expect(getSubscriptionStatusLabel("trialing")).toBe("Free trial");
+    expect(getSubscriptionStatusLabel("pending_payment")).toBe(
+      "Waiting for payment"
+    );
+    expect(getSubscriptionStatusLabel("past_due")).toBe("Payment failed");
+    expect(getSubscriptionStatusLabel("paused")).toBe("Paused");
+    expect(getSubscriptionStatusLabel("canceled")).toBe("Cancelled");
+    expect(getSubscriptionStatusLabel("")).toBe("");
+    expect(getSubscriptionStatusLabel("something_new")).toBe("");
+  });
+});
+
+describe("humanizeBillingMessage", () => {
+  it("replaces raw ISO timestamps with dates", () => {
+    expect(
+      humanizeBillingMessage(
+        "Your current plan remains active until 2026-11-30T10:15:00.000Z. Start later."
+      )
+    ).toBe("Your current plan remains active until 30 Nov 2026. Start later.");
+    expect(humanizeBillingMessage("No dates here.")).toBe("No dates here.");
   });
 });
 

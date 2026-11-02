@@ -4,6 +4,7 @@ import {
   Check,
   Clock3,
   CreditCard,
+  Info,
   Rocket,
   ShieldCheck,
   XCircle,
@@ -13,6 +14,7 @@ import { useRouter } from "next/router";
 import type { ElementType } from "react";
 
 import { OwnerOnlyNotice } from "@/components/billing/OwnerOnlyNotice";
+import { PaymentFailedNotice } from "@/components/billing/PaymentFailedNotice";
 import { Button } from "@/components/ui/button";
 import { useCurrentMembership } from "@/hooks/useCurrentMembership";
 import { useHasUsedFreeTrial } from "@/hooks/useHasUsedFreeTrial";
@@ -20,6 +22,9 @@ import AppLayout from "@/layouts/AppLayout";
 import {
   buildPlanAction,
   formatDate,
+  getPaymentState,
+  humanizeBillingMessage,
+  isAdminGrantedPlan,
   isSubscriptionCanceledWithAccess,
   plans,
   PlanDefinition
@@ -47,6 +52,10 @@ export default function PlansPage() {
   const isTrialing = activeOrganization?.subscriptionStatus === "trialing";
   const canceledWithAccess =
     isSubscriptionCanceledWithAccess(activeOrganization);
+  const paymentState = getPaymentState(activeOrganization);
+  // change-plan 409s for a granted plan, and a direct subscribe could replace
+  // the grant with an unpaid checkout, so Basic/Pro go through support.
+  const isGranted = isAdminGrantedPlan(activeOrganization);
   // See the matching comment in settings/billing.tsx: the checkout URL stays
   // populated even after the mandate payment clears, so only
   // pendingRazorpaySubscriptionStatus tells us whether action is still needed.
@@ -100,10 +109,13 @@ export default function PlansPage() {
               <p className="mt-1 font-heading font-semibold uppercase">
                 {currentPlan === "none" ? "No plan" : currentPlan}
                 {isTrialing ? " trial" : ""}
+                {paymentState === "grace" ? " (payment failed)" : ""}
               </p>
             </div>
           </div>
         </section>
+
+        <PaymentFailedNotice variant="banner" />
 
         {activeOrganization?.lastPlanChangeFailureReason && (
           <section className="rounded-lg border border-destructive/25 bg-destructive/5 p-4 text-sm text-destructive">
@@ -112,7 +124,9 @@ export default function PlansPage() {
               <div>
                 <p className="font-medium">Your last plan change failed</p>
                 <p className="mt-1">
-                  {activeOrganization.lastPlanChangeFailureReason}
+                  {humanizeBillingMessage(
+                    activeOrganization.lastPlanChangeFailureReason
+                  )}
                 </p>
               </div>
             </div>
@@ -165,16 +179,50 @@ export default function PlansPage() {
           </section>
         )}
 
+        {isGranted && (
+          <section className="flex flex-col gap-3 rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm text-sky-950 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <Info className="mt-0.5 size-4 shrink-0 text-sky-600" />
+              <p>
+                Your plan is managed by the Whatching team until{" "}
+                <span className="font-semibold">
+                  {formatDate(activeOrganization?.subscriptionCurrentPeriodEnd)}
+                </span>
+                .
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="shrink-0"
+              onClick={() =>
+                router.push({
+                  pathname: "/settings/help",
+                  query: { category: "billing" }
+                })
+              }
+            >
+              Contact support
+            </Button>
+          </section>
+        )}
+
         <section className="grid gap-5 lg:grid-cols-3">
           {plans.map((plan) => {
             const Icon = iconByPlan[plan.id];
             const action = buildPlanAction(plan, activeOrganization, {
               preferDirectSubscribe
             });
+            // While a payment is failing the current tier's button is the
+            // pay-again action, so it must stay enabled.
             const isCurrentPlan =
-              plan.id === currentPlan && !isTrialing && !canceledWithAccess;
+              plan.id === currentPlan &&
+              !isTrialing &&
+              !canceledWithAccess &&
+              paymentState === "ok";
             const isBlockedByCancellation =
               canceledWithAccess && plan.id !== "enterprise";
+            const isManaged = isGranted && plan.id !== "enterprise";
 
             return (
               <article
@@ -213,17 +261,22 @@ export default function PlansPage() {
                 <Button
                   variant={plan.highlighted ? "default" : "outline"}
                   className="mt-6 w-full"
-                  disabled={isCurrentPlan || isBlockedByCancellation}
+                  disabled={
+                    isManaged || isCurrentPlan || isBlockedByCancellation
+                  }
                   onClick={() => openCheckout(plan)}
                 >
-                  {isCurrentPlan
-                    ? "Current plan"
-                    : isBlockedByCancellation
-                      ? "Available after period ends"
-                      : action.label}
+                  {isManaged
+                    ? "Managed by Whatching"
+                    : isCurrentPlan
+                      ? "Current plan"
+                      : isBlockedByCancellation
+                        ? "Available after period ends"
+                        : action.label}
                 </Button>
 
                 {action.kind === "trial" &&
+                  !isManaged &&
                   !isCurrentPlan &&
                   !isBlockedByCancellation && (
                     <button

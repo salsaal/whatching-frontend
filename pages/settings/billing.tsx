@@ -27,6 +27,7 @@ import {
 import { Invoice } from "@/client-api/types/organizations.type";
 import BillingProfileForm from "@/components/billing/BillingProfileForm";
 import { OwnerOnlyNotice } from "@/components/billing/OwnerOnlyNotice";
+import { PaymentFailedNotice } from "@/components/billing/PaymentFailedNotice";
 import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog,
@@ -59,6 +60,9 @@ import {
   formatDate,
   getDaysUntil,
   getPlanByTier,
+  getSubscriptionStatusLabel,
+  humanizeBillingMessage,
+  isAdminGrantedPlan,
   isSubscriptionCanceledWithAccess
 } from "@/lib/billing";
 import { useOrganizationStore } from "@/stores/organizationStore";
@@ -132,7 +136,11 @@ export default function BillingSettingsPage() {
       meta: { showToast: false },
       onSuccess: (res) => {
         upsertOrganization(res.data.organization);
-        toast.success(res.message);
+        toast.success(
+          res.data.requiresAuthorization
+            ? `Your ${getPlanByTier(res.data.planTier)?.name || "current"} plan stays active until ${formatDate(res.data.effectiveAt)}. Authorise the new subscription now so it takes over automatically at that date, otherwise your plan will end as scheduled.`
+            : humanizeBillingMessage(res.message)
+        );
         queryClient.invalidateQueries({
           queryKey: ["organization", activeOrganization?._id]
         });
@@ -142,8 +150,10 @@ export default function BillingSettingsPage() {
       },
       onError: (error: AxiosError<{ message?: string }>) => {
         toast.error(
-          error.response?.data?.message ||
-            "Could not resume the subscription. Please try again."
+          humanizeBillingMessage(
+            error.response?.data?.message ||
+              "Could not resume the subscription. Please try again."
+          )
         );
       }
     });
@@ -186,10 +196,18 @@ export default function BillingSettingsPage() {
   const transactions = data?.data.transactions || [];
   const invoices = invoicesData?.data.invoices || [];
   const plan = getPlanByTier(activeOrganization?.planTier);
+  // A plan the Whatching team granted has no Razorpay subscription and no
+  // monthly charge.
+  const isGranted = isAdminGrantedPlan(activeOrganization);
   const monthlyPrice =
     typeof plan?.monthlyPrice === "number" ? plan.monthlyPrice : null;
   const totals =
-    monthlyPrice !== null ? calculatePlanTotals(monthlyPrice) : null;
+    monthlyPrice !== null && !isGranted
+      ? calculatePlanTotals(monthlyPrice)
+      : null;
+  const grantedUntil = formatDate(
+    activeOrganization?.subscriptionCurrentPeriodEnd
+  );
   const canceledWithAccess =
     isSubscriptionCanceledWithAccess(activeOrganization);
   const daysUntilPeriodEnd = getDaysUntil(
@@ -257,106 +275,118 @@ export default function BillingSettingsPage() {
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              disabled={!activeOrganization || isSyncing}
-              onClick={() => syncSubscriptionMutate()}
-            >
-              {isSyncing ? (
-                <RefreshCw className="size-4 animate-spin" />
-              ) : (
-                <RefreshCw className="size-4" />
-              )}
-              Sync billing
-            </Button>
-
-            {canceledWithAccess && (
+          <div className="flex flex-col gap-2 lg:items-end">
+            <div className="flex flex-wrap gap-2">
               <Button
                 variant="outline"
-                disabled={isResuming}
-                title="Undo the scheduled cancellation and keep this plan"
-                onClick={() => resumeSubscriptionMutate()}
+                disabled={!activeOrganization || isSyncing}
+                onClick={() => syncSubscriptionMutate()}
               >
-                {isResuming ? (
+                {isSyncing ? (
                   <RefreshCw className="size-4 animate-spin" />
                 ) : (
-                  <RotateCcw className="size-4" />
+                  <RefreshCw className="size-4" />
                 )}
-                Resume subscription
+                Sync billing
               </Button>
-            )}
 
-            {!canceledWithAccess && (
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="text-destructive hover:text-destructive"
-                    title={
-                      isTrialWithoutSubscription
-                        ? "End your free trial immediately"
-                        : hasPendingReplacement
-                          ? "Cancel the pending plan change"
-                          : "Stop renewal at the end of the current billing period"
-                    }
-                    disabled={!canCancel || isCancelling}
-                  >
-                    <XCircle className="size-4" />
-                    {isTrialWithoutSubscription
-                      ? "End trial"
-                      : hasPendingReplacement
-                        ? "Cancel pending plan change"
-                        : "Cancel subscription"}
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>
-                      {isTrialWithoutSubscription
-                        ? "End your free trial?"
-                        : hasPendingReplacement
-                          ? "Cancel the pending plan change?"
-                          : "Cancel subscription?"}
-                    </AlertDialogTitle>
-                    <AlertDialogDescription>
-                      {isTrialWithoutSubscription
-                        ? "This ends your free trial immediately. Paid features stop working right away, not at the end of the trial period."
-                        : hasPendingReplacement
-                          ? `This cancels the queued change to ${activeOrganization?.pendingRazorpaySubscriptionTier === "basic" ? "Basic" : "Pro"} only. Your current ${activeOrganization?.planTier === "basic" ? "Basic" : "Pro"} plan keeps running as-is -- this does not cancel it.`
-                          : "Your subscription will remain active until the end of the current billing period. This action will stop renewal."}
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <div className="flex gap-3 rounded-sm bg-amber-50 p-3 text-sm text-amber-800">
-                    <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-                    {isTrialWithoutSubscription
-                      ? "This cannot be undone. You can still subscribe to a paid plan at any time."
-                      : hasPendingReplacement
-                        ? "To cancel your active plan instead, wait for this pending change to resolve first."
-                        : "You can continue using paid features until the current cycle ends."}
-                  </div>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>
-                      {hasPendingReplacement
-                        ? "Keep the pending change"
-                        : "Keep subscription"}
-                    </AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={() => cancelSubscriptionMutate()}
-                      className="bg-destructive text-white hover:bg-destructive/90"
+              {canceledWithAccess && (
+                <Button
+                  variant="outline"
+                  disabled={isResuming}
+                  title="Undo the scheduled cancellation and keep this plan"
+                  onClick={() => resumeSubscriptionMutate()}
+                >
+                  {isResuming ? (
+                    <RefreshCw className="size-4 animate-spin" />
+                  ) : (
+                    <RotateCcw className="size-4" />
+                  )}
+                  Resume subscription
+                </Button>
+              )}
+
+              {!canceledWithAccess && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="text-destructive hover:text-destructive"
+                      title={
+                        isGranted
+                          ? "Your plan is managed by the Whatching team, so there is no subscription to cancel."
+                          : isTrialWithoutSubscription
+                            ? "End your free trial immediately"
+                            : hasPendingReplacement
+                              ? "Cancel the pending plan change"
+                              : "Stop renewal at the end of the current billing period"
+                      }
+                      disabled={!canCancel || isCancelling}
                     >
+                      <XCircle className="size-4" />
                       {isTrialWithoutSubscription
                         ? "End trial"
                         : hasPendingReplacement
                           ? "Cancel pending plan change"
                           : "Cancel subscription"}
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>
+                        {isTrialWithoutSubscription
+                          ? "End your free trial?"
+                          : hasPendingReplacement
+                            ? "Cancel the pending plan change?"
+                            : "Cancel subscription?"}
+                      </AlertDialogTitle>
+                      <AlertDialogDescription>
+                        {isTrialWithoutSubscription
+                          ? "This ends your free trial immediately. Paid features stop working right away, not at the end of the trial period."
+                          : hasPendingReplacement
+                            ? `This cancels the queued change to ${activeOrganization?.pendingRazorpaySubscriptionTier === "basic" ? "Basic" : "Pro"} only. Your current ${activeOrganization?.planTier === "basic" ? "Basic" : "Pro"} plan keeps running as-is -- this does not cancel it.`
+                            : "Your subscription will remain active until the end of the current billing period. This action will stop renewal."}
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <div className="flex gap-3 rounded-sm bg-amber-50 p-3 text-sm text-amber-800">
+                      <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                      {isTrialWithoutSubscription
+                        ? "This cannot be undone. You can still subscribe to a paid plan at any time."
+                        : hasPendingReplacement
+                          ? "To cancel your active plan instead, wait for this pending change to resolve first."
+                          : "You can continue using paid features until the current cycle ends."}
+                    </div>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>
+                        {hasPendingReplacement
+                          ? "Keep the pending change"
+                          : "Keep subscription"}
+                      </AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => cancelSubscriptionMutate()}
+                        className="bg-destructive text-white hover:bg-destructive/90"
+                      >
+                        {isTrialWithoutSubscription
+                          ? "End trial"
+                          : hasPendingReplacement
+                            ? "Cancel pending plan change"
+                            : "Cancel subscription"}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
+            </div>
+            {isGranted && (
+              <p className="max-w-sm text-sm text-muted-foreground lg:text-right">
+                Your plan is managed by the Whatching team, so there is no
+                subscription to cancel. Contact support to change or end it.
+              </p>
             )}
           </div>
         </section>
+
+        <PaymentFailedNotice variant="card" />
 
         {activeOrganization?.lastPlanChangeFailureReason ? (
           <section className="flex gap-3 rounded-lg border border-destructive/25 bg-destructive/5 p-4 text-sm text-destructive">
@@ -364,7 +394,9 @@ export default function BillingSettingsPage() {
             <div>
               <p className="font-medium">Your last plan change failed</p>
               <p className="mt-1">
-                {activeOrganization.lastPlanChangeFailureReason}
+                {humanizeBillingMessage(
+                  activeOrganization.lastPlanChangeFailureReason
+                )}
               </p>
               {activeOrganization.lastPlanChangeFailureAt && (
                 <p className="mt-1 text-xs text-destructive/70">
@@ -434,6 +466,12 @@ export default function BillingSettingsPage() {
           </section>
         ) : null}
 
+        {isGranted && (
+          <section className="rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm font-medium text-sky-950">
+            Complimentary {plan?.name || "paid"} plan until {grantedUntil}.
+          </section>
+        )}
+
         <section className="grid gap-4 lg:grid-cols-3">
           <div className="rounded-lg bg-white p-5 shadow-xs">
             <p className="text-sm text-muted-foreground">Current plan</p>
@@ -442,8 +480,12 @@ export default function BillingSettingsPage() {
                 ? "No plan"
                 : activeOrganization?.planTier || "-"}
             </p>
-            <p className="mt-1 text-sm capitalize text-muted-foreground">
-              {activeOrganization?.subscriptionStatus || "not started"}
+            <p className="mt-1 text-sm text-muted-foreground">
+              {isGranted
+                ? "Complimentary"
+                : getSubscriptionStatusLabel(
+                    activeOrganization?.subscriptionStatus
+                  ) || "Not started"}
             </p>
           </div>
 
@@ -453,9 +495,11 @@ export default function BillingSettingsPage() {
               <p className="font-heading font-semibold">
                 {canceledWithAccess
                   ? "Access ends"
-                  : isTrialing
-                    ? "Trial ends"
-                    : "Next deduction"}
+                  : isGranted
+                    ? "Plan ends"
+                    : isTrialing
+                      ? "Trial ends"
+                      : "Next deduction"}
               </p>
             </div>
             <p className="mt-3 text-sm text-muted-foreground">
@@ -478,6 +522,14 @@ export default function BillingSettingsPage() {
                     {formatDate(activeOrganization?.trialEndsAt)}
                   </span>
                   .
+                </>
+              ) : isGranted ? (
+                <>
+                  Your plan runs until{" "}
+                  <span className="font-semibold text-foreground">
+                    {grantedUntil}
+                  </span>
+                  . You won&apos;t be charged.
                 </>
               ) : isActiveSubscription && totals ? (
                 <>
@@ -517,7 +569,9 @@ export default function BillingSettingsPage() {
               </div>
             ) : (
               <p className="mt-3 text-sm text-muted-foreground">
-                Select a paid plan to see subscription pricing.
+                {isGranted
+                  ? "Complimentary. No monthly charge."
+                  : "Select a paid plan to see subscription pricing."}
               </p>
             )}
           </div>

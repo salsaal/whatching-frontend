@@ -56,8 +56,11 @@ import {
   emptyBillingProfile,
   formatCurrency,
   formatDate,
+  getPaymentState,
   getPlanByTier,
+  humanizeBillingMessage,
   indiaStates,
+  isAdminGrantedPlan,
   isSubscriptionCanceledWithAccess,
   PaidPlanTier,
   validateBillingProfile
@@ -76,16 +79,26 @@ type PaidCheckoutResponseData = {
   key?: string;
   paymentUrl?: string;
   organization?: Organization;
+  startsAt?: string | null;
+  changed?: boolean;
+  scheduled?: boolean;
+  requiresAuthorization?: boolean;
+  paymentMethodReplacement?: boolean;
+  effectiveAt?: string | null;
+  planTier?: string;
+  requestedPlanTier?: PaidPlanTier;
 };
+
+type ChangeKind = "upgrade" | "downgrade" | "replacement";
 
 const checkoutStorageKey = "whatching:checkout:last";
 
 const getErrorMessage = (error: unknown) => {
   const axiosError = error as AxiosError<ApiErrorPayload>;
-  return (
+  return humanizeBillingMessage(
     axiosError.response?.data?.message ||
-    axiosError.message ||
-    "Checkout request failed."
+      axiosError.message ||
+      "Checkout request failed."
   );
 };
 
@@ -140,6 +153,29 @@ export default function CheckoutPage() {
   const totals = paidPlan?.monthlyPrice
     ? calculatePlanTotals(paidPlan.monthlyPrice)
     : null;
+  const monthlyTotal = totals ? formatCurrency(totals.totalAmount) : "-";
+  const isChange = action?.kind === "change";
+  const isDowngrade =
+    isChange &&
+    activeOrganization?.planTier === "pro" &&
+    paidPlan?.id === "basic";
+  const isUpgrade =
+    isChange &&
+    activeOrganization?.planTier === "basic" &&
+    paidPlan?.id === "pro";
+  const nextRenewal = activeOrganization?.subscriptionCurrentPeriodEnd
+    ? formatDate(activeOrganization.subscriptionCurrentPeriodEnd)
+    : null;
+  // Subscribing during a trial sets the plan up now; the first charge is at
+  // the trial end.
+  const isTrialSubscribe =
+    action?.kind === "subscribe" &&
+    activeOrganization?.subscriptionStatus === "trialing";
+  const trialEndDate = formatDate(activeOrganization?.trialEndsAt);
+  const paymentState = getPaymentState(activeOrganization);
+  const currentPlanName =
+    getPlanByTier(activeOrganization?.planTier)?.name || "current";
+  const isGranted = isAdminGrantedPlan(activeOrganization);
   const [billingProfile, setBillingProfile] =
     useState<BillingProfile>(emptyBillingProfile);
 
@@ -240,6 +276,38 @@ export default function CheckoutPage() {
       const subscriptionId =
         responseData?.replacementSubscriptionId || responseData?.subscriptionId;
       const razorpayKey = responseData?.key;
+      const startsAt = responseData?.startsAt ?? null;
+      const effectiveAt = responseData?.effectiveAt ?? null;
+      const isReplacement = Boolean(
+        responseData?.requiresAuthorization &&
+          responseData?.paymentMethodReplacement
+      );
+      // Only the upgrade responses carry requestedPlanTier without being
+      // scheduled; "already on this plan" and "pending change cancelled"
+      // leave it out, so they fall through to the backend message.
+      const isUpgradeOutcome =
+        !responseData?.scheduled &&
+        (responseData?.changed || responseData?.requestedPlanTier === "pro");
+      const changeKind: ChangeKind | undefined =
+        action?.kind !== "change"
+          ? undefined
+          : isReplacement
+            ? "replacement"
+            : responseData?.scheduled
+              ? responseData.requestedPlanTier === "basic"
+                ? "downgrade"
+                : "replacement"
+              : isUpgradeOutcome
+                ? "upgrade"
+                : undefined;
+      const changeDetails =
+        action?.kind === "change"
+          ? {
+              changeKind,
+              changed: Boolean(responseData?.changed),
+              effectiveAt
+            }
+          : {};
       const callbackUrl =
         typeof window !== "undefined"
           ? `${window.location.origin}/congratulations?tier=${tier}`
@@ -250,9 +318,24 @@ export default function CheckoutPage() {
       }
 
       if (!subscriptionId || !razorpayKey) {
-        const outcomeMessage =
-          res.message ||
-          "Plan request completed. We are syncing your billing status.";
+        const requestedName =
+          getPlanByTier(responseData?.requestedPlanTier)?.name ||
+          paidPlan?.name;
+        const outcomeMessage = isTrialSubscribe
+          ? `Your ${paidPlan?.name} plan is set up and starts on ${formatDate(
+              startsAt ?? activeOrganization?.trialEndsAt
+            )}.`
+          : changeKind === "upgrade"
+            ? responseData?.changed
+              ? "You're now on Pro. Razorpay charged the difference for the rest of this billing cycle."
+              : "Razorpay accepted the upgrade. Pro turns on as soon as the payment is confirmed."
+            : changeKind && effectiveAt
+              ? `Your plan changes to ${requestedName} on ${formatDate(
+                  effectiveAt
+                )}. You keep ${currentPlanName} until then.`
+              : res.message
+                ? humanizeBillingMessage(res.message)
+                : "Plan request completed. We are syncing your billing status.";
         toast.success(outcomeMessage);
 
         if (typeof window !== "undefined") {
@@ -263,6 +346,8 @@ export default function CheckoutPage() {
               action: action?.kind,
               planName: paidPlan?.name,
               outcomeMessage,
+              startsAt,
+              ...changeDetails,
               wentThroughRazorpay: false,
               startedAt: new Date().toISOString()
             })
@@ -283,9 +368,16 @@ export default function CheckoutPage() {
           planName: paidPlan?.name,
           callbackUrl,
           subscriptionId,
-          baseAmount: totals?.baseAmount,
-          gstAmount: totals?.gstAmount,
-          totalAmount: totals?.totalAmount,
+          startsAt,
+          // Razorpay works out the prorated amount for a change, so only a
+          // fresh subscribe records what was paid.
+          ...(action?.kind === "subscribe"
+            ? {
+                baseAmount: totals?.baseAmount,
+                gstAmount: totals?.gstAmount,
+                totalAmount: totals?.totalAmount
+              }
+            : changeDetails),
           wentThroughRazorpay: true,
           startedAt: new Date().toISOString()
         };
@@ -294,6 +386,15 @@ export default function CheckoutPage() {
           checkoutStorageKey,
           JSON.stringify(checkoutSnapshot)
         );
+
+        if (isReplacement) {
+          toast.info(
+            `Your payment method can't be changed mid-cycle, so the upgrade starts at your next renewal on ${formatDate(
+              effectiveAt
+            )}. Authorise it now.`,
+            { duration: 10000 }
+          );
+        }
 
         try {
           await loadRazorpayCheckout();
@@ -360,12 +461,9 @@ export default function CheckoutPage() {
     !paidPlan ||
     isCurrentActivePlan ||
     canceledWithAccess ||
+    isGranted ||
     isProceeding ||
     (isPaidAction && (isBillingProfileLoading || hasBillingErrors));
-  const isDowngrade =
-    action?.kind === "change" &&
-    activeOrganization?.planTier === "pro" &&
-    paidPlan?.id === "basic";
   const [isDowngradeConfirmOpen, setIsDowngradeConfirmOpen] = useState(false);
 
   const updateBillingField = (key: keyof BillingProfile, value: string) => {
@@ -447,7 +545,9 @@ export default function CheckoutPage() {
               {action?.label || `Subscribe to ${paidPlan.name}`}
             </h1>
             <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-              {action?.description}
+              {isTrialSubscribe
+                ? `You won't be charged until your trial ends on ${trialEndDate}.`
+                : action?.description}
             </p>
           </div>
           <div className="rounded-md border bg-muted/40 px-4 py-3 text-sm">
@@ -457,6 +557,21 @@ export default function CheckoutPage() {
             </p>
           </div>
         </section>
+
+        {isGranted && (
+          <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+            <div className="flex gap-3">
+              <AlertCircle className="mt-0.5 size-4 shrink-0 text-amber-600" />
+              <p>
+                Your plan is managed by the Whatching team until{" "}
+                <span className="font-semibold">
+                  {formatDate(activeOrganization?.subscriptionCurrentPeriodEnd)}
+                </span>
+                . Contact support to change it.
+              </p>
+            </div>
+          </section>
+        )}
 
         {canceledWithAccess && (
           <section className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-950">
@@ -661,16 +776,59 @@ export default function CheckoutPage() {
                 </div>
                 <div className="border-t pt-3">
                   <div className="flex items-center justify-between gap-4">
-                    <span className="font-semibold">Total payable</span>
+                    <span className="font-semibold">
+                      {isChange
+                        ? "Monthly total"
+                        : isTrialSubscribe
+                          ? `Monthly total, from ${trialEndDate}`
+                          : "Total payable"}
+                    </span>
                     <span className="font-heading text-xl font-semibold">
-                      {totals ? formatCurrency(totals.totalAmount) : "-"}
+                      {monthlyTotal}
                     </span>
                   </div>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Prices shown on the plan page are exclusive of GST; this
-                    checkout shows the GST added on top.
-                  </p>
+                  {isUpgrade ? (
+                    <>
+                      <p className="mt-2 text-foreground">
+                        Razorpay charges the difference for the rest of this
+                        billing cycle today. From your next renewal:{" "}
+                        {monthlyTotal}/month.
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        If you pay by UPI AutoPay, Razorpay can&apos;t change
+                        the mandate mid-cycle. In that case you&apos;ll
+                        authorise the upgrade now and it starts at your next
+                        renewal.
+                      </p>
+                    </>
+                  ) : isDowngrade ? (
+                    <p className="mt-2 text-foreground">
+                      Nothing to pay today. {monthlyTotal}/month from{" "}
+                      {nextRenewal || "your next renewal"}.
+                    </p>
+                  ) : isTrialSubscribe ? (
+                    <p className="mt-2 text-foreground">
+                      You won&apos;t be charged until your trial ends on{" "}
+                      {trialEndDate}.
+                    </p>
+                  ) : null}
+                  {!isChange ? (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Prices shown on the plan page are exclusive of GST; this
+                      checkout shows the GST added on top.
+                    </p>
+                  ) : null}
                 </div>
+                {paymentState === "grace" ? (
+                  <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-amber-950">
+                    Your {currentPlanName} plan keeps working{" "}
+                    {activeOrganization?.paymentGraceUntil
+                      ? `until ${formatDate(activeOrganization.paymentGraceUntil)}`
+                      : "for now"}{" "}
+                    while you pay again. Paying with a new method replaces the
+                    one that failed.
+                  </p>
+                ) : null}
               </div>
             </section>
 
@@ -718,8 +876,11 @@ export default function CheckoutPage() {
                     Downgrade to {paidPlan?.name}?
                   </AlertDialogTitle>
                   <AlertDialogDescription>
-                    This takes effect at the end of your current billing cycle.
-                    You&apos;ll keep Pro features until then, but move to
+                    This takes effect{" "}
+                    {nextRenewal
+                      ? `on ${nextRenewal}`
+                      : "at the end of your current billing cycle"}
+                    . You&apos;ll keep Pro features until then, but move to
                     Basic&apos;s lower subscriber and team-member limits
                     afterward.
                   </AlertDialogDescription>

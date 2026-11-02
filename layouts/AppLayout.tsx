@@ -30,6 +30,7 @@ import {
   getOrganization
 } from "@/client-api/functions/organizations";
 import { UserAvatar, UserMenu } from "@/components/account/UserMenu";
+import { PaymentFailedNotice } from "@/components/billing/PaymentFailedNotice";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
@@ -45,7 +46,8 @@ import assets from "@/json/assets";
 import {
   isSubscriptionCanceledWithAccess,
   formatDate,
-  getDaysUntil
+  getDaysUntil,
+  getPaymentState
 } from "@/lib/billing";
 import { cn } from "@/lib/utils";
 import { useCurrentMembership } from "@/hooks/useCurrentMembership";
@@ -138,6 +140,18 @@ export default function AppLayout({
   const isReady = status === "ready";
   const currentPlan = activeOrganization?.planTier || "none";
   const isNoPlan = currentPlan === "none";
+  const paymentState = getPaymentState(activeOrganization);
+  const planChipLabel = isNoPlan
+    ? "No plan"
+    : `${currentPlan}${paymentState === "grace" ? " (payment failed)" : ""}`;
+  // Checkout and congratulations are mid-payment; plans and billing render
+  // the same notice in their own layout.
+  const shouldShowPaymentFailedBanner = ![
+    "/checkout",
+    "/congratulations",
+    "/plans",
+    "/settings/billing"
+  ].includes(router.pathname);
   const canceledWithAccess =
     isSubscriptionCanceledWithAccess(activeOrganization);
   const shouldShowCancelledPlanBanner =
@@ -467,7 +481,7 @@ export default function AppLayout({
                 <div className="text-left lg:text-right">
                   <p className="text-xs text-muted-foreground">Current plan</p>
                   <p className="font-heading text-sm font-semibold uppercase">
-                    {isNoPlan ? "No plan" : currentPlan}
+                    {planChipLabel}
                   </p>
                 </div>
                 <Button variant="outline" onClick={() => router.push("/plans")}>
@@ -479,35 +493,48 @@ export default function AppLayout({
           </header>
         )}
 
-        {!hideHeader && isNoPlan && !planBannerDismissed && (
-          <div className="px-4 pt-3 sm:px-6 lg:px-8">
-            <div className="mx-auto flex max-w-7xl items-center gap-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
-              <Zap className="size-4 shrink-0 text-amber-600" />
-              <p className="min-w-0 flex-1">
-                Choose a plan to unlock broadcasts, automation, analytics, and
-                team features.
-              </p>
-              <Button
-                type="button"
-                size="sm"
-                className="h-8 shrink-0"
-                onClick={() => router.push("/plans")}
-              >
-                View plans
-              </Button>
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                className="size-8 shrink-0 text-amber-900"
-                tooltip="Dismiss"
-                onClick={dismissPlanBanner}
-              >
-                <X className="size-4" />
-              </Button>
+        {!hideHeader &&
+          shouldShowPaymentFailedBanner &&
+          paymentState !== "ok" && (
+            <div className="px-4 pt-3 sm:px-6 lg:px-8">
+              <div className="mx-auto max-w-7xl">
+                <PaymentFailedNotice variant="banner" />
+              </div>
             </div>
-          </div>
-        )}
+          )}
+
+        {!hideHeader &&
+          isNoPlan &&
+          paymentState !== "ended" &&
+          !planBannerDismissed && (
+            <div className="px-4 pt-3 sm:px-6 lg:px-8">
+              <div className="mx-auto flex max-w-7xl items-center gap-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+                <Zap className="size-4 shrink-0 text-amber-600" />
+                <p className="min-w-0 flex-1">
+                  Choose a plan to unlock broadcasts, automation, analytics, and
+                  team features.
+                </p>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-8 shrink-0"
+                  onClick={() => router.push("/plans")}
+                >
+                  View plans
+                </Button>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="size-8 shrink-0 text-amber-900"
+                  tooltip="Dismiss"
+                  onClick={dismissPlanBanner}
+                >
+                  <X className="size-4" />
+                </Button>
+              </div>
+            </div>
+          )}
 
         {!hideHeader &&
           canceledWithAccess &&
@@ -575,7 +602,7 @@ export default function AppLayout({
               <div className="rounded-sm bg-background p-3">
                 <p className="text-xs text-muted-foreground">Current plan</p>
                 <p className="mt-1 font-heading text-sm font-semibold uppercase">
-                  {isNoPlan ? "No plan" : currentPlan}
+                  {planChipLabel}
                 </p>
               </div>
               <div className="rounded-sm bg-background p-3">

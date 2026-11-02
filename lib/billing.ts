@@ -230,7 +230,13 @@ export const canStartFreeTrial = (
   organization: Organization | null | undefined
 ) => {
   const currentPlan = organization?.planTier || "none";
-  return currentPlan === "none" && !organization?.trialConsumedAt;
+  // A past_due org whose grace ran out drops to "none" but has paid before,
+  // so it never gets a trial offer (the backend would 409 it anyway).
+  return (
+    currentPlan === "none" &&
+    !organization?.trialConsumedAt &&
+    organization?.subscriptionStatus !== "past_due"
+  );
 };
 
 export const buildPlanAction = (
@@ -241,6 +247,7 @@ export const buildPlanAction = (
   const currentPlan = organization?.planTier || "none";
   const isNoPlan = currentPlan === "none";
   const isTrialing = organization?.subscriptionStatus === "trialing";
+  const isPastDue = organization?.subscriptionStatus === "past_due";
   const canStartTrial = canStartFreeTrial(organization);
 
   if (plan.id === "enterprise") {
@@ -251,6 +258,22 @@ export const buildPlanAction = (
       label: "Contact Sales",
       description:
         "Enterprise setup is handled by the Whatching team for custom usage, more numbers, and dedicated support."
+    };
+  }
+
+  // change-plan returns 409 for a failing subscription; subscribing again
+  // stops it and starts a fresh checkout with a new payment method.
+  if (isPastDue) {
+    return {
+      kind: "subscribe",
+      tier: plan.id,
+      planName: plan.name,
+      label:
+        plan.id === currentPlan
+          ? "Pay now with another method"
+          : `Subscribe to ${plan.name}`,
+      description:
+        "Your last payment didn't go through. Review your GST billing details, then pay with a different method."
     };
   }
 
@@ -298,3 +321,47 @@ export const isSubscriptionCanceledWithAccess = (
     new Date(periodEnd as string).getTime() > Date.now()
   );
 };
+
+export type PaymentState = "ok" | "grace" | "ended";
+
+// past_due with a tier and grace still open -> "grace" (the plan keeps
+// working while Razorpay retries); past_due with no tier or a lapsed grace
+// date -> "ended" (the backend job drops the tier shortly after the date).
+export const getPaymentState = (
+  organization: Organization | null | undefined
+): PaymentState => {
+  if (organization?.subscriptionStatus !== "past_due") return "ok";
+  if ((organization.planTier || "none") === "none") return "ended";
+  const graceUntil = organization.paymentGraceUntil;
+  if (graceUntil && new Date(graceUntil).getTime() <= Date.now()) {
+    return "ended";
+  }
+  return "grace";
+};
+
+// A plan the Whatching team granted by hand: active, a real tier, and no
+// Razorpay subscription behind it (a trial is "trialing", so never matches).
+export const isAdminGrantedPlan = (
+  organization: Organization | null | undefined
+) =>
+  organization?.subscriptionStatus === "active" &&
+  (organization?.planTier || "none") !== "none" &&
+  !organization?.razorpaySubscriptionId &&
+  !organization?.pendingRazorpaySubscriptionId;
+
+const subscriptionStatusLabels: Record<string, string> = {
+  active: "Active",
+  trialing: "Free trial",
+  pending_payment: "Waiting for payment",
+  past_due: "Payment failed",
+  paused: "Paused",
+  canceled: "Cancelled"
+};
+
+// Empty for a missing or unknown status, so each page picks its own fallback.
+export const getSubscriptionStatusLabel = (status?: string | null) =>
+  (status && subscriptionStatusLabels[status]) || "";
+
+// Backend billing messages can carry raw ISO timestamps; show them as dates.
+export const humanizeBillingMessage = (message: string) =>
+  message.replace(/\d{4}-\d{2}-\d{2}T[\d:.]+Z/g, (iso) => formatDate(iso));

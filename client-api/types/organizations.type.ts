@@ -247,6 +247,7 @@ export interface SubscribeResponse {
     subscriptionStatus?: string;
     organization?: Organization;
     synced?: boolean;
+    startsAt?: string | null;
   };
 }
 
@@ -333,6 +334,13 @@ export interface ChangePlanResponse {
     replacementSubscriptionId?: string;
     key?: string;
     paymentUrl?: string;
+    changed?: boolean;
+    scheduled?: boolean;
+    requiresAuthorization?: boolean;
+    paymentMethodReplacement?: boolean;
+    effectiveAt?: string | null;
+    planTier?: string;
+    requestedPlanTier?: "basic" | "pro";
     [key: string]: unknown;
   };
 }

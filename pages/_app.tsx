@@ -19,6 +19,7 @@ import { ApiResponse } from "@/client-api/types/api";
 import { CurrentMembership } from "@/client-api/types/organizations.type";
 import RouteGuard from "@/components/auth/RouteGuard";
 import { AppErrorBoundary } from "@/components/shared/AppErrorBoundary";
+import { humanizeBillingMessage } from "@/lib/billing";
 import { describePermission } from "@/lib/permissions";
 import { initSentry } from "@/lib/sentry";
 import { NuqsAdapter } from "nuqs/adapters/next/pages";
@@ -267,7 +268,7 @@ export const queryClient = new QueryClient({
     onSuccess: (data: unknown, _v, _c, mutation) => {
       const apiData = data as ApiResponse;
       if (mutation.meta?.showToast !== false && apiData.message) {
-        toast.success(apiData.message);
+        toast.success(humanizeBillingMessage(apiData.message));
       }
     },
     onError: (res, _v, _c, mutation) => {
@@ -283,7 +284,7 @@ export const queryClient = new QueryClient({
 
       const result = res as unknown as ErrorData;
       if (result?.response?.data?.message) {
-        toast.error(result?.response?.data?.message);
+        toast.error(humanizeBillingMessage(result.response.data.message));
       } else {
         toast.error("An error occurred while processing your request.");
       }

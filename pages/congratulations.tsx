@@ -17,7 +17,10 @@ import { Button } from "@/components/ui/button";
 import AppLayout from "@/layouts/AppLayout";
 import {
   formatCurrency,
+  formatDate,
   getPlanByTier,
+  getSubscriptionStatusLabel,
+  humanizeBillingMessage,
   isSubscriptionCanceledWithAccess
 } from "@/lib/billing";
 import { cn } from "@/lib/utils";
@@ -33,11 +36,17 @@ type LastCheckout = {
   startedAt?: string;
   outcomeMessage?: string;
   wentThroughRazorpay?: boolean;
+  startsAt?: string | null;
+  changeKind?: "upgrade" | "downgrade" | "replacement";
+  changed?: boolean;
+  effectiveAt?: string | null;
 };
 
 const checkoutStorageKey = "whatching:checkout:last";
 const MAX_AUTO_SYNC_RETRIES = 2;
 const AUTO_SYNC_RETRY_DELAY_MS = 3500;
+// An older checkout left in storage is not the one that brought us here.
+const LAST_CHECKOUT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 export default function CongratulationsPage() {
   const router = useRouter();
@@ -70,7 +79,16 @@ export default function CongratulationsPage() {
     if (!stored) return;
 
     try {
-      setLastCheckout(JSON.parse(stored) as LastCheckout);
+      const parsed = JSON.parse(stored) as LastCheckout;
+      const startedAt = parsed.startedAt
+        ? new Date(parsed.startedAt).getTime()
+        : NaN;
+      if (
+        Number.isFinite(startedAt) &&
+        Date.now() - startedAt < LAST_CHECKOUT_MAX_AGE_MS
+      ) {
+        setLastCheckout(parsed);
+      }
     } catch {
       window.localStorage.removeItem(checkoutStorageKey);
     }
@@ -88,6 +106,22 @@ export default function CongratulationsPage() {
     isSubscriptionCanceledWithAccess(activeOrganization);
   const isActive =
     activeOrganization?.subscriptionStatus === "active" && !canceledWithAccess;
+  // Subscribing during a trial: the org stays "trialing" until the trial
+  // ends, so "active" never arrives here.
+  const startsLater =
+    !isTrial &&
+    activeOrganization?.subscriptionStatus === "trialing" &&
+    lastCheckout?.action === "subscribe";
+  const startsAt = lastCheckout?.startsAt || activeOrganization?.trialEndsAt;
+  const changeKind =
+    lastCheckout?.action === "change" ? lastCheckout.changeKind : undefined;
+  const isScheduledChange =
+    changeKind === "downgrade" || changeKind === "replacement";
+  const isUpgradePending =
+    changeKind === "upgrade" &&
+    !lastCheckout?.changed &&
+    activeOrganization?.planTier !== "pro";
+  const isDone = isActive || startsLater || Boolean(changeKind);
 
   // The Razorpay webhook that flips subscriptionStatus to "active" can lag
   // a few seconds behind the redirect back here. Retry the sync a couple of
@@ -95,7 +129,7 @@ export default function CongratulationsPage() {
   // "syncing" until the user happens to find the Billing page's own sync
   // button.
   useEffect(() => {
-    if (isTrial || isActive || syncMutation.isPending) return;
+    if (isTrial || isDone || syncMutation.isPending) return;
     if (autoRetryCount >= MAX_AUTO_SYNC_RETRIES) return;
     if (!activeOrganization?._id) return;
 
@@ -111,17 +145,43 @@ export default function CongratulationsPage() {
 
     return () => window.clearTimeout(timeoutId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoRetryCount, isActive, isTrial, activeOrganization?._id]);
+  }, [autoRetryCount, isDone, isTrial, activeOrganization?._id]);
 
   const planName =
     queryPlan?.name || lastCheckout?.planName || activeOrganization?.planTier;
   const wentThroughRazorpay = lastCheckout?.wentThroughRazorpay !== false;
   const statusDescription = isTrial
     ? `Your ${planName || "Whatching"} trial is active for this organisation.`
-    : wentThroughRazorpay
-      ? "Razorpay payment has been submitted. Whatching will keep syncing the subscription status through backend webhooks and the billing sync route."
-      : lastCheckout?.outcomeMessage ||
-        "Your plan request was processed. Whatching will keep syncing the subscription status.";
+    : startsLater
+      ? `Your ${planName || "Whatching"} plan starts on ${formatDate(startsAt)}. You won't be charged until then.`
+      : isScheduledChange
+        ? `Your plan changes to ${planName || "the new plan"} on ${formatDate(lastCheckout?.effectiveAt)}. You keep your current plan until then.`
+        : changeKind === "upgrade"
+          ? isUpgradePending
+            ? "Pro turns on as soon as the payment is confirmed."
+            : "You're now on Pro. Razorpay charged the difference for the rest of this billing cycle."
+          : wentThroughRazorpay
+            ? "Razorpay payment has been submitted. Whatching will keep syncing the subscription status through backend webhooks and the billing sync route."
+            : lastCheckout?.outcomeMessage
+              ? humanizeBillingMessage(lastCheckout.outcomeMessage)
+              : "Your plan request was processed. Whatching will keep syncing the subscription status.";
+  const heading = isTrial
+    ? "Free trial started"
+    : startsLater
+      ? "Your plan is set up"
+      : isScheduledChange
+        ? "Plan change scheduled"
+        : changeKind === "upgrade"
+          ? isUpgradePending
+            ? "Upgrade submitted"
+            : "Plan upgraded"
+          : "Plan purchased";
+  const statusLabel = isTrial
+    ? "Free trial"
+    : startsLater
+      ? `Free trial, ${planName || "plan"} starts ${formatDate(startsAt)}`
+      : getSubscriptionStatusLabel(activeOrganization?.subscriptionStatus) ||
+        "Checking status";
 
   return (
     <AppLayout>
@@ -156,7 +216,7 @@ export default function CongratulationsPage() {
           </div>
 
           <h1 className="mt-6 font-heading text-4xl font-semibold">
-            {isTrial ? "Free trial started" : "Plan purchased"}
+            {heading}
           </h1>
           <p className="mt-3 text-sm text-muted-foreground">
             {statusDescription}
@@ -171,21 +231,19 @@ export default function CongratulationsPage() {
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Subscription</p>
-              <div className="mt-1 flex items-center gap-2 font-heading font-semibold capitalize">
+              <div className="mt-1 flex items-center gap-2 font-heading font-semibold">
                 {syncMutation.isPending ? (
                   <Loader2 className="size-4 animate-spin text-primary" />
-                ) : isActive || isTrial ? (
+                ) : isDone || isTrial ? (
                   <CheckCircle2 className="size-4 text-primary" />
                 ) : (
                   <ReceiptText className="size-4 text-amber-600" />
                 )}
-                {isTrial
-                  ? "trialing"
-                  : activeOrganization?.subscriptionStatus || "syncing"}
+                {statusLabel}
               </div>
             </div>
 
-            {lastCheckout?.baseAmount ? (
+            {lastCheckout?.baseAmount && lastCheckout.action !== "change" ? (
               <>
                 <div>
                   <p className="text-xs text-muted-foreground">Plan price</p>
@@ -200,7 +258,9 @@ export default function CongratulationsPage() {
                   </p>
                 </div>
                 <div className="sm:col-span-2">
-                  <p className="text-xs text-muted-foreground">Total</p>
+                  <p className="text-xs text-muted-foreground">
+                    {startsLater ? "Monthly total" : "Total"}
+                  </p>
                   <p className="mt-1 font-heading text-xl font-semibold">
                     {formatCurrency(lastCheckout.totalAmount || 0)}
                   </p>
@@ -218,7 +278,7 @@ export default function CongratulationsPage() {
           ) : null}
 
           <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
-            {!isTrial && !isActive && (
+            {!isTrial && !isDone && (
               <Button
                 variant="outline"
                 disabled={syncMutation.isPending}
