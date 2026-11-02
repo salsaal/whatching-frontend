@@ -210,7 +210,8 @@ const HANDOFF_REASON_LABELS: Record<string, string> = {
   instagram_flow_handoff: "The flow handed over to a person",
   ai_requested_human_help: "AI suggested a person",
   ai_provider_unavailable: "AI was unavailable",
-  ai_token_quota_exhausted: "AI credits ran out"
+  ai_token_quota_exhausted: "AI credits ran out",
+  marked_pending: "Marked as Pending by the team"
 };
 
 export const describeHandoffReason = (reason?: string | null) =>

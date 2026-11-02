@@ -87,6 +87,9 @@ describe("describeHandoffReason", () => {
     expect(describeHandoffReason("ai_token_quota_exhausted")).toBe(
       "AI credits ran out"
     );
+    expect(describeHandoffReason("marked_pending")).toBe(
+      "Marked as Pending by the team"
+    );
     expect(describeHandoffReason("something_new")).toBe("Asked for a person");
     expect(describeHandoffReason(null)).toBe("Asked for a person");
   });
