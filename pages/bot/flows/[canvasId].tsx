@@ -11,6 +11,7 @@ import {
   ReactFlow,
   ReactFlowInstance,
   ReactFlowProvider,
+  Viewport,
   useEdgesState,
   useNodesState
 } from "@xyflow/react";
@@ -22,6 +23,7 @@ import {
   Copy,
   CopyPlus,
   Eye,
+  EyeOff,
   FileUp,
   History,
   Loader2,
@@ -46,7 +48,6 @@ import {
   discardBotCanvasDraftById,
   getApiErrorMessage,
   getBotCanvas,
-  getBotStatus,
   getDraftConflict,
   getFlowInvalid,
   publishBotCanvasDraftById,
@@ -84,20 +85,18 @@ import {
 import { MediaAsset } from "@/client-api/types/media.type";
 import BotFlowNode from "@/components/flows/BotFlowNode";
 import {
-  blockPalette,
   FlowBlockLibrary,
   getBlockLabel
 } from "@/components/flows/FlowBlockLibrary";
+import { FlowBlockPicker } from "@/components/flows/FlowBlockPicker";
 import { FlowCanvasToolbar } from "@/components/flows/FlowCanvasToolbar";
+import { FlowPhonePreview } from "@/components/flows/FlowPhonePreview";
 import { FlowVersionHistoryDialog } from "@/components/flows/FlowVersionHistoryDialog";
 import { layoutFlow } from "@/components/flows/flowGraph";
 import FlowDiagramPreviewDialog from "@/components/flows/FlowDiagramPreviewDialog";
-import { WhatsAppFlowBlockPreview } from "@/components/flows/FlowBlockPreview";
 import LocationPickerDialog from "@/components/location/LocationPickerDialog";
 import MediaPickerDialog from "@/components/media/MediaPickerDialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Combobox } from "@/components/ui/combobox";
 import {
   Dialog,
   DialogContent,
@@ -108,9 +107,7 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
@@ -152,6 +149,7 @@ import {
   getNodeOptions,
   getOptionActionType,
   getPrimaryAction,
+  readOnlyNodeChanges,
   assignOptionIds,
   buildTargetByAction,
   BuilderNode,
@@ -1088,6 +1086,8 @@ const buildEditorState = (draft?: BotCanvasDraftState | null) => {
 // The backend's name for a flow nobody has named yet.
 const DEFAULT_FLOW_NAME = "Untitled Bot Canvas";
 const RENAME_HINT_KEY = "whatching:flow-rename-hint-seen";
+const PREVIEW_OPEN_KEY = "whatching:flow-preview-open";
+const RAIL_COLLAPSED_KEY = "whatching:flow-rail-collapsed";
 
 const formatLiveDate = (value: string) =>
   new Intl.DateTimeFormat("en-IN", {
@@ -1262,6 +1262,7 @@ function FlowsBuilder() {
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState("");
   const [wiresVisible, setWiresVisible] = useState(true);
+  const [railCollapsed, setRailCollapsed] = useState(false);
   const [minimapVisible, setMinimapVisible] = useState(false);
   const [isArranging, setIsArranging] = useState(false);
   const [historyState, setHistoryState] = useState({
@@ -1308,6 +1309,9 @@ function FlowsBuilder() {
   const lastRecordAtRef = useRef(0);
   const isDraggingRef = useRef(false);
   const isArrangingRef = useRef(false);
+  // Where the editor was looking before "View live version".
+  const editViewportRef = useRef<Viewport | null>(null);
+  const pendingLiveFitRef = useRef(false);
 
   const queryClient = useQueryClient();
 
@@ -1336,6 +1340,21 @@ function FlowsBuilder() {
       setHasSeenRenameHint(true);
     }
   }, []);
+  useEffect(() => {
+    try {
+      setRailCollapsed(localStorage.getItem(RAIL_COLLAPSED_KEY) === "1");
+    } catch {
+      // Storage unavailable: the rail starts open.
+    }
+  }, []);
+  const collapseRail = (collapsed: boolean) => {
+    setRailCollapsed(collapsed);
+    try {
+      localStorage.setItem(RAIL_COLLAPSED_KEY, collapsed ? "1" : "0");
+    } catch {
+      // Not remembered; it still collapses.
+    }
+  };
   const dismissRenameHint = () => {
     setHasSeenRenameHint(true);
     try {
@@ -1361,13 +1380,6 @@ function FlowsBuilder() {
     }
   });
 
-  const { data: statusData, refetch: refetchStatus } = useQuery({
-    queryKey: ["bot-status", orgId],
-    queryFn: getBotStatus,
-    enabled: Boolean(orgId)
-  });
-
-  const status = statusData?.data?.status;
   const isLiveView = canvasMode === "live";
   const publishedState = getPublishedStateFromResponse(canvasData);
   const draftChanges = canvasData?.data?.draftChanges;
@@ -1393,23 +1405,34 @@ function FlowsBuilder() {
     };
   }, [publishedState]);
 
+  // React Flow measures blocks through onNodesChange, so the live view needs
+  // its own node state too; without it every block stays hidden at 0,0.
+  // Only measuring and selecting get through: the live version is read-only.
+  const [liveNodes, setLiveNodes, onLiveNodesChange] =
+    useNodesState<BuilderNode>([]);
+  useEffect(() => setLiveNodes(publishedNodes), [publishedNodes, setLiveNodes]);
+  const handleLiveNodesChange = useCallback(
+    (changes: NodeChange<BuilderNode>[]) => {
+      const allowed = readOnlyNodeChanges(changes);
+      if (allowed.length) onLiveNodesChange(allowed);
+    },
+    [onLiveNodesChange]
+  );
+  const viewNodes = isLiveView ? liveNodes : nodes;
+
   const selectedNode = useMemo(
-    () =>
-      (isLiveView ? publishedNodes : nodes).find(
-        (node) => node.id === selectedNodeId
-      ) || null,
-    [isLiveView, nodes, publishedNodes, selectedNodeId]
+    () => viewNodes.find((node) => node.id === selectedNodeId) || null,
+    [selectedNodeId, viewNodes]
   );
   const selectedFollowUpNode = useMemo(() => {
     if (!selectedNode?.data.followUp?.enabled) return null;
-    const sourceNodes = isLiveView ? publishedNodes : nodes;
     return (
-      sourceNodes.find(
+      viewNodes.find(
         (node) =>
           node.data.triggerKey === selectedNode.data.followUp?.targetTriggerKey
       ) || null
     );
-  }, [isLiveView, nodes, publishedNodes, selectedNode]);
+  }, [selectedNode, viewNodes]);
 
   const rawVisibleEdges = isLiveView ? publishedEdges : edges;
   const visibleEdges = useMemo(
@@ -1436,7 +1459,7 @@ function FlowsBuilder() {
   // Display-only extras for each block: where its options lead, the worst
   // problem on it, and whether it differs from the live version.
   const visibleNodes = useMemo(() => {
-    const sourceNodes = isLiveView ? publishedNodes : nodes;
+    const sourceNodes = viewNodes;
     const nameById = new Map(
       sourceNodes.map((node) => [node.id, node.data.label])
     );
@@ -1482,14 +1505,7 @@ function FlowsBuilder() {
         changed: changedIds.has(node.id)
       }
     }));
-  }, [
-    draftChanges,
-    isLiveView,
-    issues,
-    nodes,
-    publishedNodes,
-    rawVisibleEdges
-  ]);
+  }, [draftChanges, isLiveView, issues, rawVisibleEdges, viewNodes]);
 
   const buildDraftState = useCallback(
     (currentNodes = nodes, currentEdges = edges): BotCanvasDraftState => {
@@ -1890,7 +1906,8 @@ function FlowsBuilder() {
       );
       setIssues(response.data?.validation?.issues || []);
       setAnalysis(response.data?.validation?.analysis);
-      await Promise.all([refetchCanvas(), refetchStatus()]);
+      await refetchCanvas();
+      queryClient.invalidateQueries({ queryKey: ["bot-status", orgId] });
       queryClient.invalidateQueries({ queryKey: ["bot-canvases", orgId] });
       toast.success(
         wasNeverLive
@@ -2488,6 +2505,8 @@ function FlowsBuilder() {
   };
 
   const enterLiveView = () => {
+    editViewportRef.current = reactFlow?.getViewport() ?? null;
+    pendingLiveFitRef.current = true;
     setCanvasMode("live");
     setSelectedNodeId(null);
     setSelectedEdgeId(null);
@@ -2495,6 +2514,39 @@ function FlowsBuilder() {
   const exitLiveView = () => {
     setCanvasMode("draft");
     setSelectedNodeId(null);
+    const viewport = editViewportRef.current;
+    if (viewport) {
+      window.requestAnimationFrame(() => void reactFlow?.setViewport(viewport));
+    }
+  };
+
+  // Fit the live version once its blocks have been measured.
+  useEffect(() => {
+    if (!isLiveView || !pendingLiveFitRef.current || !reactFlow) return;
+    const shown = liveNodes.filter((node) => !node.hidden);
+    if (!shown.length || shown.some((node) => !node.measured?.width)) return;
+    pendingLiveFitRef.current = false;
+    window.requestAnimationFrame(
+      () => void reactFlow.fitView({ padding: 0.2 })
+    );
+  }, [isLiveView, liveNodes, reactFlow]);
+
+  // The outline selects in whichever version is on screen.
+  const showNode = (nodeId: string) => {
+    if (!isLiveView) {
+      focusNode(nodeId);
+      return;
+    }
+    const node = liveNodes.find((item) => item.id === nodeId);
+    if (!node || !reactFlow) return;
+    setSelectedEdgeId(null);
+    setSelectedNodeId(node.id);
+    setRightPanelOpen(true);
+    void reactFlow.setCenter(
+      node.position.x + (node.measured?.width ?? 300) / 2,
+      node.position.y + (node.measured?.height ?? 200) / 2,
+      { zoom: Math.max(reactFlow.getZoom(), 0.9), duration: 300 }
+    );
   };
 
   // Points an option at a block (or at nothing). Same as dragging a wire.
@@ -2525,6 +2577,27 @@ function FlowsBuilder() {
   };
 
   // "+ New block" on an option: a new block to the right, wired and selected.
+  // A new block about 380 px right of `source`, selected, and wired from
+  // `actionId` when given.
+  const placeBlockNextTo = (
+    source: BuilderNode,
+    type: BotBlockType,
+    actionId?: string
+  ) => {
+    const siblings = edges.filter((edge) => edge.source === source.id).length;
+    const node = createNode(type, {
+      x: source.position.x + 380,
+      y: source.position.y + siblings * 60
+    });
+    node.data.triggerKey = makeUniqueTrigger(node.data.triggerKey, nodes);
+    setNodes((current) => [...current, node]);
+    if (actionId) connectOption(source.id, actionId, node.id);
+    setSelectedNodeId(node.id);
+    setRightPanelOpen(true);
+    setFocusRequest({ nodeId: node.id, tab: "message", nonce: Date.now() });
+  };
+
+  // "+ Create a new block…" on an option: a new block, wired to it.
   const createConnectedBlock = (
     nodeId: string,
     actionId: string,
@@ -2532,17 +2605,34 @@ function FlowsBuilder() {
   ) => {
     if (isLiveView) return;
     const source = nodes.find((node) => node.id === nodeId);
-    if (!source) return;
-    const siblings = edges.filter((edge) => edge.source === nodeId).length;
-    const node = createNode(type, {
-      x: source.position.x + 380,
-      y: source.position.y + siblings * 60
-    });
-    node.data.triggerKey = makeUniqueTrigger(node.data.triggerKey, nodes);
-    setNodes((current) => [...current, node]);
-    connectOption(nodeId, actionId, node.id);
-    setSelectedNodeId(node.id);
-    setFocusRequest({ nodeId: node.id, tab: "message", nonce: Date.now() });
+    if (source) placeBlockNextTo(source, type, actionId);
+  };
+
+  // Clicking a block type in the rail: with a block selected, the new one
+  // goes to its right, wired to its first "Go to block" option that leads
+  // nowhere yet. With nothing selected, the usual spot.
+  const addFromPalette = (type: BotBlockType) => {
+    if (isLiveView) return;
+    const source = nodes.find(
+      (node) => node.id === selectedNodeId && !node.hidden
+    );
+    if (!source) {
+      addBlock(type);
+      return;
+    }
+    const wired = new Set(
+      edges
+        .filter((edge) => edge.source === source.id)
+        .map((edge) => edge.sourceHandle)
+    );
+    const openOption = getNodeOptions(
+      source.data.blockType,
+      source.data.content,
+      source.data.actions
+    ).find(
+      (option) => option.type === "go_to_trigger" && !wired.has(option.actionId)
+    );
+    placeBlockNextTo(source, type, openOption?.actionId);
   };
 
   // A copy with new IDs for the block, its options and reply IDs, and no
@@ -2747,12 +2837,10 @@ function FlowsBuilder() {
     selectedNode && !selectedNode.hidden && !isLiveView
       ? { nodeId: selectedNode.id, label: selectedNode.data.label }
       : null;
-  const blockChoices = nodes
-    .filter((node) => !node.hidden)
-    .map((node) => ({ id: node.id, label: node.data.label }));
+  const blockChoices = viewNodes.filter((node) => !node.hidden);
   const selectedTargets = selectedNode
     ? Object.fromEntries(
-        edges
+        rawVisibleEdges
           .filter(
             (edge) => edge.source === selectedNode.id && edge.sourceHandle
           )
@@ -2955,14 +3043,34 @@ function FlowsBuilder() {
           Some panels may be hard to use here.
         </div>
 
-        <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[250px_minmax(0,1fr)_340px]">
-          <aside className="overflow-y-auto border-r bg-muted/30 p-3 [scrollbar-color:hsl(var(--border))_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border">
+        <div
+          className={cn(
+            "grid min-h-0 flex-1 grid-cols-1",
+            railCollapsed
+              ? "lg:grid-cols-[52px_minmax(0,1fr)_340px]"
+              : "lg:grid-cols-[250px_minmax(0,1fr)_340px]"
+          )}
+        >
+          <aside
+            className={cn(
+              "overflow-y-auto border-r bg-muted/30 [scrollbar-color:hsl(var(--border))_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border",
+              railCollapsed ? "px-1.5 py-2" : "p-3"
+            )}
+          >
             <FlowBlockLibrary
               readOnly={isLiveView}
               nodes={visibleNodes}
               selectedNodeId={selectedNodeId}
-              onAdd={(type) => addBlock(type)}
-              onSelectNode={(nodeId) => focusNode(nodeId)}
+              issueCounts={{
+                errors: issues.filter((issue) => issue.severity === "error")
+                  .length,
+                warnings: issues.filter((issue) => issue.severity !== "error")
+                  .length
+              }}
+              collapsed={railCollapsed}
+              onCollapsedChange={collapseRail}
+              onAdd={addFromPalette}
+              onSelectNode={showNode}
             />
           </aside>
 
@@ -2983,7 +3091,9 @@ function FlowsBuilder() {
                 edges={visibleEdges}
                 nodeTypes={nodeTypes}
                 onInit={setReactFlow}
-                onNodesChange={isLiveView ? undefined : handleNodesChange}
+                onNodesChange={
+                  isLiveView ? handleLiveNodesChange : handleNodesChange
+                }
                 onEdgesChange={isLiveView ? undefined : onEdgesChange}
                 onConnect={onConnect}
                 onNodeDragStart={() => {
@@ -3126,7 +3236,6 @@ function FlowsBuilder() {
             addAutomaticFollowUp={addAutomaticFollowUp}
             removeAutomaticFollowUp={removeAutomaticFollowUp}
             focusRequest={focusRequest}
-            status={status}
             blockChoices={blockChoices}
             targets={selectedTargets}
             connectOption={(actionId, targetId) =>
@@ -3380,7 +3489,6 @@ function PropertiesPanel({
   addAutomaticFollowUp,
   removeAutomaticFollowUp,
   focusRequest,
-  status,
   blockChoices,
   targets,
   connectOption,
@@ -3407,13 +3515,8 @@ function PropertiesPanel({
   addAutomaticFollowUp: () => void;
   removeAutomaticFollowUp: () => void;
   focusRequest: FocusRequest | null;
-  status?: {
-    defaultFlowReady?: boolean;
-    optOutFlowReady?: boolean;
-    geminiConfigured?: boolean;
-  };
   /** Blocks an option can go to. */
-  blockChoices: Array<{ id: string; label: string }>;
+  blockChoices: BuilderNode[];
   /** Where each of this block's options is wired, by actionId. */
   targets: Record<string, string>;
   connectOption: (actionId: string, targetId: string | null) => void;
@@ -3426,7 +3529,24 @@ function PropertiesPanel({
   const panelRef = useRef<HTMLElement | null>(null);
   const handledFocusRef = useRef<number | null>(null);
   const [tab, setTab] = useState<PanelTab>("message");
-  const [previewCollapsed, setPreviewCollapsed] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  useEffect(() => {
+    try {
+      setPreviewOpen(localStorage.getItem(PREVIEW_OPEN_KEY) === "1");
+    } catch {
+      // Storage unavailable: the preview starts closed.
+    }
+  }, []);
+  const togglePreview = () => {
+    setPreviewOpen((current) => {
+      try {
+        localStorage.setItem(PREVIEW_OPEN_KEY, current ? "0" : "1");
+      } catch {
+        // Not remembered; it still toggles.
+      }
+      return !current;
+    });
+  };
   const nodeId = node?.id;
 
   // Clicking an issue selects its block; this opens the tab holding the
@@ -3450,9 +3570,7 @@ function PropertiesPanel({
       if (!root) return;
       const target = findIssueTarget(root, focusRequest);
       if (!target) {
-        root
-          .querySelector("[data-panel-scroll]")
-          ?.scrollTo({ top: 0, behavior: "smooth" });
+        root.scrollTo({ top: 0, behavior: "smooth" });
         return;
       }
       target.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -3464,34 +3582,11 @@ function PropertiesPanel({
   if (!open) return <aside className="hidden border-l bg-white lg:block" />;
   if (!node) {
     return (
-      <aside className="overflow-y-auto border-l bg-white p-4 [scrollbar-color:hsl(var(--border))_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border">
+      <aside className="overflow-y-auto border-l bg-white p-4">
         <div className="rounded-xl border border-dashed bg-muted/30 p-6 text-center text-sm text-muted-foreground">
           {readOnly
-            ? "You're viewing the live version. Go back to editing to make changes."
+            ? "You're viewing the live version. Click a block to see its details."
             : "Select a block to edit its message and where it leads."}
-        </div>
-        <div className="mt-4 rounded-xl border bg-white p-3">
-          <p className="text-xs font-medium text-muted-foreground">
-            Before you go live
-          </p>
-          <div className="mt-3 grid gap-2 text-sm">
-            <div className="flex items-center justify-between">
-              <span>Default menu</span>
-              <Badge
-                variant={status?.defaultFlowReady ? "default" : "secondary"}
-              >
-                {status?.defaultFlowReady ? "Ready" : "Not live yet"}
-              </Badge>
-            </div>
-            <div className="flex items-center justify-between">
-              <span>AI config</span>
-              <Badge
-                variant={status?.geminiConfigured ? "default" : "secondary"}
-              >
-                {status?.geminiConfigured ? "Ready" : "Not set"}
-              </Badge>
-            </div>
-          </div>
         </div>
       </aside>
     );
@@ -3690,1113 +3785,1105 @@ function PropertiesPanel({
     updateAction(option.actionId, { url });
   };
 
-  const targetChoices = blockChoices.map((choice) => ({
-    value: choice.id,
-    label:
-      choice.id === node.id ? `${choice.label} (this block)` : choice.label,
-    searchText: choice.label
-  }));
   const isWebsiteMode =
     blockType === "buttons" &&
     node.data.actions.some((action) => action.type === "open_url");
+  const mediaSummary = (() => {
+    if (blockType === "generic_carousel") {
+      const count = getCarouselCards(content).length;
+      return `${count} card${count === 1 ? "" : "s"}`;
+    }
+    if (content.mediaId) {
+      return content.mediaName
+        ? `${content.mediaType || "media"}: ${content.mediaName}`
+        : String(content.mediaType || "media");
+    }
+    return ["image", "video", "document"].includes(blockType)
+      ? "no media yet"
+      : "";
+  })();
+  const messageSummary = [
+    getBlockLabel(blockType),
+    nextOptions.length
+      ? `${nextOptions.length} option${nextOptions.length === 1 ? "" : "s"}`
+      : "",
+    mediaSummary
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
-    <aside
-      ref={panelRef}
-      className="flex min-h-0 flex-col overflow-hidden border-l bg-white"
-    >
-      <Tabs
-        value={tab}
-        onValueChange={(value) => setTab(value as PanelTab)}
-        className="flex min-h-0 flex-1 flex-col gap-0"
+    // The preview floats outside the panel, so it sits next to (not in)
+    // the panel's only scroll area.
+    <div className="relative z-30 min-h-0 border-l bg-white">
+      <FlowPhonePreview
+        open={previewOpen}
+        onClose={togglePreview}
+        title={node.data.label}
+        blockType={blockType}
+        content={content}
+        actions={node.data.actions}
+      />
+      <aside
+        ref={panelRef}
+        className="h-full overflow-y-auto [scrollbar-color:hsl(var(--border))_transparent] [scrollbar-width:thin]"
       >
-        <div className="shrink-0 border-b px-4 py-2">
-          <TabsList className="w-full">
-            <TabsTrigger value="message">Message</TabsTrigger>
-            <TabsTrigger value="next">Next steps</TabsTrigger>
-            <TabsTrigger value="settings">Settings</TabsTrigger>
-          </TabsList>
-          {readOnly && (
-            <p className="mt-2 text-xs text-muted-foreground">
-              The live version is read-only.
-            </p>
-          )}
-        </div>
-
-        <TabsContent
-          value="message"
-          data-panel-scroll
-          className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 [scrollbar-color:hsl(var(--border))_transparent] [scrollbar-width:thin]"
+        <Tabs
+          value={tab}
+          onValueChange={(value) => setTab(value as PanelTab)}
+          className="gap-0"
         >
-          <div className="sticky top-0 z-10 -mx-4 border-b bg-white/95 px-4 py-2 backdrop-blur">
-            <button
-              type="button"
-              className="flex w-full cursor-pointer items-center justify-between text-xs font-medium text-muted-foreground"
-              aria-expanded={!previewCollapsed}
-              onClick={() => setPreviewCollapsed((value) => !value)}
-            >
-              Preview
-              {previewCollapsed ? (
-                <ChevronDown className="size-4" />
-              ) : (
-                <ChevronUp className="size-4" />
-              )}
-            </button>
-            {!previewCollapsed && (
-              <div className="mt-2 max-h-[38vh] overflow-y-auto">
-                <WhatsAppFlowBlockPreview
-                  blockType={blockType}
-                  content={content}
-                  actions={node.data.actions}
-                  showClose={false}
-                />
-              </div>
+          <div className="sticky top-0 z-10 border-b bg-white px-4 py-2">
+            <div className="flex items-center gap-2">
+              <TabsList className="min-w-0 flex-1">
+                <TabsTrigger value="message">Message</TabsTrigger>
+                <TabsTrigger value="next">Next steps</TabsTrigger>
+                <TabsTrigger value="settings">Settings</TabsTrigger>
+              </TabsList>
+              <Button
+                type="button"
+                variant={previewOpen ? "secondary" : "ghost"}
+                size="icon"
+                className="size-8 shrink-0"
+                aria-pressed={previewOpen}
+                aria-label={previewOpen ? "Hide preview" : "Show preview"}
+                tooltip={previewOpen ? "Hide preview" : "Show preview"}
+                onClick={togglePreview}
+              >
+                {previewOpen ? (
+                  <EyeOff className="size-4" />
+                ) : (
+                  <Eye className="size-4" />
+                )}
+              </Button>
+            </div>
+            {readOnly && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                The live version is read-only.
+              </p>
             )}
           </div>
 
-          <div className="mt-4 space-y-4">
-            {node.data.blockType === "list" && (
-              <Field label="Optional header">
-                <Input
-                  value={String(content.headerText || "")}
-                  disabled={readOnly}
-                  maxLength={HEADER_FOOTER_MAX}
-                  placeholder="Choose Shipping Option"
-                  data-issue-field="content.headerText"
-                  onChange={(event) =>
-                    updateContent({ headerText: event.target.value })
-                  }
-                />
-                <CharCounter
-                  value={content.headerText}
-                  max={HEADER_FOOTER_MAX}
-                />
-              </Field>
-            )}
-
-            {(node.data.blockType === "text" ||
-              node.data.blockType === "buttons" ||
-              node.data.blockType === "list") && (
-              <Field
-                label={
-                  node.data.blockType === "text" ? "Message" : "Body message"
-                }
-              >
-                <Textarea
-                  className="min-h-28"
-                  value={String(content.text || content.bodyText || "")}
-                  disabled={readOnly}
-                  data-issue-field={
-                    node.data.blockType === "text"
-                      ? "content.text"
-                      : "content.bodyText"
-                  }
-                  onChange={(event) =>
-                    updateContent(
-                      node.data.blockType === "text"
-                        ? { text: event.target.value }
-                        : { bodyText: event.target.value }
-                    )
-                  }
-                />
-                <CharCounter
-                  value={content.text || content.bodyText}
-                  max={
-                    node.data.blockType === "text"
-                      ? TEXT_MESSAGE_MAX
-                      : INTERACTIVE_BODY_MAX
-                  }
-                />
-                {formatHint}
-              </Field>
-            )}
-
-            {node.data.blockType === "list" && (
-              <div className="space-y-3">
-                <Field label="List button text">
+          <TabsContent value="message" className="space-y-4 p-4">
+            <p className="truncate text-xs text-muted-foreground">
+              {messageSummary}
+            </p>
+            <div className="space-y-4">
+              {node.data.blockType === "list" && (
+                <Field label="Optional header">
                   <Input
-                    value={String(content.buttonText || "")}
-                    disabled={readOnly}
-                    maxLength={LIST_BUTTON_TEXT_MAX}
-                    placeholder="Open menu"
-                    data-issue-field="content.buttonText"
-                    onChange={(event) =>
-                      updateContent({ buttonText: event.target.value })
-                    }
-                  />
-                  <CharCounter
-                    value={content.buttonText}
-                    max={LIST_BUTTON_TEXT_MAX}
-                  />
-                </Field>
-                <Field label="Optional footer">
-                  <Input
-                    value={String(content.footerText || "")}
+                    value={String(content.headerText || "")}
                     disabled={readOnly}
                     maxLength={HEADER_FOOTER_MAX}
-                    placeholder="Your business name"
-                    data-issue-field="content.footerText"
+                    placeholder="Choose Shipping Option"
+                    data-issue-field="content.headerText"
                     onChange={(event) =>
-                      updateContent({ footerText: event.target.value })
+                      updateContent({ headerText: event.target.value })
                     }
                   />
                   <CharCounter
-                    value={content.footerText}
+                    value={content.headerText}
                     max={HEADER_FOOTER_MAX}
                   />
                 </Field>
-                <ListSectionsEditor
-                  sections={getListSections(content)}
-                  readOnly={readOnly}
-                  onChange={updateListSections}
-                />
-              </div>
-            )}
+              )}
 
-            {node.data.blockType === "buttons" && (
-              <div className="rounded-lg border p-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold">
-                      Optional media header
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Reply button messages can include image, video, or
-                      document headers.
-                    </p>
-                  </div>
-                  {content.mediaId && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
+              {(node.data.blockType === "text" ||
+                node.data.blockType === "buttons" ||
+                node.data.blockType === "list") && (
+                <Field
+                  label={
+                    node.data.blockType === "text" ? "Message" : "Body message"
+                  }
+                >
+                  <Textarea
+                    className="min-h-28"
+                    value={String(content.text || content.bodyText || "")}
+                    disabled={readOnly}
+                    data-issue-field={
+                      node.data.blockType === "text"
+                        ? "content.text"
+                        : "content.bodyText"
+                    }
+                    onChange={(event) =>
+                      updateContent(
+                        node.data.blockType === "text"
+                          ? { text: event.target.value }
+                          : { bodyText: event.target.value }
+                      )
+                    }
+                  />
+                  <CharCounter
+                    value={content.text || content.bodyText}
+                    max={
+                      node.data.blockType === "text"
+                        ? TEXT_MESSAGE_MAX
+                        : INTERACTIVE_BODY_MAX
+                    }
+                  />
+                  {formatHint}
+                </Field>
+              )}
+
+              {node.data.blockType === "list" && (
+                <div className="space-y-3">
+                  <Field label="List button text">
+                    <Input
+                      value={String(content.buttonText || "")}
                       disabled={readOnly}
-                      onClick={() =>
+                      maxLength={LIST_BUTTON_TEXT_MAX}
+                      placeholder="Open menu"
+                      data-issue-field="content.buttonText"
+                      onChange={(event) =>
+                        updateContent({ buttonText: event.target.value })
+                      }
+                    />
+                    <CharCounter
+                      value={content.buttonText}
+                      max={LIST_BUTTON_TEXT_MAX}
+                    />
+                  </Field>
+                  <Field label="Optional footer">
+                    <Input
+                      value={String(content.footerText || "")}
+                      disabled={readOnly}
+                      maxLength={HEADER_FOOTER_MAX}
+                      placeholder="Your business name"
+                      data-issue-field="content.footerText"
+                      onChange={(event) =>
+                        updateContent({ footerText: event.target.value })
+                      }
+                    />
+                    <CharCounter
+                      value={content.footerText}
+                      max={HEADER_FOOTER_MAX}
+                    />
+                  </Field>
+                  <ListSectionsEditor
+                    sections={getListSections(content)}
+                    readOnly={readOnly}
+                    onChange={updateListSections}
+                  />
+                </div>
+              )}
+
+              {node.data.blockType === "buttons" && (
+                <div className="rounded-lg border p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold">
+                        Optional media header
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Reply button messages can include image, video, or
+                        document headers.
+                      </p>
+                    </div>
+                    {content.mediaId && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={readOnly}
+                        onClick={() =>
+                          updateContent({
+                            mediaType: undefined,
+                            mediaId: undefined,
+                            mediaName: undefined,
+                            mediaUrl: undefined,
+                            filename: undefined,
+                            media: undefined
+                          })
+                        }
+                      >
+                        Clear
+                      </Button>
+                    )}
+                  </div>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
+                    <Select
+                      value={String(content.mediaType || "image")}
+                      disabled={readOnly}
+                      onValueChange={(value) =>
                         updateContent({
-                          mediaType: undefined,
-                          mediaId: undefined,
-                          mediaName: undefined,
-                          mediaUrl: undefined,
-                          filename: undefined,
-                          media: undefined
+                          mediaType: value as "image" | "document" | "video",
+                          mediaId: "",
+                          mediaName: "",
+                          mediaUrl: "",
+                          filename: ""
                         })
                       }
                     >
-                      Clear
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="image">Image</SelectItem>
+                        <SelectItem value="video">Video</SelectItem>
+                        <SelectItem value="document">Document</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={readOnly}
+                      onClick={() =>
+                        openMediaPicker(
+                          String(content.mediaType || "image").toUpperCase() as
+                            | "IMAGE"
+                            | "DOCUMENT"
+                            | "VIDEO"
+                        )
+                      }
+                    >
+                      Select media
                     </Button>
-                  )}
+                  </div>
+                  <p className="mt-2 truncate text-xs text-muted-foreground">
+                    {content.mediaName ||
+                      content.mediaId ||
+                      "No media selected"}
+                  </p>
+                  <MediaPreview
+                    mediaType={String(content.mediaType || "")}
+                    url={getMediaPreviewUrl(content)}
+                    label={String(content.mediaName || "")}
+                  />
                 </div>
-                <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
-                  <Select
-                    value={String(content.mediaType || "image")}
+              )}
+
+              {["image", "document", "video"].includes(node.data.blockType) && (
+                <MediaField
+                  node={node}
+                  openMediaPicker={openMediaPicker}
+                  readOnly={readOnly}
+                />
+              )}
+
+              {node.data.blockType === "location" && (
+                <div className="grid gap-3">
+                  <Field label="Location name">
+                    <Input
+                      value={String(content.name || content.locationName || "")}
+                      disabled={readOnly}
+                      data-issue-field="content.name"
+                      onChange={(event) =>
+                        updateContent({ name: event.target.value })
+                      }
+                    />
+                  </Field>
+                  {!hasLocation(content) && (
+                    <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                      Pick the location on the map.
+                    </p>
+                  )}
+                  <Button
+                    type="button"
                     disabled={readOnly}
-                    onValueChange={(value) =>
-                      updateContent({
-                        mediaType: value as "image" | "document" | "video",
-                        mediaId: "",
-                        mediaName: "",
-                        mediaUrl: "",
-                        filename: ""
-                      })
-                    }
+                    data-issue-field="content.latitude"
+                    onClick={openLocationPicker}
                   >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="image">Image</SelectItem>
-                      <SelectItem value="video">Video</SelectItem>
-                      <SelectItem value="document">Document</SelectItem>
-                    </SelectContent>
-                  </Select>
+                    <MapPin className="size-4" />
+                    Choose on map
+                  </Button>
                   <Button
                     type="button"
                     variant="outline"
                     disabled={readOnly}
-                    onClick={() =>
-                      openMediaPicker(
-                        String(content.mediaType || "image").toUpperCase() as
-                          | "IMAGE"
-                          | "DOCUMENT"
-                          | "VIDEO"
-                      )
-                    }
-                  >
-                    Select media
-                  </Button>
-                </div>
-                <p className="mt-2 truncate text-xs text-muted-foreground">
-                  {content.mediaName || content.mediaId || "No media selected"}
-                </p>
-                <MediaPreview
-                  mediaType={String(content.mediaType || "")}
-                  url={getMediaPreviewUrl(content)}
-                  label={String(content.mediaName || "")}
-                />
-              </div>
-            )}
-
-            {["image", "document", "video"].includes(node.data.blockType) && (
-              <MediaField
-                node={node}
-                openMediaPicker={openMediaPicker}
-                readOnly={readOnly}
-              />
-            )}
-
-            {node.data.blockType === "location" && (
-              <div className="grid gap-3">
-                <Field label="Location name">
-                  <Input
-                    value={String(content.name || content.locationName || "")}
-                    disabled={readOnly}
-                    data-issue-field="content.name"
-                    onChange={(event) =>
-                      updateContent({ name: event.target.value })
-                    }
-                  />
-                </Field>
-                {!hasLocation(content) && (
-                  <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                    Pick the location on the map.
-                  </p>
-                )}
-                <Button
-                  type="button"
-                  disabled={readOnly}
-                  data-issue-field="content.latitude"
-                  onClick={openLocationPicker}
-                >
-                  <MapPin className="size-4" />
-                  Choose on map
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={readOnly}
-                  onClick={() => {
-                    if (!navigator.geolocation) {
-                      toast.error(
-                        "Geolocation is not available in this browser."
+                    onClick={() => {
+                      if (!navigator.geolocation) {
+                        toast.error(
+                          "Geolocation is not available in this browser."
+                        );
+                        return;
+                      }
+                      navigator.geolocation.getCurrentPosition(
+                        (position) => {
+                          updateContent({
+                            latitude: Number(
+                              position.coords.latitude.toFixed(6)
+                            ),
+                            longitude: Number(
+                              position.coords.longitude.toFixed(6)
+                            )
+                          });
+                          toast.success("Current location added.");
+                        },
+                        () => toast.error("Unable to read current location.")
                       );
-                      return;
-                    }
-                    navigator.geolocation.getCurrentPosition(
-                      (position) => {
-                        updateContent({
-                          latitude: Number(position.coords.latitude.toFixed(6)),
-                          longitude: Number(
-                            position.coords.longitude.toFixed(6)
-                          )
-                        });
-                        toast.success("Current location added.");
-                      },
-                      () => toast.error("Unable to read current location.")
-                    );
-                  }}
-                >
-                  <MapPin className="size-4" />
-                  Use my current location
-                </Button>
-                <div className="grid grid-cols-2 gap-2">
-                  <Field label="Latitude">
-                    <Input
-                      type="number"
-                      value={
-                        typeof content.latitude === "number"
-                          ? content.latitude
-                          : ""
-                      }
-                      disabled={readOnly}
-                      onChange={(event) =>
-                        updateContent({
-                          latitude:
-                            event.target.value === ""
-                              ? undefined
-                              : Number(event.target.value)
-                        })
-                      }
-                    />
-                  </Field>
-                  <Field label="Longitude">
-                    <Input
-                      type="number"
-                      value={
-                        typeof content.longitude === "number"
-                          ? content.longitude
-                          : ""
-                      }
-                      disabled={readOnly}
-                      data-issue-field="content.longitude"
-                      onChange={(event) =>
-                        updateContent({
-                          longitude:
-                            event.target.value === ""
-                              ? undefined
-                              : Number(event.target.value)
-                        })
-                      }
-                    />
-                  </Field>
-                </div>
-                <Field label="Address">
-                  <Textarea
-                    value={String(
-                      content.address || content.locationAddress || ""
-                    )}
-                    disabled={readOnly}
-                    data-issue-field="content.address"
-                    onChange={(event) =>
-                      updateContent({ address: event.target.value })
-                    }
-                  />
-                </Field>
-              </div>
-            )}
-
-            {(node.data.blockType === "location_request" ||
-              node.data.blockType === "address_request") && (
-              <div className="grid gap-3">
-                <Field
-                  label={
-                    node.data.blockType === "location_request"
-                      ? "Location request message"
-                      : "Address request message"
-                  }
-                >
-                  <Textarea
-                    className="min-h-28"
-                    value={String(content.bodyText || "")}
-                    disabled={readOnly}
-                    maxLength={INTERACTIVE_BODY_MAX}
-                    data-issue-field="content.bodyText"
-                    onChange={(event) =>
-                      updateContent({ bodyText: event.target.value })
-                    }
-                  />
-                  <CharCounter
-                    value={content.bodyText}
-                    max={INTERACTIVE_BODY_MAX}
-                  />
-                </Field>
-                {node.data.blockType === "address_request" && (
-                  <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">
-                    Meta address request messages currently support India only.
-                    This block always sends{" "}
-                    <span className="font-semibold">country: IN</span>.
-                  </div>
-                )}
-              </div>
-            )}
-
-            {node.data.blockType === "handoff_to_agent" && (
-              <div className="grid gap-3">
-                <Field label="Message before handing to your team">
-                  <Textarea
-                    className="min-h-28"
-                    value={String(content.message || content.text || "")}
-                    disabled={readOnly}
-                    maxLength={TEXT_MESSAGE_MAX}
-                    data-issue-field="content.message"
-                    onChange={(event) =>
-                      updateContent({ message: event.target.value })
-                    }
-                  />
-                  {formatHint}
-                </Field>
-              </div>
-            )}
-
-            {node.data.blockType === "contacts" && (
-              <div className="space-y-3 rounded-lg border p-3">
-                <p className="text-sm font-semibold">Contact card</p>
-                <Field label="Name shown on the contact card">
-                  <Input
-                    data-issue-field="content.contacts.0.name.formatted_name"
-                    value={String(
-                      (
-                        (
-                          content.contacts as
-                            | Array<Record<string, unknown>>
-                            | undefined
-                        )?.[0]?.name as Record<string, unknown> | undefined
-                      )?.formatted_name || ""
-                    )}
-                    disabled={readOnly}
-                    onChange={(event) => {
-                      const currentContact =
-                        ((
-                          content.contacts as
-                            | Array<Record<string, unknown>>
-                            | undefined
-                        )?.[0] as Record<string, unknown> | undefined) || {};
-                      const currentName =
-                        (currentContact.name as
-                          | Record<string, unknown>
-                          | undefined) || {};
-                      updateContent({
-                        contacts: [
-                          {
-                            ...currentContact,
-                            name: {
-                              ...currentName,
-                              formatted_name: event.target.value,
-                              first_name:
-                                String(currentName.first_name || "").trim() ||
-                                event.target.value.split(" ")[0] ||
-                                event.target.value
-                            }
-                          }
-                        ]
-                      });
                     }}
-                  />
-                </Field>
-                <Field label="Phone number">
-                  <ContactPhoneField
-                    content={content}
-                    disabled={readOnly}
-                    onChange={(phone) => {
-                      const currentContact =
-                        ((
-                          content.contacts as
-                            | Array<Record<string, unknown>>
-                            | undefined
-                        )?.[0] as Record<string, unknown> | undefined) || {};
-                      const currentPhones =
-                        (currentContact.phones as
-                          | Array<Record<string, unknown>>
-                          | undefined) || [];
-                      updateContent({
-                        contacts: [
-                          {
-                            ...currentContact,
-                            phones: [
-                              {
-                                ...(currentPhones[0] || {}),
-                                phone,
-                                type: "WORK"
-                              }
-                            ]
-                          }
-                        ]
-                      });
-                    }}
-                  />
-                </Field>
-                <Field label="Email (optional)">
-                  <Input
-                    type="email"
-                    value={String(
-                      ((
-                        (
-                          content.contacts as
-                            | Array<Record<string, unknown>>
-                            | undefined
-                        )?.[0]?.emails as
-                          | Array<Record<string, unknown>>
-                          | undefined
-                      )?.[0]?.email as string | undefined) || ""
-                    )}
-                    disabled={readOnly}
-                    placeholder="support@example.com"
-                    onChange={(event) => {
-                      const currentContact =
-                        ((
-                          content.contacts as
-                            | Array<Record<string, unknown>>
-                            | undefined
-                        )?.[0] as Record<string, unknown> | undefined) || {};
-                      const currentEmails =
-                        (currentContact.emails as
-                          | Array<Record<string, unknown>>
-                          | undefined) || [];
-                      updateContent({
-                        contacts: [
-                          {
-                            ...currentContact,
-                            emails: [
-                              {
-                                ...(currentEmails[0] || {}),
-                                email: event.target.value,
-                                type: "WORK"
-                              }
-                            ]
-                          }
-                        ]
-                      });
-                    }}
-                  />
-                </Field>
-                <Field label="Website (optional)">
-                  <Input
-                    type="url"
-                    value={String(
-                      ((
-                        (
-                          content.contacts as
-                            | Array<Record<string, unknown>>
-                            | undefined
-                        )?.[0]?.urls as
-                          | Array<Record<string, unknown>>
-                          | undefined
-                      )?.[0]?.url as string | undefined) || ""
-                    )}
-                    disabled={readOnly}
-                    placeholder="https://example.com"
-                    onChange={(event) => {
-                      const currentContact =
-                        ((
-                          content.contacts as
-                            | Array<Record<string, unknown>>
-                            | undefined
-                        )?.[0] as Record<string, unknown> | undefined) || {};
-                      const currentUrls =
-                        (currentContact.urls as
-                          | Array<Record<string, unknown>>
-                          | undefined) || [];
-                      updateContent({
-                        contacts: [
-                          {
-                            ...currentContact,
-                            urls: [
-                              {
-                                ...(currentUrls[0] || {}),
-                                url: event.target.value,
-                                type: "WORK"
-                              }
-                            ]
-                          }
-                        ]
-                      });
-                    }}
-                  />
-                </Field>
-              </div>
-            )}
-
-            {node.data.blockType === "product_carousel" && (
-              <div className="space-y-3">
-                <Field label="Catalog ID">
-                  <Input
-                    data-issue-field="content.catalogId"
-                    value={String(content.catalogId || "")}
-                    disabled={readOnly}
-                    onChange={(event) =>
-                      updateContent({ catalogId: event.target.value })
-                    }
-                  />
-                </Field>
-                <JsonEditor
-                  label="Product sections JSON"
-                  value={content.sections || []}
-                  onChange={(sections) =>
-                    updateContent({
-                      sections: sections as Array<Record<string, unknown>>
-                    })
-                  }
-                  readOnly={readOnly}
-                />
-              </div>
-            )}
-
-            {node.data.blockType === "generic_carousel" && (
-              <div className="space-y-3">
-                <Field label="Intro message">
-                  <Textarea
-                    value={String(content.bodyText || "")}
-                    disabled={readOnly}
-                    data-issue-field="content.bodyText"
-                    onChange={(event) =>
-                      updateContent({ bodyText: event.target.value })
-                    }
-                  />
-                  <CharCounter
-                    value={content.bodyText}
-                    max={INTERACTIVE_BODY_MAX}
-                  />
-                  {formatHint}
-                </Field>
-                <GenericCarouselEditor
-                  cards={getCarouselCards(content)}
-                  onChange={(cards) => updateContent({ cards })}
-                  openMediaPicker={openMediaPicker}
-                  readOnly={readOnly}
-                />
-              </div>
-            )}
-
-            {(blockType === "buttons" || blockType === "product_carousel") && (
-              <div className="space-y-3 rounded-lg border p-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold">
-                      {blockType === "buttons" ? "Buttons" : "Options"}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {isWebsiteMode
-                        ? "One website button. Change it under Next steps."
-                        : blockType === "buttons"
-                          ? "Up to 3 reply buttons. Choose what each does under Next steps."
-                          : "Choose what each option does under Next steps."}
-                    </p>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={
-                      readOnly ||
-                      isWebsiteMode ||
-                      (blockType === "buttons" && node.data.actions.length >= 3)
-                    }
-                    onClick={() =>
-                      updateNode(node.id, (data) => ({
-                        ...data,
-                        actions: [
-                          ...data.actions,
-                          makeAction(
-                            `Option ${data.actions.length + 1}`,
-                            data.actions.map((action) => action.replyId || "")
-                          )
-                        ]
-                      }))
-                    }
                   >
-                    <Plus className="size-4" />
-                    Add
+                    <MapPin className="size-4" />
+                    Use my current location
                   </Button>
-                </div>
-
-                {node.data.actions.map((action) => (
-                  <div
-                    key={action.actionId}
-                    className="space-y-1 rounded-md bg-muted/40 p-2"
-                  >
-                    <div className="flex gap-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <Field label="Latitude">
                       <Input
-                        value={action.label || ""}
-                        placeholder="Button label"
-                        disabled={readOnly}
-                        data-action-id={action.actionId}
-                        maxLength={
-                          blockType === "buttons"
-                            ? REPLY_BUTTON_LABEL_MAX
-                            : LIST_ROW_TITLE_MAX
+                        type="number"
+                        value={
+                          typeof content.latitude === "number"
+                            ? content.latitude
+                            : ""
                         }
-                        onChange={(event) =>
-                          updateAction(action.actionId, {
-                            label: event.target.value
-                          })
-                        }
-                      />
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="shrink-0 text-destructive"
-                        aria-label={`Remove ${action.label || "button"}`}
-                        disabled={readOnly}
-                        onClick={() => removeAction(action.actionId)}
-                      >
-                        <Trash2 className="size-4" />
-                      </Button>
-                    </div>
-                    <CharCounter
-                      value={action.label}
-                      max={
-                        blockType === "buttons"
-                          ? REPLY_BUTTON_LABEL_MAX
-                          : LIST_ROW_TITLE_MAX
-                      }
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </TabsContent>
-
-        <TabsContent
-          value="next"
-          data-panel-scroll
-          className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 [scrollbar-color:hsl(var(--border))_transparent] [scrollbar-width:thin]"
-        >
-          {nextOptions.length ? (
-            <div className="space-y-2">
-              {nextOptions.map((option) => (
-                <div
-                  key={option.actionId}
-                  className="space-y-2 rounded-lg border p-3"
-                >
-                  <p className="truncate text-sm font-medium">
-                    &ldquo;{option.label}&rdquo;
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <span className="shrink-0 text-xs text-muted-foreground">
-                      When tapped:
-                    </span>
-                    <Select
-                      value={option.type}
-                      disabled={readOnly}
-                      onValueChange={(value) =>
-                        setOptionType(option, value as BotActionType)
-                      }
-                    >
-                      <SelectTrigger
-                        className="h-8 w-full"
-                        data-action-id={option.actionId}
-                      >
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {allowedActionTypes(blockType).map((type) => (
-                          <SelectItem key={type} value={type}>
-                            {actionTypeLabel(type)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  {option.type === "go_to_trigger" && (
-                    <div className="flex gap-2">
-                      <Combobox
-                        value={targets[option.actionId] || ""}
-                        options={targetChoices}
-                        placeholder="Choose a block"
-                        className="h-8 min-w-0 flex-1 text-xs"
-                        disabled={readOnly}
-                        onChange={(targetId) =>
-                          connectOption(option.actionId, targetId || null)
-                        }
-                      />
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-8 shrink-0"
-                            disabled={readOnly}
-                          >
-                            <Plus className="size-3.5" />
-                            New block
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-52">
-                          {blockPalette.map((group) => (
-                            <DropdownMenuGroup key={group.group}>
-                              <DropdownMenuLabel className="text-xs text-muted-foreground">
-                                {group.group}
-                              </DropdownMenuLabel>
-                              {group.items.map((item) => (
-                                <DropdownMenuItem
-                                  key={item.type}
-                                  onSelect={() =>
-                                    createConnectedBlock(
-                                      option.actionId,
-                                      item.type
-                                    )
-                                  }
-                                >
-                                  <item.icon className="size-4" />
-                                  {item.label}
-                                </DropdownMenuItem>
-                              ))}
-                            </DropdownMenuGroup>
-                          ))}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  )}
-                  {option.type === "open_url" && (
-                    <Input
-                      value={option.url || ""}
-                      placeholder="https://example.com"
-                      disabled={readOnly}
-                      data-issue-field={
-                        option.cardIndex !== undefined
-                          ? `content.cards.${option.cardIndex}.buttons.${option.buttonIndex}.url`
-                          : `action.${option.actionId}.url`
-                      }
-                      onChange={(event) =>
-                        setOptionUrl(option, event.target.value)
-                      }
-                    />
-                  )}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-              {blockType === "handoff_to_agent"
-                ? "The chat goes to your team after this message."
-                : "This message has nothing to tap, so it doesn't lead anywhere by itself."}
-            </p>
-          )}
-
-          <div className="space-y-3 rounded-lg border p-3">
-            <div className="flex items-center justify-between gap-2">
-              <p className="flex items-center gap-2 text-sm font-semibold">
-                <Timer className="size-4 text-primary" />
-                Follow-up
-              </p>
-              {hasAutomaticFollowUp && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="size-8 text-destructive"
-                  disabled={readOnly}
-                  tooltip="Remove follow-up"
-                  aria-label="Remove follow-up"
-                  onClick={removeAutomaticFollowUp}
-                >
-                  <Trash2 className="size-4" />
-                </Button>
-              )}
-            </div>
-            {!canHaveFollowUp ? (
-              <p className="text-xs text-muted-foreground">
-                This block can&apos;t send a follow-up.
-              </p>
-            ) : !hasAutomaticFollowUp || !followUpNode ? (
-              <>
-                <p className="text-xs text-muted-foreground">
-                  Send another message if the customer doesn&apos;t reply.
-                </p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={readOnly}
-                  data-issue-field="followUp"
-                  onClick={() => addAutomaticFollowUp()}
-                >
-                  <Plus className="size-4" />
-                  Add follow-up
-                </Button>
-              </>
-            ) : (
-              <>
-                <FollowUpDelayField
-                  node={node}
-                  readOnly={readOnly}
-                  updateNode={updateNode}
-                />
-                <Field label="Message type">
-                  <Select
-                    value={followUpNode.data.blockType}
-                    disabled={readOnly}
-                    onValueChange={(value) => {
-                      const nextBlockType = value as BotBlockType;
-                      updateNode(followUpNode.id, (data) => ({
-                        ...data,
-                        blockType: nextBlockType,
-                        content: defaultContent(nextBlockType),
-                        actions: []
-                      }));
-                    }}
-                  >
-                    <SelectTrigger className="w-full bg-white">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {[
-                        ["text", "Text"],
-                        ["image", "Image"],
-                        ["video", "Video"],
-                        ["document", "Document"]
-                      ].map(([value, label]) => (
-                        <SelectItem key={value} value={value}>
-                          {label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field>
-                {followUpNode.data.blockType === "text" ? (
-                  <Field label="Follow-up message">
-                    <Textarea
-                      className="min-h-28 bg-white"
-                      data-issue-field="followUp.text"
-                      value={String(followUpNode.data.content.text || "")}
-                      disabled={readOnly}
-                      placeholder="Write the message to send automatically"
-                      onChange={(event) =>
-                        updateFollowUpContent({ text: event.target.value })
-                      }
-                    />
-                    <CharCounter
-                      value={followUpNode.data.content.text}
-                      max={TEXT_MESSAGE_MAX}
-                    />
-                    {formatHint}
-                  </Field>
-                ) : (
-                  <>
-                    <MediaField
-                      node={followUpNode}
-                      readOnly={readOnly}
-                      openMediaPicker={(type) =>
-                        openMediaPicker(type, {
-                          kind: "node",
-                          nodeId: followUpNode.id
-                        })
-                      }
-                    />
-                    <Field label="Optional caption">
-                      <Textarea
-                        className="min-h-20 bg-white"
-                        value={String(followUpNode.data.content.caption || "")}
                         disabled={readOnly}
                         onChange={(event) =>
-                          updateFollowUpContent({
-                            caption: event.target.value
+                          updateContent({
+                            latitude:
+                              event.target.value === ""
+                                ? undefined
+                                : Number(event.target.value)
                           })
                         }
                       />
                     </Field>
-                  </>
-                )}
-              </>
-            )}
-          </div>
-        </TabsContent>
+                    <Field label="Longitude">
+                      <Input
+                        type="number"
+                        value={
+                          typeof content.longitude === "number"
+                            ? content.longitude
+                            : ""
+                        }
+                        disabled={readOnly}
+                        data-issue-field="content.longitude"
+                        onChange={(event) =>
+                          updateContent({
+                            longitude:
+                              event.target.value === ""
+                                ? undefined
+                                : Number(event.target.value)
+                          })
+                        }
+                      />
+                    </Field>
+                  </div>
+                  <Field label="Address">
+                    <Textarea
+                      value={String(
+                        content.address || content.locationAddress || ""
+                      )}
+                      disabled={readOnly}
+                      data-issue-field="content.address"
+                      onChange={(event) =>
+                        updateContent({ address: event.target.value })
+                      }
+                    />
+                  </Field>
+                </div>
+              )}
 
-        <TabsContent
-          value="settings"
-          data-panel-scroll
-          className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 [scrollbar-color:hsl(var(--border))_transparent] [scrollbar-width:thin]"
-        >
-          <Field label="Block name">
-            {/* Only the name changes: the internal key was set when the
+              {(node.data.blockType === "location_request" ||
+                node.data.blockType === "address_request") && (
+                <div className="grid gap-3">
+                  <Field
+                    label={
+                      node.data.blockType === "location_request"
+                        ? "Location request message"
+                        : "Address request message"
+                    }
+                  >
+                    <Textarea
+                      className="min-h-28"
+                      value={String(content.bodyText || "")}
+                      disabled={readOnly}
+                      maxLength={INTERACTIVE_BODY_MAX}
+                      data-issue-field="content.bodyText"
+                      onChange={(event) =>
+                        updateContent({ bodyText: event.target.value })
+                      }
+                    />
+                    <CharCounter
+                      value={content.bodyText}
+                      max={INTERACTIVE_BODY_MAX}
+                    />
+                  </Field>
+                  {node.data.blockType === "address_request" && (
+                    <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">
+                      Meta address request messages currently support India
+                      only. This block always sends{" "}
+                      <span className="font-semibold">country: IN</span>.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {node.data.blockType === "handoff_to_agent" && (
+                <div className="grid gap-3">
+                  <Field label="Message before handing to your team">
+                    <Textarea
+                      className="min-h-28"
+                      value={String(content.message || content.text || "")}
+                      disabled={readOnly}
+                      maxLength={TEXT_MESSAGE_MAX}
+                      data-issue-field="content.message"
+                      onChange={(event) =>
+                        updateContent({ message: event.target.value })
+                      }
+                    />
+                    {formatHint}
+                  </Field>
+                </div>
+              )}
+
+              {node.data.blockType === "contacts" && (
+                <div className="space-y-3 rounded-lg border p-3">
+                  <p className="text-sm font-semibold">Contact card</p>
+                  <Field label="Name shown on the contact card">
+                    <Input
+                      data-issue-field="content.contacts.0.name.formatted_name"
+                      value={String(
+                        (
+                          (
+                            content.contacts as
+                              | Array<Record<string, unknown>>
+                              | undefined
+                          )?.[0]?.name as Record<string, unknown> | undefined
+                        )?.formatted_name || ""
+                      )}
+                      disabled={readOnly}
+                      onChange={(event) => {
+                        const currentContact =
+                          ((
+                            content.contacts as
+                              | Array<Record<string, unknown>>
+                              | undefined
+                          )?.[0] as Record<string, unknown> | undefined) || {};
+                        const currentName =
+                          (currentContact.name as
+                            | Record<string, unknown>
+                            | undefined) || {};
+                        updateContent({
+                          contacts: [
+                            {
+                              ...currentContact,
+                              name: {
+                                ...currentName,
+                                formatted_name: event.target.value,
+                                first_name:
+                                  String(currentName.first_name || "").trim() ||
+                                  event.target.value.split(" ")[0] ||
+                                  event.target.value
+                              }
+                            }
+                          ]
+                        });
+                      }}
+                    />
+                  </Field>
+                  <Field label="Phone number">
+                    <ContactPhoneField
+                      content={content}
+                      disabled={readOnly}
+                      onChange={(phone) => {
+                        const currentContact =
+                          ((
+                            content.contacts as
+                              | Array<Record<string, unknown>>
+                              | undefined
+                          )?.[0] as Record<string, unknown> | undefined) || {};
+                        const currentPhones =
+                          (currentContact.phones as
+                            | Array<Record<string, unknown>>
+                            | undefined) || [];
+                        updateContent({
+                          contacts: [
+                            {
+                              ...currentContact,
+                              phones: [
+                                {
+                                  ...(currentPhones[0] || {}),
+                                  phone,
+                                  type: "WORK"
+                                }
+                              ]
+                            }
+                          ]
+                        });
+                      }}
+                    />
+                  </Field>
+                  <Field label="Email (optional)">
+                    <Input
+                      type="email"
+                      value={String(
+                        ((
+                          (
+                            content.contacts as
+                              | Array<Record<string, unknown>>
+                              | undefined
+                          )?.[0]?.emails as
+                            | Array<Record<string, unknown>>
+                            | undefined
+                        )?.[0]?.email as string | undefined) || ""
+                      )}
+                      disabled={readOnly}
+                      placeholder="support@example.com"
+                      onChange={(event) => {
+                        const currentContact =
+                          ((
+                            content.contacts as
+                              | Array<Record<string, unknown>>
+                              | undefined
+                          )?.[0] as Record<string, unknown> | undefined) || {};
+                        const currentEmails =
+                          (currentContact.emails as
+                            | Array<Record<string, unknown>>
+                            | undefined) || [];
+                        updateContent({
+                          contacts: [
+                            {
+                              ...currentContact,
+                              emails: [
+                                {
+                                  ...(currentEmails[0] || {}),
+                                  email: event.target.value,
+                                  type: "WORK"
+                                }
+                              ]
+                            }
+                          ]
+                        });
+                      }}
+                    />
+                  </Field>
+                  <Field label="Website (optional)">
+                    <Input
+                      type="url"
+                      value={String(
+                        ((
+                          (
+                            content.contacts as
+                              | Array<Record<string, unknown>>
+                              | undefined
+                          )?.[0]?.urls as
+                            | Array<Record<string, unknown>>
+                            | undefined
+                        )?.[0]?.url as string | undefined) || ""
+                      )}
+                      disabled={readOnly}
+                      placeholder="https://example.com"
+                      onChange={(event) => {
+                        const currentContact =
+                          ((
+                            content.contacts as
+                              | Array<Record<string, unknown>>
+                              | undefined
+                          )?.[0] as Record<string, unknown> | undefined) || {};
+                        const currentUrls =
+                          (currentContact.urls as
+                            | Array<Record<string, unknown>>
+                            | undefined) || [];
+                        updateContent({
+                          contacts: [
+                            {
+                              ...currentContact,
+                              urls: [
+                                {
+                                  ...(currentUrls[0] || {}),
+                                  url: event.target.value,
+                                  type: "WORK"
+                                }
+                              ]
+                            }
+                          ]
+                        });
+                      }}
+                    />
+                  </Field>
+                </div>
+              )}
+
+              {node.data.blockType === "product_carousel" && (
+                <div className="space-y-3">
+                  <Field label="Catalog ID">
+                    <Input
+                      data-issue-field="content.catalogId"
+                      value={String(content.catalogId || "")}
+                      disabled={readOnly}
+                      onChange={(event) =>
+                        updateContent({ catalogId: event.target.value })
+                      }
+                    />
+                  </Field>
+                  <JsonEditor
+                    label="Product sections JSON"
+                    value={content.sections || []}
+                    onChange={(sections) =>
+                      updateContent({
+                        sections: sections as Array<Record<string, unknown>>
+                      })
+                    }
+                    readOnly={readOnly}
+                  />
+                </div>
+              )}
+
+              {node.data.blockType === "generic_carousel" && (
+                <div className="space-y-3">
+                  <Field label="Intro message">
+                    <Textarea
+                      value={String(content.bodyText || "")}
+                      disabled={readOnly}
+                      data-issue-field="content.bodyText"
+                      onChange={(event) =>
+                        updateContent({ bodyText: event.target.value })
+                      }
+                    />
+                    <CharCounter
+                      value={content.bodyText}
+                      max={INTERACTIVE_BODY_MAX}
+                    />
+                    {formatHint}
+                  </Field>
+                  <GenericCarouselEditor
+                    cards={getCarouselCards(content)}
+                    onChange={(cards) => updateContent({ cards })}
+                    openMediaPicker={openMediaPicker}
+                    readOnly={readOnly}
+                  />
+                </div>
+              )}
+
+              {(blockType === "buttons" ||
+                blockType === "product_carousel") && (
+                <div className="space-y-3 rounded-lg border p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold">
+                        {blockType === "buttons" ? "Buttons" : "Options"}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {isWebsiteMode
+                          ? "One website button. Change it under Next steps."
+                          : blockType === "buttons"
+                            ? "Up to 3 reply buttons. Choose what each does under Next steps."
+                            : "Choose what each option does under Next steps."}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={
+                        readOnly ||
+                        isWebsiteMode ||
+                        (blockType === "buttons" &&
+                          node.data.actions.length >= 3)
+                      }
+                      onClick={() =>
+                        updateNode(node.id, (data) => ({
+                          ...data,
+                          actions: [
+                            ...data.actions,
+                            makeAction(
+                              `Option ${data.actions.length + 1}`,
+                              data.actions.map((action) => action.replyId || "")
+                            )
+                          ]
+                        }))
+                      }
+                    >
+                      <Plus className="size-4" />
+                      Add
+                    </Button>
+                  </div>
+
+                  {node.data.actions.map((action) => (
+                    <div
+                      key={action.actionId}
+                      className="space-y-1 rounded-md bg-muted/40 p-2"
+                    >
+                      <div className="flex gap-2">
+                        <Input
+                          value={action.label || ""}
+                          placeholder="Button label"
+                          disabled={readOnly}
+                          data-action-id={action.actionId}
+                          maxLength={
+                            blockType === "buttons"
+                              ? REPLY_BUTTON_LABEL_MAX
+                              : LIST_ROW_TITLE_MAX
+                          }
+                          onChange={(event) =>
+                            updateAction(action.actionId, {
+                              label: event.target.value
+                            })
+                          }
+                        />
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="shrink-0 text-destructive"
+                          aria-label={`Remove ${action.label || "button"}`}
+                          disabled={readOnly}
+                          onClick={() => removeAction(action.actionId)}
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </div>
+                      <CharCounter
+                        value={action.label}
+                        max={
+                          blockType === "buttons"
+                            ? REPLY_BUTTON_LABEL_MAX
+                            : LIST_ROW_TITLE_MAX
+                        }
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="next" className="space-y-4 p-4">
+            {nextOptions.length ? (
+              <div className="space-y-2">
+                {nextOptions.map((option) => (
+                  <div
+                    key={option.actionId}
+                    className="space-y-2 rounded-lg border p-3"
+                  >
+                    <p className="truncate text-sm font-medium">
+                      &ldquo;{option.label}&rdquo;
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <span className="shrink-0 text-xs text-muted-foreground">
+                        When tapped:
+                      </span>
+                      <Select
+                        value={option.type}
+                        disabled={readOnly}
+                        onValueChange={(value) =>
+                          setOptionType(option, value as BotActionType)
+                        }
+                      >
+                        <SelectTrigger
+                          className="h-8 w-full"
+                          data-action-id={option.actionId}
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {allowedActionTypes(blockType).map((type) => (
+                            <SelectItem key={type} value={type}>
+                              {actionTypeLabel(type)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {option.type === "go_to_trigger" && (
+                      <FlowBlockPicker
+                        value={targets[option.actionId]}
+                        blocks={blockChoices}
+                        currentBlockId={node.id}
+                        disabled={readOnly}
+                        onSelect={(targetId) =>
+                          connectOption(option.actionId, targetId)
+                        }
+                        onCreate={(type) =>
+                          createConnectedBlock(option.actionId, type)
+                        }
+                      />
+                    )}
+                    {option.type === "open_url" && (
+                      <Input
+                        value={option.url || ""}
+                        placeholder="https://example.com"
+                        disabled={readOnly}
+                        data-issue-field={
+                          option.cardIndex !== undefined
+                            ? `content.cards.${option.cardIndex}.buttons.${option.buttonIndex}.url`
+                            : `action.${option.actionId}.url`
+                        }
+                        onChange={(event) =>
+                          setOptionUrl(option, event.target.value)
+                        }
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                {blockType === "handoff_to_agent"
+                  ? "The chat goes to your team after this message."
+                  : "This message has nothing to tap, so it doesn't lead anywhere by itself."}
+              </p>
+            )}
+
+            <div className="space-y-3 rounded-lg border p-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="flex items-center gap-2 text-sm font-semibold">
+                  <Timer className="size-4 text-primary" />
+                  Follow-up
+                </p>
+                {hasAutomaticFollowUp && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 text-destructive"
+                    disabled={readOnly}
+                    tooltip="Remove follow-up"
+                    aria-label="Remove follow-up"
+                    onClick={removeAutomaticFollowUp}
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                )}
+              </div>
+              {!canHaveFollowUp ? (
+                <p className="text-xs text-muted-foreground">
+                  This block can&apos;t send a follow-up.
+                </p>
+              ) : !hasAutomaticFollowUp || !followUpNode ? (
+                <>
+                  <p className="text-xs text-muted-foreground">
+                    Send another message if the customer doesn&apos;t reply.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={readOnly}
+                    data-issue-field="followUp"
+                    onClick={() => addAutomaticFollowUp()}
+                  >
+                    <Plus className="size-4" />
+                    Add follow-up
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <FollowUpDelayField
+                    node={node}
+                    readOnly={readOnly}
+                    updateNode={updateNode}
+                  />
+                  <Field label="Message type">
+                    <Select
+                      value={followUpNode.data.blockType}
+                      disabled={readOnly}
+                      onValueChange={(value) => {
+                        const nextBlockType = value as BotBlockType;
+                        updateNode(followUpNode.id, (data) => ({
+                          ...data,
+                          blockType: nextBlockType,
+                          content: defaultContent(nextBlockType),
+                          actions: []
+                        }));
+                      }}
+                    >
+                      <SelectTrigger className="w-full bg-white">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[
+                          ["text", "Text"],
+                          ["image", "Image"],
+                          ["video", "Video"],
+                          ["document", "Document"]
+                        ].map(([value, label]) => (
+                          <SelectItem key={value} value={value}>
+                            {label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  {followUpNode.data.blockType === "text" ? (
+                    <Field label="Follow-up message">
+                      <Textarea
+                        className="min-h-28 bg-white"
+                        data-issue-field="followUp.text"
+                        value={String(followUpNode.data.content.text || "")}
+                        disabled={readOnly}
+                        placeholder="Write the message to send automatically"
+                        onChange={(event) =>
+                          updateFollowUpContent({ text: event.target.value })
+                        }
+                      />
+                      <CharCounter
+                        value={followUpNode.data.content.text}
+                        max={TEXT_MESSAGE_MAX}
+                      />
+                      {formatHint}
+                    </Field>
+                  ) : (
+                    <>
+                      <MediaField
+                        node={followUpNode}
+                        readOnly={readOnly}
+                        openMediaPicker={(type) =>
+                          openMediaPicker(type, {
+                            kind: "node",
+                            nodeId: followUpNode.id
+                          })
+                        }
+                      />
+                      <Field label="Optional caption">
+                        <Textarea
+                          className="min-h-20 bg-white"
+                          value={String(
+                            followUpNode.data.content.caption || ""
+                          )}
+                          disabled={readOnly}
+                          onChange={(event) =>
+                            updateFollowUpContent({
+                              caption: event.target.value
+                            })
+                          }
+                        />
+                      </Field>
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="settings" className="space-y-4 p-4">
+            <Field label="Block name">
+              {/* Only the name changes: the internal key was set when the
                 block was created, and templates, broadcasts, follow-ups and
                 sent buttons point at it. */}
-            <Input
-              value={node.data.label}
-              disabled={readOnly}
-              data-issue-field="name"
-              onChange={(event) =>
-                updateNode(node.id, (data) => ({
-                  ...data,
-                  label: event.target.value
-                }))
-              }
-            />
-          </Field>
-
-          {!isSystemBlock && (
-            <div className="rounded-lg border bg-muted/30 p-3">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-medium">Start block</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    The first message for new chats, and the reply when the bot
-                    doesn&apos;t understand.
-                  </p>
-                </div>
-                <Switch
-                  checked={isStart}
-                  disabled={readOnly}
-                  onCheckedChange={(checked) => {
-                    if (checked) setDefaultNode(node.id);
-                  }}
-                />
-              </div>
-            </div>
-          )}
-
-          <Field label="Internal key">
-            <div className="flex gap-2">
               <Input
-                readOnly
-                value={node.data.triggerKey}
-                className="font-mono text-xs"
-                aria-label="Internal key"
-              />
-              <Button
-                type="button"
-                size="icon"
-                variant="outline"
-                className="shrink-0"
-                aria-label="Copy internal key"
-                tooltip="Copy"
-                onClick={() => {
-                  void navigator.clipboard
-                    ?.writeText(node.data.triggerKey)
-                    .then(() => toast.success("Internal key copied."))
-                    .catch(() => toast.error("Couldn't copy the key."));
-                }}
-              >
-                <Copy className="size-4" />
-              </Button>
-            </div>
-            <p className="text-[11px] text-muted-foreground">
-              Templates, broadcasts and follow-ups use this key. It never
-              changes.
-            </p>
-          </Field>
-
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-muted-foreground">
-              Reached from
-            </Label>
-            {entryPoints === undefined ? (
-              <p className="text-sm text-muted-foreground">
-                Shown after the next save.
-              </p>
-            ) : entryPoints.length === 0 ? (
-              <p className="text-sm text-amber-800">Nothing leads here yet.</p>
-            ) : (
-              <ul className="space-y-1 text-sm">
-                {entryPoints.map((entry, index) => (
-                  <li key={index} className="flex gap-2">
-                    <span className="mt-2 size-1 shrink-0 rounded-full bg-muted-foreground" />
-                    {describeEntryPoint(entry)}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          <div className="space-y-2 border-t pt-4">
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="outline"
+                value={node.data.label}
                 disabled={readOnly}
-                tooltip={`Duplicate (${typeof navigator !== "undefined" && /Mac/.test(navigator.platform) ? "⌘D" : "Ctrl+D"})`}
-                onClick={onDuplicate}
-              >
-                <CopyPlus className="size-4" />
-                Duplicate block
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="text-destructive"
-                disabled={readOnly || node.data.locked || isStart}
-                onClick={onDelete}
-              >
-                {node.data.locked ? (
-                  <Lock className="size-4" />
-                ) : (
-                  <Trash2 className="size-4" />
-                )}
-                Delete block
-              </Button>
-            </div>
-            {node.data.locked ? (
-              <p className="text-xs text-muted-foreground">
-                System blocks can&apos;t be deleted.
+                data-issue-field="name"
+                onChange={(event) =>
+                  updateNode(node.id, (data) => ({
+                    ...data,
+                    label: event.target.value
+                  }))
+                }
+              />
+            </Field>
+
+            {!isSystemBlock && (
+              <div className="rounded-lg border bg-muted/30 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium">Start block</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      The first message for new chats, and the reply when the
+                      bot doesn&apos;t understand.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={isStart}
+                    disabled={readOnly}
+                    onCheckedChange={(checked) => {
+                      if (checked) setDefaultNode(node.id);
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+
+            <Field label="Internal key">
+              <div className="flex gap-2">
+                <Input
+                  readOnly
+                  value={node.data.triggerKey}
+                  className="font-mono text-xs"
+                  aria-label="Internal key"
+                />
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="outline"
+                  className="shrink-0"
+                  aria-label="Copy internal key"
+                  tooltip="Copy"
+                  onClick={() => {
+                    void navigator.clipboard
+                      ?.writeText(node.data.triggerKey)
+                      .then(() => toast.success("Internal key copied."))
+                      .catch(() => toast.error("Couldn't copy the key."));
+                  }}
+                >
+                  <Copy className="size-4" />
+                </Button>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Templates, broadcasts and follow-ups use this key. It never
+                changes.
               </p>
-            ) : isStart ? (
-              <p className="text-xs text-muted-foreground">
-                Make another block the start block to delete this one.
-              </p>
-            ) : null}
-          </div>
-        </TabsContent>
-      </Tabs>
-    </aside>
+            </Field>
+
+            {/* The live version is for looking only: no checks, copies or
+              deletes. */}
+            {!readOnly && (
+              <>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium text-muted-foreground">
+                    Reached from
+                  </Label>
+                  {entryPoints === undefined ? (
+                    <p className="text-sm text-muted-foreground">
+                      Shown after the next save.
+                    </p>
+                  ) : entryPoints.length === 0 ? (
+                    <p className="text-sm text-amber-800">
+                      Nothing leads here yet.
+                    </p>
+                  ) : (
+                    <ul className="space-y-1 text-sm">
+                      {entryPoints.map((entry, index) => (
+                        <li key={index} className="flex gap-2">
+                          <span className="mt-2 size-1 shrink-0 rounded-full bg-muted-foreground" />
+                          {describeEntryPoint(entry)}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                <div className="space-y-2 border-t pt-4">
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={readOnly}
+                      tooltip={`Duplicate (${typeof navigator !== "undefined" && /Mac/.test(navigator.platform) ? "⌘D" : "Ctrl+D"})`}
+                      onClick={onDuplicate}
+                    >
+                      <CopyPlus className="size-4" />
+                      Duplicate block
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="text-destructive"
+                      disabled={readOnly || node.data.locked || isStart}
+                      onClick={onDelete}
+                    >
+                      {node.data.locked ? (
+                        <Lock className="size-4" />
+                      ) : (
+                        <Trash2 className="size-4" />
+                      )}
+                      Delete block
+                    </Button>
+                  </div>
+                  {node.data.locked ? (
+                    <p className="text-xs text-muted-foreground">
+                      System blocks can&apos;t be deleted.
+                    </p>
+                  ) : isStart ? (
+                    <p className="text-xs text-muted-foreground">
+                      Make another block the start block to delete this one.
+                    </p>
+                  ) : null}
+                </div>
+              </>
+            )}
+          </TabsContent>
+        </Tabs>
+      </aside>
+    </div>
   );
 }
 

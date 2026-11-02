@@ -9,14 +9,22 @@ import {
   MessageSquareText,
   MousePointerClick,
   Package,
+  PanelLeftClose,
+  PanelLeftOpen,
   Search,
   UserRound,
   Video
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import { BotBlockType } from "@/client-api/types/bot.type";
+import {
+  BotAction,
+  BotBlockType,
+  BotCanvasNodeContent
+} from "@/client-api/types/bot.type";
 import { BotFlowReactNode } from "@/components/flows/BotFlowNode";
+import { WhatsAppFlowBlockPreview } from "@/components/flows/FlowBlockPreview";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -24,6 +32,7 @@ import {
   TooltipContent,
   TooltipTrigger
 } from "@/components/ui/tooltip";
+import { defaultContent, getContentActions } from "@/lib/flowBuilder";
 import { cn } from "@/lib/utils";
 
 type PaletteItem = {
@@ -91,13 +100,13 @@ export const blockPalette: Array<{ group: string; items: PaletteItem[] }> = [
     items: [
       {
         type: "location_request",
-        label: "Location",
+        label: "Ask for location",
         description: "Ask the customer to share where they are",
         icon: LocateFixed
       },
       {
         type: "address_request",
-        label: "Address (India)",
+        label: "Ask for address (India)",
         description: "Ask for a delivery address in India",
         icon: MapPin
       }
@@ -108,13 +117,13 @@ export const blockPalette: Array<{ group: string; items: PaletteItem[] }> = [
     items: [
       {
         type: "location",
-        label: "Location pin",
+        label: "Send location",
         description: "Send a place on the map",
         icon: MapPin
       },
       {
         type: "contacts",
-        label: "Contact card",
+        label: "Send contact",
         description: "Send a contact the customer can save",
         icon: ContactRound
       }
@@ -145,9 +154,108 @@ export const getBlockIcon = (type: BotBlockType) =>
   paletteByType.get(type)?.icon || Package;
 
 const SYSTEM_TRIGGER_KEYS = new Set(["OPT_IN", "OPT_OUT"]);
+const isSystemNode = (node: BotFlowReactNode) =>
+  SYSTEM_TRIGGER_KEYS.has(node.data.triggerKey);
+const isStartNode = (node: BotFlowReactNode) =>
+  Boolean(node.data.metadata?.isDefault);
+
+/**
+ * Blocks in the order the Outline shows them: the start block, the rest in
+ * flow order, then opt-in/opt-out. Hidden follow-up messages are left out.
+ */
+export const outlineOrder = <N extends BotFlowReactNode>(nodes: N[]): N[] => {
+  const visible = nodes.filter((node) => !node.hidden);
+  return [
+    ...visible.filter((node) => isStartNode(node) && !isSystemNode(node)),
+    ...visible.filter((node) => !isStartNode(node) && !isSystemNode(node)),
+    ...visible.filter(isSystemNode)
+  ];
+};
+
+// Each block type's default content, built once, for the hover preview.
+const previewByType = new Map<
+  BotBlockType,
+  { content: BotCanvasNodeContent; actions: BotAction[] }
+>();
+const getPalettePreview = (type: BotBlockType) => {
+  let preview = previewByType.get(type);
+  if (!preview) {
+    const content = defaultContent(type);
+    preview = {
+      content,
+      actions:
+        type === "buttons"
+          ? [
+              {
+                actionId: "preview_option",
+                type: "go_to_trigger",
+                replyId: "preview_option",
+                label: "Option 1"
+              }
+            ]
+          : getContentActions(type, content)
+    };
+    previewByType.set(type, preview);
+  }
+  return preview;
+};
 
 const matches = (text: string, query: string) =>
   text.toLowerCase().includes(query.trim().toLowerCase());
+
+const dragBlock = (event: React.DragEvent, type: BotBlockType) => {
+  event.dataTransfer.setData("application/whatching-block", type);
+  event.dataTransfer.effectAllowed = "move";
+};
+
+function PaletteTile({
+  item,
+  readOnly,
+  onAdd
+}: {
+  item: PaletteItem;
+  readOnly: boolean;
+  onAdd: (type: BotBlockType) => void;
+}) {
+  const preview = getPalettePreview(item.type);
+  return (
+    <Tooltip delayDuration={400}>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          draggable={!readOnly}
+          disabled={readOnly}
+          onDragStart={(event) => dragBlock(event, item.type)}
+          onClick={() => onAdd(item.type)}
+          className={cn(
+            "flex h-9 w-full items-center gap-2.5 rounded-md px-2 text-left text-sm transition hover:bg-white hover:shadow-xs",
+            readOnly ? "cursor-not-allowed opacity-50" : "cursor-grab"
+          )}
+        >
+          <item.icon className="size-4 shrink-0 text-primary" />
+          <span className="truncate">{item.label}</span>
+        </button>
+      </TooltipTrigger>
+      <TooltipContent
+        side="right"
+        align="start"
+        className="max-w-none border-0 bg-transparent p-0 shadow-none"
+      >
+        <div className="w-64 space-y-1.5 rounded-lg border bg-white p-2 shadow-md">
+          <p className="px-1 text-xs text-muted-foreground">
+            {item.description}
+          </p>
+          <WhatsAppFlowBlockPreview
+            blockType={item.type}
+            content={preview.content}
+            actions={preview.actions}
+            showClose={false}
+          />
+        </div>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 function AddTab({
   readOnly,
@@ -171,6 +279,11 @@ function AddTab({
 
   return (
     <div className="space-y-3">
+      {readOnly && (
+        <p className="text-xs text-muted-foreground">
+          Go back to editing to add blocks.
+        </p>
+      )}
       <div className="relative">
         <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
         <Input
@@ -178,50 +291,23 @@ function AddTab({
           placeholder="Search blocks"
           aria-label="Search blocks"
           className="h-8 bg-white pl-8 text-sm"
+          disabled={readOnly}
           onChange={(event) => setQuery(event.target.value)}
         />
       </div>
       {groups.map((group) => (
-        <div key={group.group} className="space-y-1.5">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <div key={group.group} className="space-y-0.5">
+          <p className="px-2 pb-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             {group.group}
           </p>
-          <div className="grid grid-cols-2 gap-1.5">
-            {group.items.map((item) => {
-              const Icon = item.icon;
-              return (
-                <Tooltip key={item.type}>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      draggable={!readOnly}
-                      disabled={readOnly}
-                      onDragStart={(event) => {
-                        event.dataTransfer.setData(
-                          "application/whatching-block",
-                          item.type
-                        );
-                        event.dataTransfer.effectAllowed = "move";
-                      }}
-                      onClick={() => onAdd(item.type)}
-                      className={cn(
-                        "flex min-h-14 flex-col items-center justify-center gap-1 rounded-lg border bg-white p-2 text-center text-xs font-medium shadow-xs transition hover:border-primary/40 hover:bg-primary/5",
-                        readOnly
-                          ? "cursor-not-allowed opacity-55"
-                          : "cursor-grab"
-                      )}
-                    >
-                      <Icon className="size-4 text-primary" />
-                      {item.label}
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="right">
-                    {item.description}
-                  </TooltipContent>
-                </Tooltip>
-              );
-            })}
-          </div>
+          {group.items.map((item) => (
+            <PaletteTile
+              key={item.type}
+              item={item}
+              readOnly={readOnly}
+              onAdd={onAdd}
+            />
+          ))}
         </div>
       ))}
       {!groups.length && (
@@ -242,21 +328,12 @@ function OutlineTab({
 }) {
   const [query, setQuery] = useState("");
   const { main, system } = useMemo(() => {
-    const visible = nodes.filter(
-      (node) =>
-        !node.hidden && (!query.trim() || matches(node.data.label, query))
+    const ordered = outlineOrder(nodes).filter(
+      (node) => !query.trim() || matches(node.data.label, query)
     );
-    const isSystem = (node: BotFlowReactNode) =>
-      SYSTEM_TRIGGER_KEYS.has(node.data.triggerKey);
-    const isStart = (node: BotFlowReactNode) =>
-      Boolean(node.data.metadata?.isDefault);
     return {
-      // The start block first, then the rest in flow order.
-      main: [
-        ...visible.filter((node) => isStart(node) && !isSystem(node)),
-        ...visible.filter((node) => !isStart(node) && !isSystem(node))
-      ],
-      system: visible.filter(isSystem)
+      main: ordered.filter((node) => !isSystemNode(node)),
+      system: ordered.filter(isSystemNode)
     };
   }, [nodes, query]);
 
@@ -274,7 +351,7 @@ function OutlineTab({
         >
           <Icon className="size-3.5 shrink-0 text-primary" />
           <span className="min-w-0 flex-1 truncate">{node.data.label}</span>
-          {Boolean(node.data.metadata?.isDefault) && (
+          {isStartNode(node) && (
             <span className="shrink-0 text-[10px] font-semibold uppercase text-primary">
               Start
             </span>
@@ -327,26 +404,134 @@ function OutlineTab({
   );
 }
 
+// The rail shrunk to icons: expand, plus one button per block type.
+function IconStrip({
+  readOnly,
+  onAdd,
+  onExpand
+}: {
+  readOnly: boolean;
+  onAdd: (type: BotBlockType) => void;
+  onExpand: () => void;
+}) {
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="size-8"
+        tooltip="Show the block list"
+        aria-label="Show the block list"
+        onClick={onExpand}
+      >
+        <PanelLeftOpen className="size-4" />
+      </Button>
+      <span className="my-1 h-px w-6 bg-border" />
+      {blockPalette.flatMap((group) =>
+        group.items.map((item) => (
+          <Button
+            key={item.type}
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-8"
+            draggable={!readOnly}
+            disabled={readOnly}
+            tooltip={`Add ${item.label}`}
+            aria-label={`Add ${item.label}`}
+            onDragStart={(event) => dragBlock(event, item.type)}
+            onClick={() => onAdd(item.type)}
+          >
+            <item.icon className="size-4 text-primary" />
+          </Button>
+        ))
+      )}
+    </div>
+  );
+}
+
 /** The left rail: add blocks, or find one already in the flow. */
 export function FlowBlockLibrary({
   readOnly,
   nodes,
   selectedNodeId,
+  issueCounts,
+  collapsed,
+  onCollapsedChange,
   onAdd,
   onSelectNode
 }: {
   readOnly: boolean;
   nodes: BotFlowReactNode[];
   selectedNodeId: string | null;
+  issueCounts: { errors: number; warnings: number };
+  collapsed: boolean;
+  onCollapsedChange: (collapsed: boolean) => void;
   onAdd: (type: BotBlockType) => void;
   onSelectNode: (nodeId: string) => void;
 }) {
+  const blockCount = nodes.filter((node) => !node.hidden).length;
+  // Chosen once the flow has loaded: a flow beyond the 3 system blocks
+  // opens on its outline, a new one on the palette.
+  const [tab, setTab] = useState<"add" | "outline" | null>(null);
+  useEffect(() => {
+    if (tab === null && blockCount > 0) {
+      setTab(blockCount > 3 ? "outline" : "add");
+    }
+  }, [blockCount, tab]);
+
+  if (collapsed) {
+    return (
+      <IconStrip
+        readOnly={readOnly}
+        onAdd={onAdd}
+        onExpand={() => onCollapsedChange(false)}
+      />
+    );
+  }
+
   return (
-    <Tabs defaultValue="add" className="gap-3">
-      <TabsList className="w-full">
-        <TabsTrigger value="add">Add</TabsTrigger>
-        <TabsTrigger value="outline">Outline</TabsTrigger>
-      </TabsList>
+    <Tabs
+      value={tab ?? "add"}
+      onValueChange={(value) => setTab(value as "add" | "outline")}
+      className="gap-3"
+    >
+      <div className="flex items-center gap-1">
+        <TabsList className="min-w-0 flex-1">
+          <TabsTrigger value="add">Add</TabsTrigger>
+          <TabsTrigger value="outline" className="gap-1.5">
+            Outline · {blockCount}
+            {issueCounts.errors > 0 && (
+              <span
+                className="rounded-full bg-destructive px-1.5 text-[10px] font-semibold leading-4 text-white"
+                aria-label={`${issueCounts.errors} to fix`}
+              >
+                {issueCounts.errors}
+              </span>
+            )}
+            {issueCounts.warnings > 0 && (
+              <span
+                className="rounded-full bg-amber-500 px-1.5 text-[10px] font-semibold leading-4 text-white"
+                aria-label={`${issueCounts.warnings} warnings`}
+              >
+                {issueCounts.warnings}
+              </span>
+            )}
+          </TabsTrigger>
+        </TabsList>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-8 shrink-0"
+          tooltip="Hide the block list"
+          aria-label="Hide the block list"
+          onClick={() => onCollapsedChange(true)}
+        >
+          <PanelLeftClose className="size-4" />
+        </Button>
+      </div>
       <TabsContent value="add">
         <AddTab readOnly={readOnly} onAdd={onAdd} />
       </TabsContent>

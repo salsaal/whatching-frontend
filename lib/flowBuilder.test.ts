@@ -15,6 +15,7 @@ import {
   getFlowStatus,
   getOptionActionType,
   getPrimaryAction,
+  readOnlyNodeChanges,
   assignOptionIds,
   buildTargetByAction,
   countChars,
@@ -747,5 +748,24 @@ describe("describeEntryPoint", () => {
         label: "See prices"
       })
     ).toBe("Broadcast Diwali › See prices");
+  });
+});
+
+describe("readOnlyNodeChanges", () => {
+  it("lets measuring and selecting through, so the live view renders", () => {
+    const changes = readOnlyNodeChanges([
+      {
+        id: "a",
+        type: "dimensions",
+        dimensions: { width: 300, height: 200 }
+      },
+      { id: "a", type: "select", selected: true },
+      { id: "a", type: "position", position: { x: 10, y: 10 } },
+      { id: "a", type: "remove" }
+    ]);
+    expect(changes.map((change) => change.type)).toEqual([
+      "dimensions",
+      "select"
+    ]);
   });
 });

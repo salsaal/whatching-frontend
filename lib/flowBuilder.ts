@@ -1,4 +1,4 @@
-import type { Edge } from "@xyflow/react";
+import type { Edge, Node, NodeChange } from "@xyflow/react";
 
 import {
   BotAction,
@@ -572,6 +572,18 @@ export const getNodeOptions = (
     label: trimmed(action.label) || "Untitled option"
   }));
 };
+
+/**
+ * The node changes a read-only canvas (the live version) accepts: React
+ * Flow's measurements, without which nodes stay hidden, and selection.
+ * Moves and deletions are dropped.
+ */
+export const readOnlyNodeChanges = <N extends Node>(
+  changes: NodeChange<N>[]
+): NodeChange<N>[] =>
+  changes.filter(
+    (change) => change.type === "dimensions" || change.type === "select"
+  );
 
 // ---------------------------------------------------------------------------
 // Wires
