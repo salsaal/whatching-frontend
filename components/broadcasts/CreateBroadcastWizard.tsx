@@ -372,7 +372,7 @@ export function CreateBroadcastWizard({
       if (!needsPersonalise) return "";
       if (missingSlots.length) return "Fill every variable.";
       if (quickReplyButtons.length && triggers.hasNoLiveFlow)
-        return "Quick replies need a live flow on this number.";
+        return "Quick replies need an active flow on this number.";
       if (quickReplyButtons.length && triggers.isLoading)
         return "Loading the flow…";
       return "";
