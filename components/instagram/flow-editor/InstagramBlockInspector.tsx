@@ -1234,6 +1234,7 @@ export function InstagramBlockInspector({
   entryPoints,
   unreachableMessage,
   focusRequest,
+  readOnlyNote = "The current version is read-only.",
   onDuplicate,
   onDelete
 }: {
@@ -1257,6 +1258,8 @@ export function InstagramBlockInspector({
   entryPoints?: InstagramFlowEntryPoint[];
   unreachableMessage?: string;
   focusRequest: FocusRequest | null;
+  /** Why the panel is locked: viewing the current version, or a conflict. */
+  readOnlyNote?: string;
   onDuplicate: () => void;
   onDelete: () => void;
 }) {
@@ -1387,7 +1390,7 @@ export function InstagramBlockInspector({
             </div>
             {readOnly && (
               <p className="mt-2 text-xs text-muted-foreground">
-                The current version is read-only.
+                {readOnlyNote}
               </p>
             )}
           </div>
