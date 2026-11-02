@@ -32,7 +32,7 @@ export interface QuickReplyButtonEntry {
 }
 
 /**
- * The live flow's blocks for a sender. "Main menu" is what the backend runs
+ * The active flow's blocks for a sender. "Main menu" is what the backend runs
  * when no block is picked, so every quick reply always gets a route.
  */
 export function useQuickReplyTriggers(
@@ -92,7 +92,7 @@ export function NoLiveFlowCallout() {
       <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
       <div className="space-y-1">
         <p>
-          Quick replies need a live flow on this number. Without one, Meta
+          Quick replies need an active flow on this number. Without one, Meta
           delivers the buttons but nothing happens when customers tap them.
         </p>
         <Link
@@ -141,7 +141,7 @@ export function QuickReplyRouting({
         {senderLabel && (
           <>
             {" "}
-            Taps start blocks in the flow live on {senderLabel}
+            Taps start blocks in the flow active on {senderLabel}
             {flowName ? (
               <>
                 :{" "}
