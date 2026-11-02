@@ -12,6 +12,8 @@ import {
   assignActionReplyIds,
   cloneBlockOptions,
   describeEntryPoint,
+  FLOW_STATE_LABELS,
+  getFlowState,
   getFlowStatus,
   getOptionActionType,
   getPrimaryAction,
@@ -641,25 +643,26 @@ describe("getFlowStatus", () => {
   });
 
   it("follows the rules in order, first match wins", () => {
-    expect(getFlowStatus(live({ botEnabled: false }), changes()).label).toBe(
-      "Bot is off"
+    expect(getFlowStatus(live({ botEnabled: false }), changes())).toMatchObject(
+      { tone: "paused", label: "Paused · bot is off", href: "/bot/settings" }
     );
-    expect(getFlowStatus(live(), changes({ neverPublished: true })).label).toBe(
-      "Not live yet"
-    );
+    expect(
+      getFlowStatus(live(), changes({ neverPublished: true }))
+    ).toMatchObject({ tone: "draft", label: "Draft" });
     expect(getFlowStatus(live({ phoneNumbers: [] }), changes())).toMatchObject({
-      tone: "amber",
-      label: "Live, but no number uses it"
+      tone: "ready",
+      label: "Ready · not on any number",
+      href: "/bot/flows#flows-per-number"
     });
     expect(
       getFlowStatus(
         live(),
         changes({ hasUnpublishedChanges: true, changedBlockCount: 3 })
       )
-    ).toMatchObject({ tone: "amber", label: "Live · 3 changes not live yet" });
+    ).toMatchObject({ tone: "pending", label: "Active · 3 pending changes" });
     expect(getFlowStatus(live(), changes())).toMatchObject({
-      tone: "green",
-      label: "Live on +91 98765 43210"
+      tone: "active",
+      label: "Active on +91 98765 43210"
     });
   });
 
@@ -673,7 +676,7 @@ describe("getFlowStatus", () => {
       }),
       changes()
     );
-    expect(status.label).toBe("Live on 2 numbers");
+    expect(status.label).toBe("Active on 2 numbers");
     expect(status.numbers).toEqual(["+91 1", "+91 2"]);
   });
 });
@@ -695,10 +698,10 @@ describe("getPrimaryAction", () => {
   it("names the button for the flow's state", () => {
     expect(
       getPrimaryAction(changes({ neverPublished: true }), false, false)
-    ).toEqual({ label: "Go live", disabled: false });
+    ).toEqual({ label: "Activate", disabled: false });
     expect(
       getPrimaryAction(changes({ hasUnpublishedChanges: true }), true, false)
-    ).toEqual({ label: "Update live flow", disabled: false });
+    ).toEqual({ label: "Apply changes", disabled: false });
     expect(getPrimaryAction(changes(), true, false)).toEqual({
       label: "Up to date",
       disabled: true
@@ -706,9 +709,7 @@ describe("getPrimaryAction", () => {
   });
 
   it("treats unsaved edits as changes", () => {
-    expect(getPrimaryAction(changes(), true, true).label).toBe(
-      "Update live flow"
-    );
+    expect(getPrimaryAction(changes(), true, true).label).toBe("Apply changes");
   });
 });
 
@@ -767,5 +768,19 @@ describe("readOnlyNodeChanges", () => {
       "dimensions",
       "select"
     ]);
+  });
+});
+
+describe("getFlowState", () => {
+  it("is Paused, Draft, Ready or Active, first match wins", () => {
+    const state = (
+      botEnabled: boolean,
+      applied: boolean,
+      numberCount: number
+    ) => FLOW_STATE_LABELS[getFlowState({ botEnabled, applied, numberCount })];
+    expect(state(false, true, 2)).toBe("Paused");
+    expect(state(true, false, 2)).toBe("Draft");
+    expect(state(true, true, 0)).toBe("Ready");
+    expect(state(true, true, 1)).toBe("Active");
   });
 });

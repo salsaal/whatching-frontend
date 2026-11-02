@@ -93,7 +93,7 @@ export const isNoPublishedFlowError = (error: unknown) =>
   404;
 
 export const NO_PUBLISHED_FLOW_MESSAGE =
-  "Take a bot flow live to route quick replies to it";
+  "Activate a bot flow to route quick replies to it";
 
 export const listBotCanvases = async (): Promise<BotCanvasesResponse> => {
   const res = await api.get<BotCanvasesResponse>(BOT_ENDPOINTS.CANVASES);
@@ -255,7 +255,7 @@ export const getFlowInvalid = (
   if (body?.code !== "FLOW_INVALID") return null;
   const details = body.details as Partial<BotCanvasValidation> | undefined;
   return {
-    message: body.message || "This flow can't go live yet.",
+    message: body.message || "Can't apply changes yet.",
     issues: Array.isArray(details?.issues) ? details.issues : []
   };
 };

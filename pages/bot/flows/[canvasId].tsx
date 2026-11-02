@@ -91,6 +91,7 @@ import {
 import { FlowBlockPicker } from "@/components/flows/FlowBlockPicker";
 import { FlowCanvasToolbar } from "@/components/flows/FlowCanvasToolbar";
 import { FlowPhonePreview } from "@/components/flows/FlowPhonePreview";
+import { FlowStatusPill } from "@/components/flows/FlowStatusPill";
 import { FlowVersionHistoryDialog } from "@/components/flows/FlowVersionHistoryDialog";
 import { layoutFlow } from "@/components/flows/flowGraph";
 import FlowDiagramPreviewDialog from "@/components/flows/FlowDiagramPreviewDialog";
@@ -1119,7 +1120,7 @@ type DraftConflict = {
   /** What to retry after "Keep mine". */
   retry:
     | { kind: "save" }
-    | { kind: "go-live" }
+    | { kind: "apply" }
     | { kind: "discard" }
     | { kind: "restore"; versionId: string };
 };
@@ -1149,12 +1150,15 @@ function IssuesBar({
   open,
   onOpenChange,
   onSelect,
+  blockedApply,
   className
 }: {
   issues: BotFlowIssue[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSelect: (issue: BotFlowIssue) => void;
+  /** Activate / Apply changes was stopped by these errors. */
+  blockedApply?: boolean;
   className?: string;
 }) {
   const errors = issues.filter((issue) => issue.severity === "error");
@@ -1167,6 +1171,10 @@ function IssuesBar({
   ]
     .filter(Boolean)
     .join(" · ");
+  const heading =
+    blockedApply && errors.length
+      ? `Fix these before applying changes · ${summary}`
+      : summary;
 
   return (
     <div
@@ -1188,7 +1196,7 @@ function IssuesBar({
           {warnings.length > 0 && (
             <span className="size-2 rounded-full bg-amber-500" />
           )}
-          {summary}
+          {heading}
         </span>
         {open ? (
           <ChevronDown className="size-4 text-muted-foreground" />
@@ -1250,6 +1258,14 @@ function FlowsBuilder() {
   const [lastSavedAt, setLastSavedAt] = useState<string>("");
   const [issues, setIssues] = useState<BotFlowIssue[]>([]);
   const [issuesOpen, setIssuesOpen] = useState(false);
+  // Set when Activate / Apply changes was stopped by errors; cleared once
+  // there are none.
+  const [applyBlocked, setApplyBlocked] = useState(false);
+  useEffect(() => {
+    if (!issues.some((issue) => issue.severity === "error")) {
+      setApplyBlocked(false);
+    }
+  }, [issues]);
   const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null);
   const [conflict, setConflict] = useState<DraftConflict | null>(null);
   const [cachedOffer, setCachedOffer] =
@@ -1309,7 +1325,7 @@ function FlowsBuilder() {
   const lastRecordAtRef = useRef(0);
   const isDraggingRef = useRef(false);
   const isArrangingRef = useRef(false);
-  // Where the editor was looking before "View live version".
+  // Where the editor was looking before "View current version".
   const editViewportRef = useRef<Viewport | null>(null);
   const pendingLiveFitRef = useRef(false);
 
@@ -1911,19 +1927,20 @@ function FlowsBuilder() {
       queryClient.invalidateQueries({ queryKey: ["bot-canvases", orgId] });
       toast.success(
         wasNeverLive
-          ? "Your flow is live. Customers get the new version from their next message."
-          : "Live flow updated."
+          ? "Flow activated. Customers get it from their next message."
+          : "Changes applied. Customers get them from their next message."
       );
     } catch (error) {
       const draftConflict = getDraftConflict(error);
       if (draftConflict) {
-        openConflict(draftConflict.details, { kind: "go-live" });
+        openConflict(draftConflict.details, { kind: "apply" });
         return;
       }
       const invalid = getFlowInvalid(error);
       if (invalid) {
         setIssues(invalid.issues);
         setIssuesOpen(true);
+        setApplyBlocked(true);
         const first =
           invalid.issues.find((issue) => issue.severity === "error") ||
           invalid.issues[0];
@@ -1931,7 +1948,9 @@ function FlowsBuilder() {
         toast.error(invalid.message);
         return;
       }
-      toast.error(getApiErrorMessage(error, "Couldn't go live. Try again."));
+      toast.error(
+        getApiErrorMessage(error, "Couldn't apply changes. Try again.")
+      );
     }
   };
 
@@ -1946,6 +1965,7 @@ function FlowsBuilder() {
       !saveInFlightRef.current
     ) {
       setIssuesOpen(true);
+      setApplyBlocked(true);
       focusIssue(errors[0]);
       return;
     }
@@ -2015,8 +2035,8 @@ function FlowsBuilder() {
       setLastSavedAt(formatTime());
       toast.success(
         target.kind === "discard"
-          ? "Back to the live version."
-          : "Version copied into your editor. Update the live flow when you're ready."
+          ? "Pending changes discarded."
+          : "Version copied into your editor. Apply changes when you're ready."
       );
       return true;
     } catch (error) {
@@ -2043,7 +2063,7 @@ function FlowsBuilder() {
     const { retry } = conflict;
     conflictRef.current = false;
     setConflict(null);
-    if (retry.kind === "go-live") {
+    if (retry.kind === "apply") {
       void goLive();
     } else if (retry.kind === "save") {
       void saveNow();
@@ -2849,24 +2869,7 @@ function FlowsBuilder() {
     : {};
 
   const statusPill = (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
-        flowStatus.tone === "green" && "bg-emerald-50 text-emerald-800",
-        flowStatus.tone === "amber" && "bg-amber-50 text-amber-800",
-        flowStatus.tone === "grey" && "bg-muted text-muted-foreground"
-      )}
-    >
-      <span
-        className={cn(
-          "size-1.5 rounded-full",
-          flowStatus.tone === "green" && "bg-emerald-500",
-          flowStatus.tone === "amber" && "bg-amber-500",
-          flowStatus.tone === "grey" && "bg-slate-400"
-        )}
-      />
-      {flowStatus.label}
-    </span>
+    <FlowStatusPill tone={flowStatus.tone} label={flowStatus.label} />
   );
 
   return (
@@ -2915,7 +2918,7 @@ function FlowsBuilder() {
                   flowStatus.numbers?.length
                     ? `Answers on ${flowStatus.numbers.join(", ")}`
                     : "",
-                  liveSince ? `Live since ${liveSince}` : ""
+                  liveSince ? `Current since ${liveSince}` : ""
                 ]
                   .filter(Boolean)
                   .join(". ")}
@@ -2988,14 +2991,14 @@ function FlowsBuilder() {
                   onSelect={enterLiveView}
                 >
                   <Eye className="size-4" />
-                  View live version
+                  View current version
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   disabled={!canDiscard || isLiveView}
                   onSelect={() => setDiscardOpen(true)}
                 >
                   <Undo2 className="size-4" />
-                  Discard changes
+                  Discard pending changes
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   disabled={!canvasName}
@@ -3166,7 +3169,8 @@ function FlowsBuilder() {
             {isLiveView && (
               <div className="absolute inset-x-0 top-0 z-10 flex flex-wrap items-center justify-between gap-2 border-b bg-sky-50 px-4 py-2 text-sm text-sky-900">
                 <span>
-                  You&apos;re viewing the live version. It&apos;s read-only.
+                  You&apos;re viewing the current version customers get.
+                  It&apos;s read-only.
                 </span>
                 <Button size="sm" variant="outline" onClick={exitLiveView}>
                   Back to editing
@@ -3197,6 +3201,7 @@ function FlowsBuilder() {
                 open={issuesOpen}
                 onOpenChange={setIssuesOpen}
                 onSelect={focusIssue}
+                blockedApply={applyBlocked}
                 className={minimapVisible ? "right-48" : "right-4"}
               />
             )}
@@ -3362,11 +3367,13 @@ function FlowsBuilder() {
       <AlertDialog open={discardOpen} onOpenChange={setDiscardOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Go back to the live version?</AlertDialogTitle>
-            <AlertDialogDescription>
+            <AlertDialogTitle>
               {changeCount > 0
-                ? `Your ${changeCount} change${changeCount === 1 ? "" : "s"} will be lost.`
-                : "Your changes will be lost."}
+                ? `Discard ${changeCount} pending change${changeCount === 1 ? "" : "s"} and go back to the current version?`
+                : "Discard pending changes and go back to the current version?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This can&apos;t be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -3375,7 +3382,7 @@ function FlowsBuilder() {
               className="bg-destructive text-white hover:bg-destructive/90"
               onClick={() => void replaceDraft({ kind: "discard" })}
             >
-              Discard changes
+              Discard pending changes
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -3585,7 +3592,7 @@ function PropertiesPanel({
       <aside className="overflow-y-auto border-l bg-white p-4">
         <div className="rounded-xl border border-dashed bg-muted/30 p-6 text-center text-sm text-muted-foreground">
           {readOnly
-            ? "You're viewing the live version. Click a block to see its details."
+            ? "You're viewing the current version customers get. Click a block to see its details."
             : "Select a block to edit its message and where it leads."}
         </div>
       </aside>
@@ -3859,7 +3866,7 @@ function PropertiesPanel({
             </div>
             {readOnly && (
               <p className="mt-2 text-xs text-muted-foreground">
-                The live version is read-only.
+                The current version is read-only.
               </p>
             )}
           </div>
@@ -4813,7 +4820,7 @@ function PropertiesPanel({
               </p>
             </Field>
 
-            {/* The live version is for looking only: no checks, copies or
+            {/* The current version is for looking only: no checks, copies or
               deletes. */}
             {!readOnly && (
               <>

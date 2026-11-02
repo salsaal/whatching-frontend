@@ -126,8 +126,8 @@ function NumberFlowRow({
         <p className="flex gap-1.5 text-xs text-amber-800">
           <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
           {defaultCanvas
-            ? `${staleName} isn't live yet, so ${defaultCanvas.name} is running instead.`
-            : `${staleName} isn't live yet, so nothing is running.`}
+            ? `${staleName} is still a draft, so ${defaultCanvas.name} is running instead.`
+            : `${staleName} is still a draft, so nothing is running.`}
         </p>
       )}
     </div>
@@ -180,7 +180,7 @@ export function NumberFlowsPanel() {
   });
 
   return (
-    // The flow editor's "Live, but no number uses it" links here.
+    // The flow editor's "Ready · not on any number" links here.
     <section
       id="flows-per-number"
       className="scroll-mt-4 space-y-4 rounded-lg bg-white p-5 shadow-xs"
@@ -201,7 +201,7 @@ export function NumberFlowsPanel() {
 
       {!publishedCanvases.length && (
         <p className="text-xs text-muted-foreground">
-          Take a flow live to pick it here.
+          Activate a flow to pick it here.
         </p>
       )}
 

@@ -14,15 +14,15 @@ const version = (overrides: Partial<BotCanvasVersion> = {}) => ({
 });
 
 describe("describeVersion", () => {
-  it("says Live since only for the live version", () => {
+  it("says Current since only for the current version", () => {
     expect(describeVersion(version({ isLive: true }))).toBe(
-      "Version 12 · Live since 31 Oct, 3:02 pm · by Zaki · 33 blocks"
+      "Version 12 · Current since 31 Oct, 3:02 pm · by Zaki · 33 blocks"
     );
   });
 
-  it("says Went live for older versions", () => {
+  it("says Applied for older versions", () => {
     expect(describeVersion(version())).toBe(
-      "Version 12 · Went live 31 Oct, 3:02 pm · by Zaki · 33 blocks"
+      "Version 12 · Applied 31 Oct, 3:02 pm · by Zaki · 33 blocks"
     );
   });
 });

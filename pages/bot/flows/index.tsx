@@ -33,7 +33,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -48,7 +47,10 @@ import { Label } from "@/components/ui/label";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { QueryErrorState } from "@/components/shared/QueryErrorState";
 import { CardGridLoadingSkeleton } from "@/components/ui/loading-skeletons";
+import { FlowStatusPill } from "@/components/flows/FlowStatusPill";
+import { useBotSettings } from "@/hooks/useBotSettings";
 import { isPublishedCanvas, useLiveFlows } from "@/hooks/useLiveFlows";
+import { FLOW_STATE_LABELS, getFlowState } from "@/lib/flowBuilder";
 import { useOrganizationStore } from "@/stores/organizationStore";
 import BotLayout from "@/components/bot/BotLayout";
 
@@ -87,6 +89,7 @@ function FlowsPageContent() {
     refetch,
     isFetching
   } = useLiveFlows();
+  const { settings: botSettings } = useBotSettings();
   const canvasDetailQueries = useQueries({
     queries: canvases.map((canvas) => ({
       queryKey: ["bot-canvas-detail", activeOrganization?._id, canvas._id],
@@ -199,13 +202,19 @@ function FlowsPageContent() {
               const hasPublishedVersion = isPublishedCanvas(canvas);
               // Same rule as the number dropdowns: a number's own flow,
               // else the default.
-              const liveOn = numbers
+              const answeringOn = numbers
                 .filter(
                   (number) => effectiveCanvasFor(number)?._id === canvas._id
                 )
                 .map(
                   (number) => number.displayPhoneNumber || number.phoneNumberId
                 );
+              // Same rules as the status pill in the flow editor.
+              const flowState = getFlowState({
+                botEnabled: botSettings?.isBotEnabled ?? true,
+                applied: hasPublishedVersion,
+                numberCount: answeringOn.length
+              });
               const isNewNumbersFlow =
                 defaultCanvas?._id === canvas._id && numbers.length >= 2;
               const detail = canvasDetailById.get(canvas._id);
@@ -233,23 +242,24 @@ function FlowsPageContent() {
                           Updated {formatDate(canvas.updatedAt)}
                         </p>
                       </div>
-                      <Badge
-                        variant={hasPublishedVersion ? "default" : "secondary"}
-                      >
-                        {hasPublishedVersion ? "Live" : "Not live yet"}
-                      </Badge>
+                      <FlowStatusPill
+                        tone={flowState}
+                        label={FLOW_STATE_LABELS[flowState]}
+                      />
                     </div>
 
                     <div className="space-y-1 text-sm">
                       <p>
-                        <span className="text-muted-foreground">Live on: </span>
-                        {liveOn.length ? (
+                        <span className="text-muted-foreground">
+                          Answering on:{" "}
+                        </span>
+                        {answeringOn.length ? (
                           <span className="font-medium text-emerald-700">
-                            {liveOn.join(", ")}
+                            {answeringOn.join(", ")}
                           </span>
                         ) : (
                           <span className="text-muted-foreground">
-                            Not live
+                            No number
                           </span>
                         )}
                         {isNewNumbersFlow && (
@@ -260,7 +270,7 @@ function FlowsPageContent() {
                       </p>
                       {!hasPublishedVersion && (
                         <p className="text-xs text-muted-foreground">
-                          Open it and click Go live to start using it
+                          Open it and click Activate to start using it
                         </p>
                       )}
                       <p className="text-muted-foreground">
@@ -376,7 +386,7 @@ function FlowsPageContent() {
             <AlertDialogTitle>Delete flow?</AlertDialogTitle>
             <AlertDialogDescription>
               This deletes {deleteCanvas?.name} -- permanently removed in 30
-              days. If it&apos;s live, switch your numbers to another flow
+              days. If it&apos;s active, switch your numbers to another flow
               before deleting.
             </AlertDialogDescription>
           </AlertDialogHeader>

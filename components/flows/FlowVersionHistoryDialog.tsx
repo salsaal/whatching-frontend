@@ -36,9 +36,9 @@ const formatWhen = (value: string) =>
 export const describeVersion = (version: BotCanvasVersion) =>
   [
     `Version ${version.versionNumber}`,
-    // Only the version customers get now is still live.
+    // Only the version customers get now is current.
     version.publishedAt
-      ? `${version.isLive ? "Live since" : "Went live"} ${formatWhen(version.publishedAt)}`
+      ? `${version.isLive ? "Current since" : "Applied"} ${formatWhen(version.publishedAt)}`
       : "",
     version.publishedBy?.name ? `by ${version.publishedBy.name}` : "",
     typeof version.blockCount === "number"
@@ -48,7 +48,7 @@ export const describeVersion = (version: BotCanvasVersion) =>
     .filter(Boolean)
     .join(" · ");
 
-/** Every version that went live, with View (live one) and Restore. */
+/** Every version that was applied, with View (current one) and Restore. */
 export function FlowVersionHistoryDialog({
   open,
   onOpenChange,
@@ -94,7 +94,7 @@ export function FlowVersionHistoryDialog({
               Version history
             </DialogTitle>
             <DialogDescription>
-              Every version of this flow that went live, newest first.
+              Every version of this flow that was applied, newest first.
             </DialogDescription>
           </DialogHeader>
           <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
@@ -112,7 +112,7 @@ export function FlowVersionHistoryDialog({
             )}
             {!isLoading && !isError && !versions.length && (
               <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                This flow hasn&apos;t gone live yet.
+                This flow hasn&apos;t been applied yet.
               </p>
             )}
             {versions.map((version) => (
@@ -123,7 +123,7 @@ export function FlowVersionHistoryDialog({
                 <div className="flex items-start justify-between gap-2">
                   <p>{describeVersion(version)}</p>
                   {version.isLive && (
-                    <Badge className="shrink-0">Live now</Badge>
+                    <Badge className="shrink-0">Current</Badge>
                   )}
                 </div>
                 <div className="flex gap-2">
@@ -166,8 +166,8 @@ export function FlowVersionHistoryDialog({
               Copy version {confirming?.versionNumber} into your editor?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Your current changes are replaced. Customers keep getting the live
-              flow until you update it.
+              Your pending changes are replaced. Customers keep getting the
+              current version until you apply changes.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

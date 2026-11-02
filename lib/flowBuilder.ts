@@ -574,7 +574,7 @@ export const getNodeOptions = (
 };
 
 /**
- * The node changes a read-only canvas (the live version) accepts: React
+ * The node changes a read-only canvas (the current version) accepts: React
  * Flow's measurements, without which nodes stay hidden, and selection.
  * Moves and deletions are dropped.
  */
@@ -804,8 +804,39 @@ export const cloneBlockOptions = (
 // Status and wording
 // ---------------------------------------------------------------------------
 
+/**
+ * Where a flow stands, in the words customers' owners see: Paused (bot
+ * off), Draft (never applied), Ready (applied, but no number uses it) or
+ * Active (answering on at least one number). First match wins.
+ */
+export type FlowState = "paused" | "draft" | "ready" | "active";
+
+export const getFlowState = ({
+  botEnabled,
+  applied,
+  numberCount
+}: {
+  botEnabled: boolean;
+  applied: boolean;
+  numberCount: number;
+}): FlowState => {
+  if (!botEnabled) return "paused";
+  if (!applied) return "draft";
+  return numberCount > 0 ? "active" : "ready";
+};
+
+export const FLOW_STATE_LABELS: Record<FlowState, string> = {
+  paused: "Paused",
+  draft: "Draft",
+  ready: "Ready",
+  active: "Active"
+};
+
+/** amber marks pending changes on an active flow. */
+export type FlowStatusTone = FlowState | "pending";
+
 export type FlowStatus = {
-  tone: "grey" | "amber" | "green";
+  tone: FlowStatusTone;
   label: string;
   /** Where clicking the pill takes you, if anywhere. */
   href?: string;
@@ -813,45 +844,55 @@ export type FlowStatus = {
   numbers?: string[];
 };
 
-/** The header's status pill: the first rule that matches wins. */
+/** The editor header's status pill. */
 export const getFlowStatus = (
   live: BotCanvasLiveInfo | undefined,
   changes: BotDraftChanges | undefined
 ): FlowStatus => {
-  if (live && !live.botEnabled) {
-    return { tone: "grey", label: "Bot is off", href: "/bot/settings" };
-  }
-  const neverLive = changes ? changes.neverPublished : !live?.hasLiveVersion;
-  if (neverLive) return { tone: "grey", label: "Not live yet" };
-  if (live && live.phoneNumbers.length === 0) {
+  const numbers = (live?.phoneNumbers || []).map(
+    (number) =>
+      number.displayPhoneNumber || number.verifiedName || "a WhatsApp number"
+  );
+  const state = getFlowState({
+    botEnabled: live ? live.botEnabled : true,
+    applied: changes ? !changes.neverPublished : Boolean(live?.hasLiveVersion),
+    // Without live info, assume it answers somewhere rather than warn.
+    numberCount: live ? numbers.length : 1
+  });
+  if (state === "paused") {
     return {
-      tone: "amber",
-      label: "Live, but no number uses it",
+      tone: "paused",
+      label: "Paused · bot is off",
+      href: "/bot/settings"
+    };
+  }
+  if (state === "draft") return { tone: "draft", label: "Draft" };
+  if (state === "ready") {
+    return {
+      tone: "ready",
+      label: "Ready · not on any number",
       href: "/bot/flows#flows-per-number"
     };
   }
   if (changes?.hasUnpublishedChanges) {
     const count = changes.changedBlockCount;
     return {
-      tone: "amber",
+      tone: "pending",
       label:
         count > 0
-          ? `Live · ${count} change${count === 1 ? "" : "s"} not live yet`
-          : "Live · changes not live yet"
+          ? `Active · ${count} pending change${count === 1 ? "" : "s"}`
+          : "Active · pending changes",
+      numbers
     };
   }
-  const numbers = (live?.phoneNumbers || []).map(
-    (number) =>
-      number.displayPhoneNumber || number.verifiedName || "a WhatsApp number"
-  );
   return {
-    tone: "green",
+    tone: "active",
     label:
       numbers.length === 1
-        ? `Live on ${numbers[0]}`
+        ? `Active on ${numbers[0]}`
         : numbers.length > 1
-          ? `Live on ${numbers.length} numbers`
-          : "Live",
+          ? `Active on ${numbers.length} numbers`
+          : "Active",
     numbers
   };
 };
@@ -863,10 +904,10 @@ export const getPrimaryAction = (
   hasUnsavedEdits: boolean
 ): { label: string; disabled: boolean } => {
   if (changes ? changes.neverPublished : !hasLiveVersion) {
-    return { label: "Go live", disabled: false };
+    return { label: "Activate", disabled: false };
   }
   if (hasUnsavedEdits || !changes || changes.hasUnpublishedChanges) {
-    return { label: "Update live flow", disabled: false };
+    return { label: "Apply changes", disabled: false };
   }
   return { label: "Up to date", disabled: true };
 };

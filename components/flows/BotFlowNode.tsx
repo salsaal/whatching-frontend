@@ -50,7 +50,7 @@ export interface BotFlowNodeData extends Record<string, unknown> {
   targets?: Record<string, string>;
   /** The worst problem the backend found on this block. */
   issueSeverity?: "error" | "warning";
-  /** Changed since the live version. */
+  /** Changed since the current version (a pending change). */
   changed?: boolean;
 }
 
@@ -180,8 +180,8 @@ function BotFlowNode({ id, data, selected }: NodeProps<BotFlowReactNode>) {
             {data.changed && (
               <span
                 className="size-2 shrink-0 rounded-full bg-sky-500"
-                title="Changed, not live yet"
-                aria-label="Changed, not live yet"
+                title="Pending change"
+                aria-label="Pending change"
               />
             )}
           </div>
