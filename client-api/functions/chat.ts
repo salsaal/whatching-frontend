@@ -129,6 +129,18 @@ export const markConversationRead = async (
   return res.data;
 };
 
+// Hands the chat back to the bot (clears the pause and handoff, Pending ->
+// Open) without resolving it.
+export const resumeConversationBot = async (
+  conversationId: string
+): Promise<ConversationResponse> => {
+  const res = await api.post<ConversationResponse>(
+    CONVERSATION_ENDPOINTS.RESUME_BOT(conversationId),
+    {}
+  );
+  return res.data;
+};
+
 export const sendConversationReply = async ({
   conversationId,
   payload

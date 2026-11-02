@@ -1,13 +1,17 @@
 "use client";
 
 import {
+  ArrowLeft,
   Bot,
+  Check,
   CheckCheck,
+  ChevronDown,
   Clock3,
   ContactRound,
   CreditCard,
   FileText,
   Globe,
+  Headphones,
   ImageIcon,
   Inbox,
   Instagram,
@@ -15,10 +19,13 @@ import {
   MapPin,
   MessageCircle,
   MessageSquareReply,
+  MoreHorizontal,
   Paperclip,
   Search,
   Send,
+  SlidersHorizontal,
   Trash2,
+  Video,
   X
 } from "lucide-react";
 import {
@@ -26,6 +33,7 @@ import {
   DragEvent,
   ElementType,
   FormEvent,
+  Fragment,
   KeyboardEvent,
   useCallback,
   useEffect,
@@ -53,6 +61,7 @@ import {
   getConversationMessages,
   getConversations,
   markConversationRead,
+  resumeConversationBot,
   sendConversationReply,
   sendTemplateMessage,
   updateConversationStatus
@@ -112,7 +121,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from "@/components/ui/alert-dialog";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -123,6 +132,12 @@ import {
   DialogHeader,
   DialogTitle
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -138,6 +153,23 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { useCurrentMembership } from "@/hooks/useCurrentMembership";
 import AppLayout from "@/layouts/AppLayout";
+import {
+  CarouselCard,
+  FormattedText,
+  STATUS_DESCRIPTIONS,
+  dayKey,
+  describeHandoffReason,
+  formatClockTime,
+  formatDayDivider,
+  formatListTime,
+  formatPhoneNumber,
+  formatUntil,
+  getCarouselCards,
+  insertMessageInOrder,
+  messageTimestamp,
+  parseWhatsAppFormatting,
+  rewriteSystemNote
+} from "@/lib/inbox";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
 import { useOrganizationStore } from "@/stores/organizationStore";
@@ -196,10 +228,17 @@ const subscriberName = (conversation?: Conversation | null) => {
     .filter(Boolean)
     .join(" ")
     .trim();
-  return name || subscriber?.phoneNumber || subscriber?.waId || "Customer";
+  if (name) return name;
+  if (conversation?.channel === "instagram") {
+    const handle = subscriberHandle(conversation);
+    if (handle.startsWith("@")) return handle;
+  }
+  return (
+    formatPhoneNumber(subscriber?.phoneNumber || subscriber?.waId) || "Customer"
+  );
 };
 
-const subscriberHandle = (conversation?: Conversation | null) => {
+function subscriberHandle(conversation?: Conversation | null) {
   const subscriber = conversation?.subscriberId;
   if (!subscriber) return "";
   if (conversation?.channel === "instagram") {
@@ -216,12 +255,75 @@ const subscriberHandle = (conversation?: Conversation | null) => {
       "Instagram user"
     );
   }
-  return getString(
-    subscriber.phoneNumber,
-    subscriber.waId,
-    conversation?.channel
+  return (
+    formatPhoneNumber(getString(subscriber.phoneNumber, subscriber.waId)) ||
+    getString(conversation?.channel)
   );
+}
+
+// Who is answering the customer right now, in plain words.
+const replyingLabel = (conversation: Conversation) => {
+  if (conversation.mode === "agent_manual") {
+    const name = getString(
+      conversation.takeoverState?.manualTakeoverBy?.name,
+      conversation.manualTakeoverBy?.name
+    );
+    return name ? `${name} is replying` : "A person is replying";
+  }
+  if (conversation.mode === "ai_fallback") return "AI assistant";
+  return "Bot";
 };
+
+// Only a pause that hasn't run out yet is worth mentioning.
+const botPausedUntil = (conversation: Conversation) => {
+  const until = conversation.botState?.automationPausedUntil;
+  return until && new Date(until).getTime() > Date.now() ? until : null;
+};
+
+const statusLabel: Record<ConversationStatus, string> = {
+  open: "Open",
+  pending: "Pending",
+  resolved: "Resolved"
+};
+
+// The media kinds worth listing under "Shared in this chat".
+const sharedMediaKinds: Array<{
+  type: string;
+  label: string;
+  icon: ElementType;
+}> = [
+  { type: "image", label: "Images", icon: ImageIcon },
+  { type: "video", label: "Videos", icon: Video },
+  { type: "document", label: "Documents", icon: FileText },
+  { type: "audio", label: "Audio", icon: Headphones },
+  { type: "location", label: "Locations", icon: MapPin }
+];
+
+const MEDIA_MESSAGE_TYPES = new Set(["image", "video", "audio", "document"]);
+
+function FormattedMessageText({ nodes }: { nodes: FormattedText[] }) {
+  return (
+    <>
+      {nodes.map((node, index) => {
+        if (typeof node === "string") return node;
+        const children = <FormattedMessageText nodes={node.children} />;
+        if (node.type === "bold")
+          return <strong key={index}>{children}</strong>;
+        if (node.type === "italic") return <em key={index}>{children}</em>;
+        if (node.type === "strike") return <s key={index}>{children}</s>;
+        return (
+          <code key={index} className="font-mono text-[0.92em]">
+            {children}
+          </code>
+        );
+      })}
+    </>
+  );
+}
+
+const WhatsAppText = ({ text }: { text: string }) => (
+  <FormattedMessageText nodes={parseWhatsAppFormatting(text)} />
+);
 
 type MessageMediaPreview = {
   type: "image" | "video" | "document";
@@ -598,31 +700,7 @@ const getMessageMedia = (message: ChatMessage): MessageMediaPreview[] => {
   if (headerType === "document") {
     addPreview("document", header.document, "Document");
   }
-
-  const action = asRecord(interactive.action);
-  const cards = Array.isArray(action.cards) ? action.cards : [];
-  cards.forEach((card, index) => {
-    const cardRecord = asRecord(card);
-    const cardHeader = asRecord(cardRecord.header);
-    const cardBody = asRecord(cardRecord.body);
-    const type = getString(cardHeader.type);
-    if (type === "image") {
-      addPreview(
-        "image",
-        cardHeader.image,
-        `Carousel image ${index + 1}`,
-        cardBody.text
-      );
-    }
-    if (type === "video") {
-      addPreview(
-        "video",
-        cardHeader.video,
-        `Carousel video ${index + 1}`,
-        cardBody.text
-      );
-    }
-  });
+  // Carousel card images are drawn inside their cards (see CarouselCards).
 
   const seen = new Set<string>();
   return previews.filter((preview) => {
@@ -715,6 +793,53 @@ const renderOutboundStatusIcon = (status: ChatMessage["status"]) => {
   return <CheckCheck className="size-3" aria-label="Sent" />;
 };
 
+function ContactAvatar({
+  conversation,
+  className,
+  fallbackClassName,
+  withChannel = false
+}: {
+  conversation: Conversation;
+  className?: string;
+  fallbackClassName?: string;
+  withChannel?: boolean;
+}) {
+  const pictureUrl = conversation.subscriberId?.instagramProfilePictureUrl;
+  const isInstagram = conversation.channel === "instagram";
+  return (
+    <div className="relative shrink-0">
+      <Avatar className={className}>
+        {pictureUrl && (
+          <AvatarImage src={pictureUrl} alt={subscriberName(conversation)} />
+        )}
+        <AvatarFallback
+          className={cn("bg-primary/10 text-primary", fallbackClassName)}
+        >
+          {initials(subscriberName(conversation))}
+        </AvatarFallback>
+      </Avatar>
+      {withChannel && (
+        <span
+          className={cn(
+            "absolute -bottom-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full text-white ring-2 ring-white",
+            isInstagram
+              ? "bg-gradient-to-tr from-amber-400 via-pink-500 to-purple-600"
+              : "bg-emerald-500"
+          )}
+          title={isInstagram ? "Instagram" : "WhatsApp"}
+          aria-label={isInstagram ? "Instagram" : "WhatsApp"}
+        >
+          {isInstagram ? (
+            <Instagram className="size-2.5" />
+          ) : (
+            <FaWhatsapp className="size-2.5" />
+          )}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function ConversationListItem({
   conversation,
   selected,
@@ -740,18 +865,18 @@ function ConversationListItem({
         selected && "bg-primary/5"
       )}
     >
-      <Avatar className="size-9">
-        <AvatarFallback className="bg-primary/10 text-primary">
-          {initials(name)}
-        </AvatarFallback>
-      </Avatar>
+      <ContactAvatar
+        conversation={conversation}
+        className="size-9"
+        withChannel
+      />
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">
           <p className="truncate text-sm font-medium" title={name}>
             {name}
           </p>
           <span className="shrink-0 text-[11px] text-muted-foreground">
-            {formatDateTime(
+            {formatListTime(
               conversation.lastMessageAt || conversation.updatedAt
             )}
           </span>
@@ -765,18 +890,21 @@ function ConversationListItem({
               "px-1.5 py-0 text-[10px] capitalize",
               statusClass[conversation.status]
             )}
+            title={STATUS_DESCRIPTIONS[conversation.status]}
           >
             {conversation.status}
           </Badge>
-          <Badge
-            variant="secondary"
-            className={cn(
-              "px-1.5 py-0 text-[10px] capitalize",
-              priorityClass[conversation.priority]
-            )}
-          >
-            {conversation.priority}
-          </Badge>
+          {conversation.priority !== "normal" && (
+            <Badge
+              variant="secondary"
+              className={cn(
+                "px-1.5 py-0 text-[10px] capitalize",
+                priorityClass[conversation.priority]
+              )}
+            >
+              {conversation.priority}
+            </Badge>
+          )}
           {conversation.channel === "whatsapp" && senderLabel && (
             <Badge
               variant="outline"
@@ -836,11 +964,18 @@ function MessageBubble({
   const contacts = getMessageContacts(message);
   const location = getMessageLocation(message);
   const interactiveActions = getInteractiveActions(message);
+  const carouselCards = getCarouselCards(message.payload);
+  // Media messages carry a label like "📷 Photo" as their text; the media
+  // itself already says that, so only the caption is shown.
+  const bodyText =
+    MEDIA_MESSAGE_TYPES.has(message.type) && mediaPreviews.length
+      ? getString(message.payload?.caption)
+      : messageText(message);
   if (isSystem) {
     return (
       <div className="flex justify-center">
         <div className="max-w-md rounded-full bg-muted px-3 py-1 text-center text-xs text-muted-foreground">
-          {messageText(message)}
+          {rewriteSystemNote(messageText(message))}
         </div>
       </div>
     );
@@ -868,7 +1003,7 @@ function MessageBubble({
       )}
       <div
         className={cn(
-          "max-w-[78%] rounded-2xl px-3 py-2 text-sm shadow-xs",
+          "min-w-0 max-w-[78%] rounded-2xl px-3 py-2 text-sm shadow-xs",
           isOutbound
             ? "rounded-br-sm bg-primary text-primary-foreground"
             : "rounded-bl-sm bg-white"
@@ -902,9 +1037,6 @@ function MessageBubble({
                     playsInline
                   />
                 )}
-                <span className="absolute inset-x-2 bottom-2 rounded-md bg-black/55 px-2 py-1 text-xs text-white opacity-0 transition group-hover:opacity-100">
-                  Preview
-                </span>
               </button>
             ))}
           </div>
@@ -1014,10 +1146,17 @@ function MessageBubble({
             ))}
           </div>
         )}
-        {contacts.length === 0 && !location && (
+        {contacts.length === 0 && !location && bodyText && (
           <p className="whitespace-pre-wrap break-words">
-            {messageText(message)}
+            <WhatsAppText text={bodyText} />
           </p>
+        )}
+        {carouselCards.length > 0 && (
+          <CarouselCards
+            cards={carouselCards}
+            isOutbound={isOutbound}
+            onPreview={onPreview}
+          />
         )}
         {interactiveActions.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1.5">
@@ -1042,7 +1181,7 @@ function MessageBubble({
             isOutbound ? "text-primary-foreground/75" : "text-muted-foreground"
           )}
         >
-          {formatDateTime(message.createdAt || message.sentAt)}
+          {formatClockTime(messageTimestamp(message))}
           {isOutbound && renderOutboundStatusIcon(message.status)}
         </div>
         {message.status === "failed" && message.errorCategory === "payment" && (
@@ -1089,6 +1228,88 @@ function MessageBubble({
   );
 }
 
+// Cards side by side in a row that scrolls sideways, like WhatsApp. Buttons
+// are shown as chips; they aren't clickable from the inbox.
+function CarouselCards({
+  cards,
+  isOutbound,
+  onPreview
+}: {
+  cards: CarouselCard[];
+  isOutbound: boolean;
+  onPreview: (preview: MessageMediaPreview) => void;
+}) {
+  return (
+    <div className="-mx-1 mt-2 flex snap-x gap-2 overflow-x-auto px-1 pb-1">
+      {cards.map((card, index) => (
+        <div
+          key={card.key}
+          className="w-52 shrink-0 snap-start overflow-hidden rounded-xl bg-white text-foreground shadow-xs ring-1 ring-black/5"
+        >
+          {card.mediaUrl && card.mediaType && (
+            <button
+              type="button"
+              className="block w-full cursor-pointer bg-black/5"
+              onClick={() =>
+                onPreview({
+                  type: card.mediaType as "image" | "video",
+                  url: card.mediaUrl,
+                  name: card.title || `Card ${index + 1}`,
+                  caption: card.body
+                })
+              }
+            >
+              {card.mediaType === "image" ? (
+                <img
+                  src={card.mediaUrl}
+                  alt={card.title || `Card ${index + 1}`}
+                  className="h-32 w-full object-cover"
+                />
+              ) : (
+                <video
+                  src={card.mediaUrl}
+                  className="h-32 w-full object-cover"
+                  muted
+                  playsInline
+                />
+              )}
+            </button>
+          )}
+          <div className="space-y-1 p-2">
+            {card.title && (
+              <p className="text-sm font-medium">
+                <WhatsAppText text={card.title} />
+              </p>
+            )}
+            {card.body && (
+              <p className="whitespace-pre-wrap break-words text-xs text-muted-foreground">
+                <WhatsAppText text={card.body} />
+              </p>
+            )}
+          </div>
+          {card.buttons.length > 0 && (
+            <div className="flex flex-col gap-1 border-t p-2">
+              {card.buttons.map((button, buttonIndex) => (
+                <span
+                  key={`${button}-${buttonIndex}`}
+                  className={cn(
+                    "truncate rounded-full px-2 py-1 text-center text-xs font-medium",
+                    isOutbound
+                      ? "bg-primary/10 text-primary"
+                      : "bg-muted text-foreground"
+                  )}
+                >
+                  {button}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function ThreadSkeleton() {
   return (
     <div className="space-y-4 p-4">
@@ -1097,6 +1318,22 @@ function ThreadSkeleton() {
       <Skeleton className="h-20 w-3/4 rounded-2xl" />
     </div>
   );
+}
+
+const MD_BREAKPOINT = 768;
+
+// Matches Tailwind's breakpoints. False until mounted, so the server render
+// and the first client render agree.
+function useMinWidth(minWidth: number) {
+  const [matches, setMatches] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia(`(min-width: ${minWidth}px)`);
+    const update = () => setMatches(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, [minWidth]);
+  return matches;
 }
 
 function ConversationsPageContent() {
@@ -1159,11 +1396,17 @@ function ConversationsPageContent() {
   const [contactSearch, setContactSearch] = useState("");
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [isMobileDetailsOpen, setIsMobileDetailsOpen] = useState(false);
+  const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
+  // Whether the person picked the open chat themselves (clicked its row or
+  // used the chat), rather than it being auto-selected after a filter
+  // change. Only a chat they picked is marked read.
+  const [isSelectionDeliberate, setIsSelectionDeliberate] = useState(false);
+  const isDesktop = useMinWidth(MD_BREAKPOINT);
+  const [listSummary, setListSummary] = useState<
+    ConversationListResponse["data"]["summary"] | null
+  >(null);
   const [isDeleteConversationOpen, setIsDeleteConversationOpen] =
     useState(false);
-  const detailsCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null
-  );
   const [templateMediaPickerOpen, setTemplateMediaPickerOpen] = useState(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   // One mapping per template variable (body, header text, link and
@@ -1313,10 +1556,16 @@ function ConversationsPageContent() {
   useEffect(() => {
     setPage(1);
     setSelectedId("");
+    setIsSelectionDeliberate(false);
     setLoadedConversations([]);
   }, [filterKey]);
 
   useEffect(() => {
+    // Counts are the same on every page; keep the last ones while the next
+    // filter loads so the badges don't flicker.
+    if (conversationsData?.data.summary) {
+      setListSummary(conversationsData.data.summary);
+    }
     const nextPageConversations = conversationsData?.data.conversations || [];
     setLoadedConversations((current) => {
       if (page === 1) return nextPageConversations;
@@ -1331,34 +1580,31 @@ function ConversationsPageContent() {
     });
   }, [conversationsData, page]);
 
+  // The API filters by channel, so every loaded row belongs to this tab.
   const conversations = loadedConversations;
-  const visibleConversations = useMemo(
-    () =>
-      channel === "all"
-        ? conversations
-        : conversations.filter(
-            (conversation) => conversation.channel === channel
-          ),
-    [channel, conversations]
-  );
   const selectedConversation =
-    visibleConversations.find(
-      (conversation) => conversation._id === selectedId
-    ) || null;
+    conversations.find((conversation) => conversation._id === selectedId) ||
+    null;
+
+  const selectConversation = (conversationId: string) => {
+    setSelectedId(conversationId);
+    setIsSelectionDeliberate(Boolean(conversationId));
+  };
 
   useEffect(() => {
     selectedIdRef.current = selectedId;
   }, [selectedId]);
 
   useEffect(() => {
-    if (
-      !visibleConversations.some(
-        (conversation) => conversation._id === selectedId
-      )
-    ) {
-      setSelectedId(visibleConversations[0]?._id || "");
+    if (conversations.some((conversation) => conversation._id === selectedId)) {
+      return;
     }
-  }, [selectedId, visibleConversations]);
+    // Phones show the list or a chat, never both, so nothing opens on its
+    // own there -- except a ?search= deep link, which asks for that chat.
+    if (!isDesktop && !(linkedSearch && search === linkedSearch)) return;
+    setSelectedId(conversations[0]?._id || "");
+    setIsSelectionDeliberate(false);
+  }, [conversations, isDesktop, linkedSearch, search, selectedId]);
 
   const currentConversationPage = conversationsData?.pagination.page || page;
   const totalConversationPages = conversationsData?.pagination.totalPages || 1;
@@ -1417,7 +1663,7 @@ function ConversationsPageContent() {
       getConversationMessages({
         conversationId: selectedId,
         before: pageParam,
-        limit: 7
+        limit: 30
       }),
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) =>
@@ -1585,7 +1831,10 @@ function ConversationsPageContent() {
                     results: latestPage.results + 1,
                     data: {
                       ...latestPage.data,
-                      messages: [...latestPage.data.messages, incomingMessage]
+                      messages: insertMessageInOrder(
+                        latestPage.data.messages,
+                        incomingMessage
+                      )
                     }
                   },
                   ...current.pages.slice(1)
@@ -1664,10 +1913,14 @@ function ConversationsPageContent() {
   });
 
   useEffect(() => {
-    if (selectedConversation && selectedConversation.unreadCount > 0) {
+    if (
+      isSelectionDeliberate &&
+      selectedConversation &&
+      selectedConversation.unreadCount > 0
+    ) {
       markRead(selectedConversation._id);
     }
-  }, [markRead, selectedConversation]);
+  }, [isSelectionDeliberate, markRead, selectedConversation]);
 
   const { mutate: assignMutate, isPending: isAssigning } = useMutation({
     mutationFn: assignConversation,
@@ -1698,6 +1951,20 @@ function ConversationsPageContent() {
         );
       }
     });
+
+  const { mutate: resumeBotMutate, isPending: isResumingBot } = useMutation({
+    mutationFn: resumeConversationBot,
+    meta: { showToast: false },
+    onSuccess: async () => {
+      toast.success("The bot is handling this conversation again.");
+      await invalidateConversations();
+    },
+    onError: (error: AxiosError<{ message?: string }>) => {
+      toast.error(
+        error.response?.data?.message || "The bot could not be resumed."
+      );
+    }
+  });
 
   const { mutate: updateContactMutate, isPending: isUpdatingContact } =
     useMutation({
@@ -1926,6 +2193,7 @@ function ConversationsPageContent() {
     ])
   );
   const replyWindow = contextConversation?.replyWindow;
+  const isReplyWindowClosed = Boolean(replyWindow && !replyWindow.isOpen);
   const canReply = Boolean(hasReplyAccess && replyWindow?.isOpen && selectedId);
   const isInstagramConversation = contextConversation?.channel === "instagram";
   const canSendMediaReply = canReply;
@@ -2194,21 +2462,29 @@ function ConversationsPageContent() {
   // mobile/tablet Dialog fallback below it -- same content, two surfaces.
   const renderConversationDetails = () => {
     if (!contextConversation) return null;
+    const mediaCounts = new Map(
+      (contextData?.data.mediaSummary || []).map((item) => [
+        item._id,
+        item.count
+      ])
+    );
+    const sharedMedia = sharedMediaKinds
+      .map((kind) => ({ ...kind, count: mediaCounts.get(kind.type) || 0 }))
+      .filter((kind) => kind.count > 0);
 
     return (
       <>
-        <div className="text-center">
-          <Avatar className="mx-auto size-16">
-            <AvatarFallback className="bg-primary/10 text-xl text-primary">
-              {initials(subscriberName(contextConversation))}
-            </AvatarFallback>
-          </Avatar>
+        <div className="flex flex-col items-center text-center">
+          <ContactAvatar
+            conversation={contextConversation}
+            className="size-16"
+            fallbackClassName="text-xl"
+          />
           <h2 className="mt-3 font-heading text-xl font-semibold">
             {subscriberName(contextConversation)}
           </h2>
           <p className="text-sm text-muted-foreground">
-            {contextConversation.subscriberId?.phoneNumber ||
-              contextConversation.subscriberId?.waId}
+            {subscriberHandle(contextConversation)}
           </p>
         </div>
 
@@ -2324,6 +2600,9 @@ function ConversationsPageContent() {
                   ))}
               </SelectContent>
             </Select>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {STATUS_DESCRIPTIONS[contextConversation.status]}
+            </p>
           </div>
         </div>
 
@@ -2340,42 +2619,46 @@ function ConversationsPageContent() {
             </p>
           </div>
           <div className="rounded-lg bg-muted/40 p-3">
-            <p className="text-xs text-muted-foreground">Bot state</p>
-            <p className="mt-1 font-medium capitalize">
-              {contextConversation.mode.replaceAll("_", " ")}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Trigger: {contextConversation.botState?.activeTriggerKey || "-"}
-            </p>
-          </div>
-          <div className="rounded-lg bg-muted/40 p-3">
-            <p className="text-xs text-muted-foreground">Handoff</p>
+            <p className="text-xs text-muted-foreground">Who is replying</p>
             <p className="mt-1 font-medium">
-              {contextConversation.takeoverState?.handoffReason ||
-                "No handoff reason"}
+              {replyingLabel(contextConversation)}
             </p>
-            <p className="text-xs text-muted-foreground">
-              Requested{" "}
-              {formatDateTime(
-                contextConversation.takeoverState?.handoffRequestedAt
-              )}
-            </p>
-            <div className="mt-2 rounded-md bg-white px-2 py-1 text-xs">
-              <span className="text-muted-foreground">Manual source: </span>
-              <span className="font-medium">
-                {contextConversation.takeoverState?.manualTakeoverSource
-                  ? takeoverSourceLabel[
-                      contextConversation.takeoverState.manualTakeoverSource
-                    ] || contextConversation.takeoverState.manualTakeoverSource
-                  : "Not in manual takeover"}
-              </span>
-            </div>
-            {contextConversation.takeoverState?.manualTakeoverBy && (
-              <p className="mt-2 text-xs text-muted-foreground">
-                By {contextConversation.takeoverState.manualTakeoverBy.name}
+            {botPausedUntil(contextConversation) && (
+              <p className="text-xs text-muted-foreground">
+                Bot paused until{" "}
+                {formatUntil(botPausedUntil(contextConversation))}
               </p>
             )}
+            {contextConversation.mode === "agent_manual" &&
+              contextConversation.takeoverState?.manualTakeoverSource && (
+                <p className="text-xs text-muted-foreground">
+                  Took over from{" "}
+                  {takeoverSourceLabel[
+                    contextConversation.takeoverState.manualTakeoverSource
+                  ] || "the inbox"}
+                </p>
+              )}
           </div>
+          {(contextConversation.status === "pending" ||
+            (contextConversation.mode === "ai_fallback" &&
+              contextConversation.takeoverState?.handoffRequestedAt)) && (
+            <div className="rounded-lg bg-amber-50 p-3">
+              <p className="text-xs text-amber-800">Handoff</p>
+              <p className="mt-1 font-medium">
+                {describeHandoffReason(
+                  contextConversation.takeoverState?.handoffReason
+                )}
+              </p>
+              {contextConversation.takeoverState?.handoffRequestedAt && (
+                <p className="text-xs text-muted-foreground">
+                  Requested{" "}
+                  {formatDateTime(
+                    contextConversation.takeoverState.handoffRequestedAt
+                  )}
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         <Separator className="my-4" />
@@ -2408,28 +2691,24 @@ function ConversationsPageContent() {
         <Separator className="my-4" />
 
         <div>
-          <p className="mb-2 text-sm font-semibold">Message media</p>
+          <p className="mb-2 text-sm font-semibold">Shared in this chat</p>
           <div className="grid gap-2">
-            {(contextData?.data.mediaSummary || []).length ? (
-              contextData?.data.mediaSummary.map((item) => (
+            {sharedMedia.length ? (
+              sharedMedia.map(({ type, label, icon: Icon, count }) => (
                 <div
-                  key={item._id}
+                  key={type}
                   className="flex items-center justify-between rounded-lg bg-muted/40 px-3 py-2 text-sm"
                 >
-                  <span className="inline-flex items-center gap-2 capitalize">
-                    {item._id === "image" ? (
-                      <ImageIcon className="size-4" />
-                    ) : (
-                      <FileText className="size-4" />
-                    )}
-                    {item._id}
+                  <span className="inline-flex items-center gap-2">
+                    <Icon className="size-4" />
+                    {label}
                   </span>
-                  <Badge variant="outline">{item.count}</Badge>
+                  <Badge variant="outline">{count}</Badge>
                 </div>
               ))
             ) : (
               <p className="text-sm text-muted-foreground">
-                No media in this conversation.
+                Nothing has been shared in this chat yet.
               </p>
             )}
           </div>
@@ -2451,14 +2730,140 @@ function ConversationsPageContent() {
     );
   };
 
+  const activeFilterCount = [
+    status !== "all",
+    mode !== "all",
+    assignedTo !== "all",
+    unreadOnly,
+    pendingEscalation
+  ].filter(Boolean).length;
+
+  const renderCountBadge = (count: number | undefined, active: boolean) =>
+    count ? (
+      <span
+        className={cn(
+          "rounded-full px-1.5 text-[10px] font-semibold",
+          active ? "bg-white/25" : "bg-primary/10 text-primary"
+        )}
+      >
+        {count}
+      </span>
+    ) : null;
+
+  // The toolbar on wide screens and the "Filters" sheet on phones.
+  const renderFilterControls = ({ stacked = false } = {}) => (
+    <>
+      <Select
+        value={status}
+        onValueChange={(value) => {
+          setStatus(value as ConversationStatus | "all");
+          setPage(1);
+        }}
+      >
+        <SelectTrigger className={cn("h-10", stacked ? "w-full" : "w-[150px]")}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {statusOptions.map((option) => (
+            <SelectItem
+              key={option.value}
+              value={option.value}
+              title={
+                option.value === "all"
+                  ? undefined
+                  : STATUS_DESCRIPTIONS[option.value]
+              }
+            >
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      <Select
+        value={mode}
+        onValueChange={(value) => {
+          setMode(value as ConversationMode | "all");
+          setPage(1);
+        }}
+      >
+        <SelectTrigger className={cn("h-10", stacked ? "w-full" : "w-[160px]")}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {modeOptions.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      <Select
+        value={assignedTo}
+        onValueChange={(value) => {
+          setAssignedTo(value);
+          setPage(1);
+        }}
+      >
+        <SelectTrigger className={cn("h-10", stacked ? "w-full" : "w-[170px]")}>
+          <SelectValue placeholder="Assignee" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All agents</SelectItem>
+          {assigneeOptions.map((member) => (
+            <SelectItem key={member.userId._id} value={member.userId._id}>
+              {member.userId.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      <div className={cn("flex gap-2", stacked && "grid grid-cols-2")}>
+        <Button
+          type="button"
+          size={stacked ? "default" : "sm"}
+          variant={unreadOnly ? "default" : "outline"}
+          onClick={() => {
+            setUnreadOnly((value) => !value);
+            setPage(1);
+          }}
+        >
+          Unread
+          {renderCountBadge(listSummary?.unread, unreadOnly)}
+        </Button>
+        <Button
+          type="button"
+          size={stacked ? "default" : "sm"}
+          variant={pendingEscalation ? "default" : "outline"}
+          title={STATUS_DESCRIPTIONS.pending}
+          onClick={() => {
+            setPendingEscalation((value) => !value);
+            setPage(1);
+          }}
+        >
+          Escalations
+          {renderCountBadge(listSummary?.escalations, pendingEscalation)}
+        </Button>
+      </div>
+    </>
+  );
+
   return (
     <AppLayout hideHeader fullBleed>
-      <div className="flex h-screen min-h-0 flex-col overflow-hidden p-3">
-        <section className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-lg bg-white p-3 shadow-xs">
-          <div>
+      <div className="flex h-dvh min-h-0 flex-col overflow-hidden p-3">
+        {/* On phones an open chat takes the whole screen, so the header and
+            filters step aside until the back arrow is used. */}
+        <section
+          className={cn(
+            "mb-3 flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-lg bg-white p-3 shadow-xs",
+            selectedId && "max-md:hidden"
+          )}
+        >
+          <div className="min-w-0">
             <p className="font-heading text-lg font-semibold">Conversations</p>
             <p className="text-xs text-muted-foreground">
-              Filter the inbox by the WhatsApp number that received the message.
+              All your WhatsApp and Instagram conversations in one place.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -2476,11 +2881,20 @@ function ConversationsPageContent() {
               <ContactRound className="size-4" />
               Start conversation
             </Button>
-            <WhatsAppNumberSwitcher showManage />
+            {channel !== "instagram" && (
+              <div className="hidden md:block">
+                <WhatsAppNumberSwitcher showManage />
+              </div>
+            )}
           </div>
         </section>
-        <section className="mb-3 flex shrink-0 flex-wrap items-center gap-2 rounded-lg bg-white p-2 shadow-xs">
-          <div className="grid min-w-[220px] grid-cols-3 gap-1 rounded-xl bg-muted p-1">
+        <section
+          className={cn(
+            "mb-3 flex shrink-0 flex-wrap items-center gap-2 rounded-lg bg-white p-2 shadow-xs",
+            selectedId && "max-md:hidden"
+          )}
+        >
+          <div className="grid min-w-0 flex-1 grid-cols-3 gap-1 rounded-xl bg-muted p-1 md:min-w-[220px] md:flex-none">
             {channelOptions.map((option) => {
               const Icon = option.icon;
               return (
@@ -2504,97 +2918,38 @@ function ConversationsPageContent() {
             })}
           </div>
 
-          <Select
-            value={status}
-            onValueChange={(value) => {
-              setStatus(value as ConversationStatus | "all");
-              setPage(1);
-            }}
-          >
-            <SelectTrigger className="h-10 w-[150px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {statusOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select
-            value={mode}
-            onValueChange={(value) => {
-              setMode(value as ConversationMode | "all");
-              setPage(1);
-            }}
-          >
-            <SelectTrigger className="h-10 w-[160px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {modeOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select
-            value={assignedTo}
-            onValueChange={(value) => {
-              setAssignedTo(value);
-              setPage(1);
-            }}
-          >
-            <SelectTrigger className="h-10 w-[170px]">
-              <SelectValue placeholder="Assignee" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All agents</SelectItem>
-              {assigneeOptions.map((member) => (
-                <SelectItem key={member.userId._id} value={member.userId._id}>
-                  {member.userId.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="hidden md:contents">{renderFilterControls()}</div>
 
           <Button
             type="button"
-            size="sm"
-            variant={unreadOnly ? "default" : "outline"}
-            onClick={() => {
-              setUnreadOnly((value) => !value);
-              setPage(1);
-            }}
+            variant="outline"
+            className="h-10 md:hidden"
+            onClick={() => setIsMobileFiltersOpen(true)}
           >
-            Unread
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={pendingEscalation ? "default" : "outline"}
-            onClick={() => {
-              setPendingEscalation((value) => !value);
-              setPage(1);
-            }}
-          >
-            Escalations
+            <SlidersHorizontal className="size-4" />
+            Filters
+            {activeFilterCount > 0 && (
+              <span className="rounded-full bg-primary px-1.5 text-[10px] text-primary-foreground">
+                {activeFilterCount}
+              </span>
+            )}
           </Button>
         </section>
 
-        <section className="grid min-h-0 flex-1 overflow-hidden rounded-xl bg-white shadow-xs xl:grid-cols-[360px_1fr_56px]">
-          <aside className="flex min-h-0 flex-col border-r">
+        <section className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)] overflow-hidden rounded-xl bg-white shadow-xs md:grid-cols-[320px_minmax(0,1fr)] xl:grid-cols-[360px_minmax(0,1fr)_auto]">
+          <aside
+            className={cn(
+              "flex min-h-0 flex-col border-r",
+              selectedId && "max-md:hidden"
+            )}
+          >
             <div className="border-b p-3">
               <div className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3">
                 <Search className="size-4 text-muted-foreground" />
                 <Input
                   className="border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
                   value={search}
-                  placeholder="Search name or phone"
+                  placeholder="Search name, number or @handle"
                   onChange={(event) => {
                     setSearch(event.target.value);
                     setPage(1);
@@ -2614,8 +2969,8 @@ function ConversationsPageContent() {
                     <Skeleton key={index} className="h-24 rounded-lg" />
                   ))}
                 </div>
-              ) : visibleConversations.length ? (
-                visibleConversations.map((conversation) => (
+              ) : conversations.length ? (
+                conversations.map((conversation) => (
                   <ConversationListItem
                     key={conversation._id}
                     conversation={conversation}
@@ -2628,7 +2983,7 @@ function ConversationsPageContent() {
                       )?.displayPhoneNumber ||
                       conversation.whatsappSender?.phoneNumberId
                     }
-                    onSelect={() => setSelectedId(conversation._id)}
+                    onSelect={() => selectConversation(conversation._id)}
                   />
                 ))
               ) : (
@@ -2645,37 +3000,133 @@ function ConversationsPageContent() {
             </div>
           </aside>
 
-          <main className="flex min-h-0 flex-col bg-[radial-gradient(circle_at_1px_1px,rgba(15,23,42,0.08)_1px,transparent_0)] [background-size:22px_22px]">
+          <main
+            className={cn(
+              "flex min-h-0 flex-col bg-[radial-gradient(circle_at_1px_1px,rgba(15,23,42,0.08)_1px,transparent_0)] [background-size:22px_22px]",
+              !selectedId && "max-md:hidden"
+            )}
+            // Using the chat counts as picking it, so an auto-selected chat
+            // is marked read once the person actually looks at it.
+            onPointerDown={() => {
+              if (selectedId) setIsSelectionDeliberate(true);
+            }}
+            onFocusCapture={() => {
+              if (selectedId) setIsSelectionDeliberate(true);
+            }}
+          >
             {contextConversation ? (
               <>
-                <div className="flex items-center justify-between border-b bg-white/95 p-4">
-                  <div className="flex items-center gap-3">
-                    <Avatar className="size-10">
-                      <AvatarFallback className="bg-primary/10 text-primary">
-                        {initials(subscriberName(contextConversation))}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <p className="font-semibold">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b bg-white/95 p-3 md:p-4">
+                  <div className="flex min-w-0 flex-1 items-center gap-3">
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="-ml-1 shrink-0 md:hidden"
+                      aria-label="Back to conversations"
+                      onClick={() => selectConversation("")}
+                    >
+                      <ArrowLeft className="size-5" />
+                    </Button>
+                    <ContactAvatar
+                      conversation={contextConversation}
+                      className="size-10"
+                    />
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold">
                         {subscriberName(contextConversation)}
                       </p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="truncate text-xs text-muted-foreground">
                         {subscriberHandle(contextConversation)}
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Badge
-                      className={cn(
-                        "capitalize",
-                        statusClass[contextConversation.status]
+                  <div className="flex flex-wrap items-center gap-2">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          disabled={!canManageStatus || isUpdatingStatus}
+                          className={cn(
+                            "inline-flex h-7 cursor-pointer items-center gap-1 rounded-full px-2.5 text-xs font-medium disabled:cursor-default",
+                            statusClass[contextConversation.status]
+                          )}
+                          title={
+                            canManageStatus
+                              ? STATUS_DESCRIPTIONS[contextConversation.status]
+                              : "You need Conversations → Manage conversation status access"
+                          }
+                        >
+                          {isUpdatingStatus && (
+                            <Loader2 className="size-3 animate-spin" />
+                          )}
+                          {statusLabel[contextConversation.status]}
+                          {canManageStatus && (
+                            <ChevronDown className="size-3" />
+                          )}
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-72">
+                        {(["open", "pending", "resolved"] as const).map(
+                          (value) => (
+                            <DropdownMenuItem
+                              key={value}
+                              className="flex-col items-start gap-0.5"
+                              onSelect={() => {
+                                if (value === contextConversation.status)
+                                  return;
+                                updateStatusMutate({
+                                  conversationId: contextConversation._id,
+                                  status: value
+                                });
+                              }}
+                            >
+                              <span className="inline-flex items-center gap-1.5 font-medium">
+                                {statusLabel[value]}
+                                {value === contextConversation.status && (
+                                  <Check className="size-3.5" />
+                                )}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                {STATUS_DESCRIPTIONS[value]}
+                              </span>
+                            </DropdownMenuItem>
+                          )
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                      {contextConversation.mode === "agent_manual" ? (
+                        <ContactRound className="size-3.5" />
+                      ) : (
+                        <Bot className="size-3.5" />
                       )}
-                    >
-                      {contextConversation.status}
-                    </Badge>
-                    <Badge variant="outline" className="capitalize">
-                      {contextConversation.mode.replaceAll("_", " ")}
-                    </Badge>
+                      {replyingLabel(contextConversation)}
+                      {botPausedUntil(contextConversation) &&
+                        ` · Bot paused until ${formatUntil(
+                          botPausedUntil(contextConversation)
+                        )}`}
+                    </span>
+                    {canManageStatus &&
+                      (contextConversation.mode === "agent_manual" ||
+                        contextConversation.status === "pending") && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={isResumingBot}
+                          onClick={() =>
+                            resumeBotMutate(contextConversation._id)
+                          }
+                        >
+                          {isResumingBot ? (
+                            <Loader2 className="size-3.5 animate-spin" />
+                          ) : (
+                            <Bot className="size-3.5" />
+                          )}
+                          Resume bot
+                        </Button>
+                      )}
                     {contextConversation.subscriberId?.spamMutedUntil &&
                       new Date(
                         contextConversation.subscriberId.spamMutedUntil
@@ -2705,23 +3156,34 @@ function ConversationsPageContent() {
                       <ContactRound className="size-4" />
                     </Button>
                     {canDeleteConversation && (
-                      <Button
-                        type="button"
-                        size="icon"
-                        variant="outline"
-                        className="text-destructive hover:text-destructive"
-                        tooltip="Delete conversation"
-                        onClick={() => setIsDeleteConversationOpen(true)}
-                      >
-                        <Trash2 className="size-4" />
-                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            aria-label="More actions"
+                          >
+                            <MoreHorizontal className="size-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            variant="destructive"
+                            onSelect={() => setIsDeleteConversationOpen(true)}
+                          >
+                            <Trash2 className="size-4" />
+                            Delete conversation
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     )}
                   </div>
                 </div>
 
                 <div
                   ref={messageScrollRef}
-                  className="min-h-0 flex-1 overflow-y-auto p-4"
+                  className="min-h-0 flex-1 overflow-y-auto p-3 md:p-4"
                   onScroll={(event) => {
                     if (event.currentTarget.scrollTop <= 48) {
                       void loadOlderMessages();
@@ -2745,15 +3207,25 @@ function ConversationsPageContent() {
                           Conversation start reached.
                         </p>
                       )}
-                      {messages.map((message) =>
-                        (() => {
-                          const replyContext =
-                            getReplyContext(message) ||
-                            replyContextCacheRef.current[message._id] ||
-                            null;
-                          return (
+                      {messages.map((message, index) => {
+                        const replyContext =
+                          getReplyContext(message) ||
+                          replyContextCacheRef.current[message._id] ||
+                          null;
+                        const startsNewDay =
+                          index === 0 ||
+                          dayKey(messageTimestamp(message)) !==
+                            dayKey(messageTimestamp(messages[index - 1]));
+                        return (
+                          <Fragment key={message._id}>
+                            {startsNewDay && (
+                              <div className="flex justify-center py-1">
+                                <span className="rounded-md bg-white px-2.5 py-1 text-[11px] font-medium text-muted-foreground shadow-xs">
+                                  {formatDayDivider(messageTimestamp(message))}
+                                </span>
+                              </div>
+                            )}
                             <MessageBubble
-                              key={message._id}
                               message={message}
                               onPreview={setPreviewMedia}
                               onReplyTo={selectReplyTarget}
@@ -2772,9 +3244,9 @@ function ConversationsPageContent() {
                                 null
                               }
                             />
-                          );
-                        })()
-                      )}
+                          </Fragment>
+                        );
+                      })}
                       <div ref={messagesEndRef} />
                     </div>
                   ) : (
@@ -2810,7 +3282,7 @@ function ConversationsPageContent() {
                       Drop file to attach
                     </div>
                   )}
-                  {!canReply && (
+                  {isReplyWindowClosed && (
                     <div className="mb-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
                       {isInstagramConversation
                         ? "The 24-hour customer service window is closed for this Instagram conversation."
@@ -2917,7 +3389,7 @@ function ConversationsPageContent() {
                     {canSendTemplate && (
                       <Button
                         type="button"
-                        variant="outline"
+                        variant={isReplyWindowClosed ? "default" : "outline"}
                         className="h-10 shrink-0 rounded-full px-3"
                         tooltip="Send an approved WhatsApp template"
                         disabled={!selectedId || isSendingTemplate}
@@ -2926,8 +3398,14 @@ function ConversationsPageContent() {
                           setIsTemplateModalOpen(true);
                         }}
                       >
-                        <FileText className="mr-2 size-4" />
-                        Template
+                        <FileText className="size-4 sm:mr-2" />
+                        <span
+                          className={cn(
+                            !isReplyWindowClosed && "max-sm:sr-only"
+                          )}
+                        >
+                          Template
+                        </span>
                       </Button>
                     )}
                     <Textarea
@@ -2938,9 +3416,13 @@ function ConversationsPageContent() {
                       placeholder={
                         !hasReplyAccess
                           ? "You need Conversations → View and reply access to reply."
-                          : attachment
-                            ? "Add a caption..."
-                            : "Type a reply..."
+                          : isReplyWindowClosed
+                            ? canSendTemplate
+                              ? "You can only send a template until the customer replies."
+                              : "You can reply once the customer messages again."
+                            : attachment
+                              ? "Add a caption..."
+                              : "Type a reply..."
                       }
                       onChange={(event) => setReplyText(event.target.value)}
                       onKeyDown={handleReplyKeyDown}
@@ -2969,23 +3451,11 @@ function ConversationsPageContent() {
             )}
           </main>
 
+          {/* Its own grid column, so opening it pushes the chat aside
+              instead of covering it. */}
           <aside
-            onMouseEnter={() => {
-              if (detailsCloseTimerRef.current) {
-                clearTimeout(detailsCloseTimerRef.current);
-              }
-              setDetailsOpen(true);
-            }}
-            onMouseLeave={() => {
-              detailsCloseTimerRef.current = setTimeout(() => {
-                const openDropdown = document.querySelector(
-                  '[role="listbox"][data-state="open"], [role="menu"][data-state="open"]'
-                );
-                if (!openDropdown) setDetailsOpen(false);
-              }, 250);
-            }}
             className={cn(
-              "relative z-20 hidden min-h-0 justify-self-end overflow-hidden border-l bg-white shadow-sm transition-[width] duration-200 xl:flex",
+              "relative hidden min-h-0 overflow-hidden border-l bg-white transition-[width] duration-200 xl:flex",
               detailsOpen ? "w-[340px]" : "w-14"
             )}
           >
@@ -2997,7 +3467,7 @@ function ConversationsPageContent() {
             >
               <button
                 type="button"
-                className="flex size-9 items-center justify-center rounded-md text-primary hover:bg-primary/10"
+                className="flex size-9 cursor-pointer items-center justify-center rounded-md text-primary hover:bg-primary/10"
                 onClick={() => setDetailsOpen(true)}
                 aria-label="Open conversation details"
               >
@@ -3030,6 +3500,28 @@ function ConversationsPageContent() {
           </aside>
         </section>
       </div>
+      <Dialog open={isMobileFiltersOpen} onOpenChange={setIsMobileFiltersOpen}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Filters</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3">
+            {channel !== "instagram" && (
+              <WhatsAppNumberSwitcher className="w-full" />
+            )}
+            {renderFilterControls({ stacked: true })}
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              className="w-full"
+              onClick={() => setIsMobileFiltersOpen(false)}
+            >
+              Show conversations
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <Dialog open={isMobileDetailsOpen} onOpenChange={setIsMobileDetailsOpen}>
         <DialogContent className="max-h-[85vh] overflow-y-auto">
           <DialogHeader>

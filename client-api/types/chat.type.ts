@@ -228,6 +228,7 @@ export interface ConversationListResponse {
       resolved: number;
       unread: number;
       agentManual: number;
+      escalations: number;
     };
     conversations: Conversation[];
   };

@@ -216,6 +216,8 @@ export const CONVERSATION_ENDPOINTS = {
     `${CONVERSATIONS_BASE}/${conversationId}/status`,
   READ: (conversationId: string) =>
     `${CONVERSATIONS_BASE}/${conversationId}/read`,
+  RESUME_BOT: (conversationId: string) =>
+    `${CONVERSATIONS_BASE}/${conversationId}/resume-bot`,
   REPLY: (conversationId: string) =>
     `${CONVERSATIONS_BASE}/${conversationId}/reply`
 };
