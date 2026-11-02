@@ -1901,9 +1901,7 @@ export function InstagramFlowEditor({ canvasId }: { canvasId: string }) {
             node={selectedNode}
             readOnly={readOnly}
             readOnlyNote={
-              conflict && !isCurrentView
-                ? "Reload to keep editing."
-                : undefined
+              conflict && !isCurrentView ? "Reload to keep editing." : undefined
             }
             updateNode={updateNode}
             blockChoices={viewNodes}
