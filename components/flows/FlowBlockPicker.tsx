@@ -1,4 +1,4 @@
-import { ArrowLeft, Check, ChevronDown, Plus } from "lucide-react";
+import { ArrowLeft, Ban, Check, ChevronDown, Plus } from "lucide-react";
 import { useState } from "react";
 
 import { BotBlockType } from "@/client-api/types/bot.type";
@@ -38,45 +38,80 @@ const filterByKeywords = (
     ? 1
     : 0;
 
+/** The least a block needs to be listed: WhatsApp's or Instagram's. */
+export type PickerBlock<T extends string> = {
+  id: string;
+  hidden?: boolean;
+  data: { label: string; blockType: T };
+};
+
+export type PickerPalette<T extends string> = Array<{
+  group: string;
+  items: Array<{ type: T; label: string; icon: React.ElementType }>;
+}>;
+
 /**
  * The "Go to block" picker on the Next steps tab: one control to pick an
  * existing block or create a new one. Styled like the selects around it.
+ * WhatsApp's block types are the default; Instagram passes its own.
  */
-export function FlowBlockPicker({
+export function FlowBlockPicker<
+  T extends string = BotBlockType,
+  B extends PickerBlock<T> = PickerBlock<T>
+>({
   value,
   blocks,
   currentBlockId,
   disabled,
   actionId,
   onSelect,
-  onCreate
+  onCreate,
+  onClear,
+  palette,
+  getIcon,
+  getLabel,
+  order
 }: {
   /** The block this option goes to now. */
   value?: string;
-  blocks: BotFlowReactNode[];
+  blocks: B[];
   /** The block being edited; listed last, as "This block". */
   currentBlockId: string;
   disabled?: boolean;
   /** Lets an issue about this option focus the picker. */
   actionId?: string;
   onSelect: (nodeId: string) => void;
-  onCreate: (type: BotBlockType) => void;
+  onCreate: (type: T) => void;
+  /** Offers "Nothing", which removes the wire. */
+  onClear?: () => void;
+  palette?: PickerPalette<T>;
+  getIcon?: (type: T) => React.ElementType;
+  getLabel?: (type: T) => string;
+  /** The order blocks are listed in. */
+  order?: (blocks: B[]) => B[];
 }) {
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
-  const ordered = outlineOrder(blocks);
+  const iconFor =
+    getIcon || (getBlockIcon as unknown as (type: T) => React.ElementType);
+  const labelFor =
+    getLabel || (getBlockLabel as unknown as (type: T) => string);
+  const types = palette || (blockPalette as unknown as PickerPalette<T>);
+  const ordered = order
+    ? order(blocks)
+    : (outlineOrder(blocks as unknown as BotFlowReactNode[]) as unknown as B[]);
   const others = ordered.filter((node) => node.id !== currentBlockId);
   const current = ordered.find((node) => node.id === currentBlockId);
   const selected = blocks.find((node) => node.id === value);
-  const SelectedIcon = selected ? getBlockIcon(selected.data.blockType) : null;
+  const SelectedIcon = selected ? iconFor(selected.data.blockType) : null;
 
   const close = () => {
     setOpen(false);
     setCreating(false);
   };
 
-  const renderBlock = (node: BotFlowReactNode, isCurrent = false) => {
-    const Icon = getBlockIcon(node.data.blockType);
+  const renderBlock = (node: B, isCurrent = false) => {
+    const Icon = iconFor(node.data.blockType);
     const name = isCurrent ? "This block" : node.data.label;
     return (
       <CommandItem
@@ -84,7 +119,7 @@ export function FlowBlockPicker({
         value={node.id}
         keywords={[
           node.data.label,
-          getBlockLabel(node.data.blockType),
+          labelFor(node.data.blockType),
           ...(isCurrent ? ["this block"] : [])
         ]}
         className={cn(isCurrent && "text-muted-foreground")}
@@ -154,7 +189,7 @@ export function FlowBlockPicker({
             </div>
             <CommandList className="max-h-80">
               <CommandEmpty>No block type matches.</CommandEmpty>
-              {blockPalette.map((group) => (
+              {types.map((group) => (
                 <CommandGroup key={group.group} heading={group.group}>
                   {group.items.map((item) => (
                     <CommandItem
@@ -180,6 +215,21 @@ export function FlowBlockPicker({
             <CommandList className="max-h-80">
               <CommandEmpty>No block matches.</CommandEmpty>
               <CommandGroup>
+                {onClear && (
+                  <CommandItem
+                    value="__no_block"
+                    keywords={["nothing", "none"]}
+                    className="text-muted-foreground"
+                    onSelect={() => {
+                      onClear();
+                      close();
+                    }}
+                  >
+                    <Ban className="size-4 shrink-0" />
+                    <span className="min-w-0 flex-1 truncate">Nothing</span>
+                    {!value && <Check className="size-4 shrink-0" />}
+                  </CommandItem>
+                )}
                 {others.map((node) => renderBlock(node))}
                 {current && renderBlock(current, true)}
               </CommandGroup>

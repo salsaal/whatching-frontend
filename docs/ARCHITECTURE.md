@@ -140,36 +140,19 @@ Backend canvas published state contains a `defaultTriggerKey`, nodes, edges, and
 
 ## Instagram Architecture
 
-Instagram UI is primarily in `pages/instagram.tsx` with detail route `pages/instagram/[canvasId].tsx`.
+Instagram UI is in `pages/instagram.tsx` (Profile, Settings, Flows, Comment rules, Media tabs). The Flows tab renders `components/instagram/InstagramFlowsList.tsx`; `pages/instagram/[canvasId].tsx` renders the editor in `components/instagram/flow-editor/`, which reuses `components/flows/*` (status pill, toolbar, block picker, version history, test/diagram dialog, floating preview).
 
-Supported trigger types from frontend/backend types:
+`components/instagram/flow-editor/instagramFlow.ts` holds the pure load/save rules (tested in `instagramFlow.test.ts`):
 
-- `default`
-- `first_dm`
-- `keyword`
-- `story_reply`
-- `comment_private_reply_opened`
-- `manual_start`
+- Every block gets an `IG_<random>` `triggerKey` once; it is never derived from the name.
+- Exactly one block has `triggerType: "default"` (the Main menu) and `defaultTriggerKey` is its key. Keyword and story-reply blocks keep their words in `keywords`.
+- Every quick reply, button and carousel button stores a stable `actionId` (and `replyId`) in `content`. Wires leave from that handle; renaming an option never changes it. Options saved before ids existed take `actionId = replyId`, which keeps their old wires.
+- Message, image, video and tag blocks have a `next` ("Then") handle; follower checks have `follows`, `not_follows`, `unknown`.
+- Wires are the only record of targets: saved actions never carry `nextNodeId`/`nextTriggerKey`. Old follower-check content routes (`followsTriggerKey` etc.) are turned into wires on load and dropped on save.
 
-Supported Instagram canvas blocks:
+Trigger types in the backend model: `default`, `first_dm`, `keyword`, `story_reply`, `comment_private_reply_opened` (not offered in the editor; kept if present) and legacy `manual_start`.
 
-- `send_text`
-- `send_image`
-- `send_video`
-- `quick_replies`
-- `button_template`
-- `generic_template`
-- `follow_condition`
-- `tag_subscriber`
-- `handoff_to_agent`
-- `pause_automation`
-- `end_flow`
-
-`follow_condition` has three route fields in content:
-
-- `followsTriggerKey`
-- `notFollowsTriggerKey`
-- `unknownTriggerKey`
+Block types: `send_text`, `send_image`, `send_video`, `quick_replies`, `button_template`, `generic_template`, `follow_condition`, `tag_subscriber`, `handoff_to_agent`, `pause_automation`, `end_flow`.
 
 The backend `InstagramCanvas` published state compiles trigger, reply, keyword, story reply, and comment entry indexes. The orchestrator uses Meta Instagram user profile follower data where available.
 
@@ -344,6 +327,9 @@ Instagram:
 - `POST /api/v1/organizations/instagram/canvases/:canvasId/validate`
 - `POST /api/v1/organizations/instagram/canvases/:canvasId/publish`
 - `POST /api/v1/organizations/instagram/canvases/:canvasId/status`
+- `POST /api/v1/organizations/instagram/canvases/:canvasId/discard-draft`
+- `GET /api/v1/organizations/instagram/canvases/:canvasId/versions`
+- `POST /api/v1/organizations/instagram/canvases/:canvasId/versions/:versionId/restore`
 - `GET|POST /api/v1/organizations/instagram/flows`
 - `GET|PATCH /api/v1/organizations/instagram/flows/:flowId`
 - `POST /api/v1/organizations/instagram/flows/:flowId/publish`

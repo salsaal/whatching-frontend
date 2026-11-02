@@ -18,10 +18,12 @@ import {
 } from "@xyflow/react";
 import {
   AlertTriangle,
+  CheckCircle2,
   Eye,
   Map as MapIcon,
   PauseCircle,
   Tags,
+  UserCheck,
   UserRound,
   Workflow
 } from "lucide-react";
@@ -38,6 +40,7 @@ import {
 } from "@/client-api/types/instagram.type";
 import {
   InstagramFlowBlockPreview,
+  RouteSourceHandle,
   WhatsAppFlowBlockPreview
 } from "@/components/flows/FlowBlockPreview";
 import { FlowSimulator } from "@/components/flows/FlowSimulator";
@@ -112,11 +115,37 @@ const instagramMessageTypes = new Set<InstagramBlockType>([
 const instagramOperationMeta: Partial<
   Record<InstagramBlockType, { label: string; icon: React.ElementType }>
 > = {
-  tag_subscriber: { label: "Tag subscriber", icon: Tags },
-  handoff_to_agent: { label: "Handoff to agent", icon: UserRound },
+  follow_condition: { label: "Check if they follow you", icon: UserCheck },
+  tag_subscriber: { label: "Add tag", icon: Tags },
+  handoff_to_agent: { label: "Hand to a person", icon: UserRound },
   pause_automation: { label: "Pause automation", icon: PauseCircle },
-  end_flow: { label: "End flow", icon: Workflow }
+  end_flow: { label: "End conversation", icon: CheckCircle2 }
 };
+
+// Instagram blocks that carry on to a "Then" step without waiting.
+const instagramChainableTypes = new Set<InstagramBlockType>([
+  "send_text",
+  "send_image",
+  "send_video",
+  "tag_subscriber"
+]);
+
+const instagramFollowOutputs = [
+  { id: "follows", label: "Follows you" },
+  { id: "not_follows", label: "Doesn't follow you" },
+  { id: "unknown", label: "Couldn't check" }
+];
+
+// An Instagram output that isn't a button: "Then", or a follower check's
+// answer. Edges leave from its handle.
+function InstagramOutputRow({ id, label }: { id: string; label: string }) {
+  return (
+    <div className="relative mt-1 rounded-lg border border-dashed border-pink-200 bg-white px-3 py-1.5 text-[11px] font-medium text-slate-600">
+      {label}
+      <RouteSourceHandle id={id} platform="Instagram" />
+    </div>
+  );
+}
 
 function MessagePreviewDiagramNode({ data }: NodeProps<MessagePreviewNode>) {
   const sourceData = data.sourceData;
@@ -150,13 +179,17 @@ function MessagePreviewDiagramNode({ data }: NodeProps<MessagePreviewNode>) {
     <div className="nodrag nopan nowheel relative">
       {data.isStart && (
         <span className="absolute -top-6 left-0 rounded-full bg-emerald-600 px-2 py-0.5 text-[11px] font-semibold text-white shadow-xs">
-          Start
+          {data.platform === "Instagram" ? "Main menu" : "Start"}
         </span>
       )}
       {data.isUnreachable && (
         <span
           className="absolute -top-6 left-0 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 ring-1 ring-amber-200"
-          title="No button leads here. It can still start from a broadcast quick reply."
+          title={
+            data.platform === "Instagram"
+              ? "Nothing leads here and it has no start of its own."
+              : "No button leads here. It can still start from a broadcast quick reply."
+          }
         >
           Unreachable
         </span>
@@ -190,12 +223,28 @@ function MessagePreviewDiagramNode({ data }: NodeProps<MessagePreviewNode>) {
             showClose={false}
             showRouteHandles
           />
+          {instagramChainableTypes.has(blockType as InstagramBlockType) && (
+            <InstagramOutputRow id="next" label="Then" />
+          )}
         </div>
       ) : (
-        <InstagramOperationPreview
-          blockType={blockType as InstagramBlockType}
-          content={sourceData.content as InstagramCanvasContent}
-        />
+        <div>
+          <InstagramOperationPreview
+            blockType={blockType as InstagramBlockType}
+            content={sourceData.content as InstagramCanvasContent}
+          />
+          {blockType === "follow_condition" &&
+            instagramFollowOutputs.map((output) => (
+              <InstagramOutputRow
+                key={output.id}
+                id={output.id}
+                label={output.label}
+              />
+            ))}
+          {instagramChainableTypes.has(blockType as InstagramBlockType) && (
+            <InstagramOutputRow id="next" label="Then" />
+          )}
+        </div>
       )}
     </div>
   );
@@ -216,10 +265,14 @@ function InstagramOperationPreview({
   const detail =
     blockType === "tag_subscriber"
       ? ((content.tags as string[] | undefined) || []).join(", ") ||
-        "No tags configured"
+        "No tags yet"
       : blockType === "pause_automation"
         ? `${content.minutes || content.pauseMinutes || 60} minutes`
-        : String(content.reason || "Automation step").replaceAll("_", " ");
+        : blockType === "follow_condition"
+          ? "Followers and non-followers go different ways"
+          : blockType === "end_flow"
+            ? "Marks the chat as resolved"
+            : String(content.reason || "Alerts your team").replaceAll("_", " ");
 
   return (
     <div className="w-60 rounded-xl border border-pink-100 bg-white p-3 shadow-sm">
@@ -243,6 +296,11 @@ const previewNodeTypes: NodeTypes = {
 };
 
 type Mode = "diagram" | "try";
+
+const hasOwnInstagramStart = (node: Node) =>
+  ["first_dm", "keyword", "story_reply"].includes(
+    String((node.data as Record<string, unknown>)?.triggerType || "")
+  );
 
 function FlowPreviewBody({
   title,
@@ -291,7 +349,10 @@ function FlowPreviewBody({
           isUnreachable:
             node.id !== startNodeId &&
             !incoming.has(node.id) &&
-            !isSystemEntryNode(node)
+            !isSystemEntryNode(node) &&
+            // Instagram welcome, keyword and story-reply blocks start
+            // by themselves.
+            !(platform === "Instagram" && hasOwnInstagramStart(node))
         },
         draggable: false,
         connectable: false,

@@ -83,7 +83,11 @@ Do not describe Instagram connection as Facebook Login unless the product flow c
 
 ## Instagram Follow Check Is A Control Block
 
-`follow_condition` routes to follows, not-follows, or unknown trigger keys. It depends on backend/Meta user profile follower fields. It should behave as routing logic, not as a normal message bubble preview.
+`follow_condition` routes by its wires from the `follows`, `not_follows` and `unknown` outputs (older drafts' content trigger keys are converted to wires on load). It depends on backend/Meta user profile follower fields. It should behave as routing logic, not as a normal message bubble preview.
+
+## Instagram Option IDs Never Follow The Label
+
+Each Instagram quick reply, button and carousel button keeps the `actionId` and `replyId` it was created with, stored in `content`. Never regenerate them from the label: the wire's handle is the `actionId`, so renaming an option must not disconnect it.
 
 ## Skeleton Loading Is Preferred
 

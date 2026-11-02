@@ -139,6 +139,8 @@ export interface InstagramCanvasAction {
 }
 
 export interface InstagramQuickReply {
+  /** Stable id: the option's wire leaves from this. Never changes. */
+  actionId?: string;
   replyId?: string;
   payload?: string;
   label?: string;
@@ -195,6 +197,7 @@ export interface InstagramCanvasNode {
     label?: string;
     triggerType?: InstagramTriggerType;
     triggerKey?: string;
+    keywords?: string[];
     blockType?: InstagramBlockType;
     content?: InstagramCanvasContent;
     actions?: InstagramCanvasAction[];
@@ -203,6 +206,7 @@ export interface InstagramCanvasNode {
   };
   triggerType?: InstagramTriggerType;
   triggerKey?: string;
+  keywords?: string[];
   name?: string;
   blockType?: InstagramBlockType;
   content?: InstagramCanvasContent;
@@ -244,6 +248,13 @@ export interface InstagramCanvasRecord {
   activePublishedVersionId?: string;
   draftState?: InstagramCanvasState;
   publishedState?: InstagramCanvasState | null;
+  draftRevision?: number;
+  /** List only: blocks in the draft. */
+  blockCount?: number;
+  /** List only: has been applied at least once. */
+  hasLiveVersion?: boolean;
+  /** List only: null until the flow has been applied. */
+  pendingChangeCount?: number | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -267,12 +278,40 @@ export interface InstagramCanvasesResponse {
   };
 }
 
+/** How the draft differs from the version customers get. */
+export interface InstagramDraftChanges {
+  neverPublished: boolean;
+  hasUnpublishedChanges: boolean;
+  changedBlockCount: number;
+  addedBlockIds: string[];
+  removedBlockIds: string[];
+  changedBlockIds: string[];
+  startChanged: boolean;
+}
+
+/** Whether and where this flow answers customers. */
+export interface InstagramCanvasLiveInfo {
+  hasLiveVersion: boolean;
+  isActive: boolean;
+  automationEnabled: boolean;
+  aiEnabled: boolean;
+  account: {
+    username: string;
+    name: string | null;
+    profilePictureUrl: string | null;
+    connected: boolean;
+  } | null;
+}
+
 export interface InstagramCanvasDetailResponse {
   status: string;
   data: {
     canvas: InstagramCanvasRecord;
     draftVersion?: InstagramCanvasVersion | null;
     latestPublishedVersion?: InstagramCanvasVersion | null;
+    draftRevision?: number;
+    draftChanges?: InstagramDraftChanges;
+    live?: InstagramCanvasLiveInfo;
   };
 }
 
@@ -286,10 +325,61 @@ export interface InstagramCanvasResponse {
   };
 }
 
+/** A draft save, discard or restore. */
+export interface InstagramCanvasDraftSaveResponse {
+  status: string;
+  data: {
+    canvasId: string;
+    draftState?: InstagramCanvasState;
+    draftRevision?: number;
+    draftChanges?: InstagramDraftChanges;
+    updatedAt?: string;
+  };
+}
+
+/** One problem found by the backend; `message` is shown as-is. */
+export interface InstagramFlowIssue {
+  severity: "error" | "warning";
+  code: string;
+  message: string;
+  nodeId?: string;
+  blockName?: string;
+  /** Which option the problem is about. */
+  actionId?: string;
+  /** e.g. "content.cards.1.title", "content.buttons.0.url", "keywords". */
+  field?: string;
+}
+
+/** How customers reach a block. */
+export type InstagramFlowEntryPoint =
+  | { kind: "start"; greetings: string[] }
+  | { kind: "welcome" }
+  | { kind: "keyword"; keywords: string[] }
+  | { kind: "story_reply"; keywords: string[] }
+  | { kind: "ai" }
+  | {
+      kind: "option";
+      fromNodeId: string;
+      fromBlockName: string;
+      label?: string;
+    }
+  | { kind: "next"; fromNodeId: string; fromBlockName: string }
+  | {
+      kind: "follower_check";
+      fromNodeId: string;
+      fromBlockName: string;
+      condition: string;
+    };
+
 export interface InstagramCanvasValidation {
   valid: boolean;
   errors: string[];
   warnings: string[];
+  issues?: InstagramFlowIssue[];
+  analysis?: Record<
+    string,
+    { reachable: boolean; entryPoints: InstagramFlowEntryPoint[] }
+  >;
   summary: {
     nodeCount: number;
     edgeCount: number;
@@ -308,10 +398,27 @@ export interface InstagramCanvasValidationResponse {
 export interface InstagramCanvasPublishResponse {
   status: string;
   data: {
-    canvasId: string;
-    publishedState: InstagramCanvasState;
-    validation: InstagramCanvasValidation;
+    canvas?: InstagramCanvasRecord;
+    publishedVersion?: InstagramCanvasVersion;
+    draftRevision?: number;
+    draftChanges?: InstagramDraftChanges;
+    validation?: InstagramCanvasValidation;
   };
+}
+
+/** One applied version, for version history. */
+export interface InstagramCanvasVersionSummary {
+  _id: string;
+  versionNumber: number;
+  publishedAt: string | null;
+  publishedBy: { _id: string; name: string } | null;
+  blockCount: number | null;
+  isLive: boolean;
+}
+
+export interface InstagramCanvasVersionsResponse {
+  status: string;
+  data: { versions: InstagramCanvasVersionSummary[] };
 }
 
 export type InstagramFlowStatus = "draft" | "published" | "archived";

@@ -55,7 +55,9 @@ export function FlowVersionHistoryDialog({
   canvasId,
   readOnly,
   onViewLive,
-  onRestore
+  onRestore,
+  listVersions = listBotCanvasVersions,
+  queryKeyPrefix = "bot-canvas-versions"
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -64,12 +66,17 @@ export function FlowVersionHistoryDialog({
   onViewLive: () => void;
   /** Resolves true once the version is in the editor. */
   onRestore: (version: BotCanvasVersion) => Promise<boolean>;
+  /** Loads the versions; WhatsApp's by default. */
+  listVersions?: (
+    canvasId: string
+  ) => Promise<{ data?: { versions?: BotCanvasVersion[] } }>;
+  queryKeyPrefix?: string;
 }) {
   const [confirming, setConfirming] = useState<BotCanvasVersion | null>(null);
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ["bot-canvas-versions", canvasId],
-    queryFn: () => listBotCanvasVersions(canvasId),
+    queryKey: [queryKeyPrefix, canvasId],
+    queryFn: () => listVersions(canvasId),
     enabled: open && Boolean(canvasId),
     refetchOnMount: "always"
   });

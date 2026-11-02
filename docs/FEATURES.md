@@ -121,42 +121,23 @@ Supported WhatsApp action types:
 
 ## Instagram Connection
 
-- `/instagram` handles Instagram professional account status, Instagram Login connection, sync, disconnect, media sync, canvas listing/building, and comment automation.
+- `/instagram` handles Instagram professional account status, Instagram Login connection, sync, disconnect, media sync, the Flows list and editor, and comment automation.
 - Uses `NEXT_PUBLIC_INSTAGRAM_APP_ID`.
 - Reviewer/product wording should keep Instagram Login separate from WhatsApp Embedded Signup.
 
 ## Instagram Message Flows
 
-Supported trigger types:
+The Flows tab (`/instagram?tab=canvas`) lists every flow with its status, block count and pending changes. Only one flow is switched on per account. The editor (`/instagram/[canvasId]`) works like the WhatsApp editor: Outline/Add rail, canvas, and a Content / Next steps / Start inspector with a floating preview. It autosaves with `baseRevision`, shows a blocking banner on a 409 conflict, checks the on-screen draft after each save, and lists every issue in the header.
 
-- Default
-- First DM
-- Keyword
-- Story reply
-- Comment private reply opened
-- Manual start
+Statuses, first match wins: Paused · automation is off, Draft (never applied), Ready · switched off, Active · N pending changes, Active on @username. The header's main button is Activate (never applied: apply, then switch on), Apply changes, or Up to date.
 
-Supported block types:
+Starts (one per block): Only from other blocks, Main menu (exactly one; the greeting words from Settings), Welcome message (at most one), Keyword (1–20 whole-word keywords), Story reply (optional keywords). Legacy `manual_start` is read as "only from other blocks".
 
-- Send text
-- Send image
-- Send video
-- Quick replies
-- Button template
-- Generic template
-- Follower check
-- Tag subscriber
-- Handoff to agent
-- Pause automation
-- End flow
+Blocks: Message, Image, Video, Quick replies (up to 13), Buttons (up to 3; answer or website), Carousel (up to 10 image-only cards), Check if they follow you, Add tag, Hand to a person, Pause automation (1 minute to 7 days), End conversation.
 
-Follower check routes users based on:
+Message, Image, Video and Add tag have a "Then" output (handle `next`): the next block is sent straight away. Check if they follow you has Follows you / Doesn't follow you / Couldn't check (optional; unwired it takes the "Doesn't follow you" path).
 
-- follows the business;
-- does not follow the business;
-- follower status unknown.
-
-Preview is intentionally not shown for non-message/control blocks such as tag subscriber, handoff, pause, and end flow.
+Preview is intentionally not shown for control blocks such as the follower check, tag, hand-off, pause and end.
 
 ## Instagram Comment Automation
 

@@ -250,6 +250,12 @@ export const INSTAGRAM_ENDPOINTS = {
     `${INSTAGRAM_BASE}/canvases/${canvasId}/publish`,
   CANVAS_STATUS_BY_ID: (canvasId: string) =>
     `${INSTAGRAM_BASE}/canvases/${canvasId}/status`,
+  CANVAS_DISCARD_BY_ID: (canvasId: string) =>
+    `${INSTAGRAM_BASE}/canvases/${canvasId}/discard-draft`,
+  CANVAS_VERSIONS_BY_ID: (canvasId: string) =>
+    `${INSTAGRAM_BASE}/canvases/${canvasId}/versions`,
+  CANVAS_VERSION_RESTORE_BY_ID: (canvasId: string, versionId: string) =>
+    `${INSTAGRAM_BASE}/canvases/${canvasId}/versions/${versionId}/restore`,
   FLOWS: `${INSTAGRAM_BASE}/flows`,
   FLOW_BY_ID: (flowId: string) => `${INSTAGRAM_BASE}/flows/${flowId}`,
   FLOW_PUBLISH: (flowId: string) => `${INSTAGRAM_BASE}/flows/${flowId}/publish`,

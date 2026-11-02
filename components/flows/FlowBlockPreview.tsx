@@ -134,7 +134,7 @@ function PreviewShell({
   );
 }
 
-function RouteSourceHandle({
+export function RouteSourceHandle({
   id,
   platform
 }: {
@@ -913,9 +913,9 @@ export function InstagramFlowBlockPreview({
                   .slice(0, 13)
                   .map((reply, index) => (
                     <span
-                      key={reply.replyId || index}
+                      key={reply.actionId || reply.replyId || index}
                       {...routeOption(
-                        reply.replyId || reply.payload,
+                        reply.actionId || reply.replyId || reply.payload,
                         reply.label || reply.title || `Reply ${index + 1}`
                       )}
                       className={cn(
@@ -926,7 +926,7 @@ export function InstagramFlowBlockPreview({
                       {reply.label || reply.title || `Reply ${index + 1}`}
                       {showRouteHandles && (
                         <RouteSourceHandle
-                          id={reply.replyId || reply.payload}
+                          id={reply.actionId || reply.replyId || reply.payload}
                           platform="Instagram"
                         />
                       )}

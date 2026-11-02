@@ -1,6 +1,13 @@
 import { Edge, Node } from "@xyflow/react";
 import { RotateCcw } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from "react";
 
 import {
   BotAction,
@@ -39,11 +46,43 @@ const instagramMessageTypes = new Set<string>([
 ]);
 
 const instagramOperationLabels: Record<string, string> = {
-  tag_subscriber: "Tags the subscriber",
-  handoff_to_agent: "Hands the chat to an agent",
+  tag_subscriber: "Adds a tag",
+  handoff_to_agent: "Hands the chat to a person",
   pause_automation: "Pauses automation",
-  end_flow: "Ends the flow"
+  end_flow: "Ends the conversation"
 };
+
+// An Instagram block's "Then" step is sent straight after it. Capped like
+// the backend's, so a loop can't run forever.
+const INSTAGRAM_NEXT_HANDLE = "next";
+const INSTAGRAM_MAX_CHAIN = 10;
+
+const instagramFollowAnswers = [
+  { id: "follows", label: "Follows you" },
+  { id: "not_follows", label: "Doesn't follow you" }
+];
+
+// The tester plays the customer: pick whether they follow the account.
+function FollowCheckChooser() {
+  const onRoute = useContext(RouteClickContext);
+  return (
+    <div className="mx-auto w-fit space-y-1.5 rounded-md bg-slate-100 px-2.5 py-2 text-center text-[11px] text-slate-600">
+      <p>Checks if they follow you. In this test, they:</p>
+      <div className="flex flex-wrap justify-center gap-1.5">
+        {instagramFollowAnswers.map((answer) => (
+          <button
+            key={answer.id}
+            type="button"
+            className="cursor-pointer rounded-full border border-[#3797f0] bg-white px-2.5 py-1 font-semibold text-[#3797f0] hover:bg-sky-50"
+            onClick={() => onRoute?.(answer.id, answer.label)}
+          >
+            {answer.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 // A phone-sized, fully client-side walk through the flow: tapping an option
 // follows the same edges as the diagram. Nothing is sent anywhere.
@@ -72,18 +111,42 @@ export function FlowSimulator({
       ),
     [edges]
   );
+  // The block, then (Instagram) each "Then" step after it.
+  const botEntries = useCallback(
+    (nodeId: string): Entry[] => {
+      const entries: Entry[] = [{ kind: "bot", nodeId, key: nextKey() }];
+      if (platform !== "Instagram") return entries;
+      let current = nodeId;
+      for (let step = 0; step < INSTAGRAM_MAX_CHAIN; step += 1) {
+        const next = targetByRoute.get(edgeKey(current, INSTAGRAM_NEXT_HANDLE));
+        if (!next || !nodeById.has(next)) return entries;
+        entries.push({ kind: "bot", nodeId: next, key: nextKey() });
+        current = next;
+      }
+      entries.push({
+        kind: "system",
+        text: "These blocks lead into each other, so the test stopped here.",
+        key: nextKey()
+      });
+      return entries;
+    },
+    [nodeById, platform, targetByRoute]
+  );
   const initialEntries = useCallback(
     (): Entry[] =>
       startNodeId
-        ? [{ kind: "bot", nodeId: startNodeId, key: nextKey() }]
+        ? botEntries(startNodeId)
         : [
             {
               kind: "system",
-              text: "This flow has no start block.",
+              text:
+                platform === "Instagram"
+                  ? "This flow has no main menu."
+                  : "This flow has no start block.",
               key: nextKey()
             }
           ],
-    [startNodeId]
+    [botEntries, platform, startNodeId]
   );
   const [entries, setEntries] = useState<Entry[]>(initialEntries);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -106,13 +169,15 @@ export function FlowSimulator({
       setEntries((current) => [
         ...current,
         { kind: "user", label, key: nextKey() },
-        target && nodeById.has(target)
-          ? { kind: "bot", nodeId: target, key: nextKey() }
-          : {
-              kind: "system",
-              text: "This button has no next step.",
-              key: nextKey()
-            }
+        ...(target && nodeById.has(target)
+          ? botEntries(target)
+          : [
+              {
+                kind: "system" as const,
+                text: "This button has no next step.",
+                key: nextKey()
+              }
+            ])
       ]);
     };
 
@@ -199,6 +264,8 @@ export function FlowSimulator({
                       chrome={false}
                     />
                   </div>
+                ) : blockType === "follow_condition" ? (
+                  <FollowCheckChooser />
                 ) : (
                   <p className="mx-auto w-fit rounded-md bg-slate-100 px-2.5 py-1 text-[11px] text-slate-600">
                     {instagramOperationLabels[blockType] || "Automation step"}

@@ -1,67 +1,24 @@
 "use client";
 
 import {
-  addEdge,
-  Background,
-  Connection,
-  ConnectionLineType,
-  Controls,
-  Edge,
-  Handle,
-  MiniMap,
-  Node,
-  NodeChange,
-  NodeProps,
-  Position,
-  ReactFlow,
-  ReactFlowProvider,
-  ViewportPortal,
-  useEdgesState,
-  useNodesState,
-  useUpdateNodeInternals
-} from "@xyflow/react";
-import {
-  ArrowLeft,
   Check,
   CheckCircle2,
-  Eye,
   ExternalLink,
   ImageIcon,
   Instagram,
   Loader2,
   MessageCircle,
-  MousePointerClick,
-  PauseCircle,
   Plus,
   RefreshCcw,
-  Route,
-  Save,
   Search,
-  Send,
   Settings2,
-  ShieldAlert,
-  Tags,
-  Trash2,
-  UserCheck,
-  UserRound,
-  Video,
-  Workflow,
   X,
   XCircle
 } from "lucide-react";
-import {
-  DragEvent,
-  memo,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   useInfiniteQuery,
   useMutation,
-  useQueries,
   useQuery,
   useQueryClient
 } from "@tanstack/react-query";
@@ -72,57 +29,30 @@ import { toast } from "sonner";
 
 import {
   connectInstagramLogin,
-  createInstagramCanvas,
-  deleteInstagramCanvas,
   createInstagramCommentRule,
   deleteInstagramCommentRule,
   disableInstagramCommentRule,
   enableInstagramCommentRule,
-  getInstagramCanvas,
-  getInstagramCanvasDraft,
-  getInstagramCanvasPublished,
   getInstagramCanvases,
   getInstagramCommentRules,
   getInstagramFlows,
   getInstagramMedia,
   disconnectInstagram,
   getInstagramStatus,
-  publishInstagramCanvasById,
-  publishInstagramCanvas,
-  saveInstagramCanvasDraftById,
-  saveInstagramCanvasDraft,
   syncInstagramMedia,
   syncInstagramStatus,
-  updateInstagramCanvas,
-  updateInstagramCanvasStatus,
-  updateInstagramCommentRule,
-  validateInstagramCanvasById,
-  validateInstagramCanvas
+  updateInstagramCommentRule
 } from "@/client-api/functions/instagram";
 import {
   ConnectInstagramLoginPayload,
-  InstagramActionType,
-  InstagramBlockType,
-  InstagramCanvasAction,
-  InstagramCanvasContent,
-  InstagramCanvasNode,
-  InstagramCanvasRecord,
-  InstagramCanvasState,
   InstagramCommentRule,
   InstagramCommentRulePayload,
   InstagramFlow,
-  InstagramGenericCard,
   InstagramLoginAccount,
   InstagramMedia,
-  InstagramQuickReply,
-  InstagramStatusResponse,
-  InstagramTemplateButton,
-  InstagramTriggerType
+  InstagramStatusResponse
 } from "@/client-api/types/instagram.type";
-import { MediaAsset } from "@/client-api/types/media.type";
-import MediaPickerDialog from "@/components/media/MediaPickerDialog";
-import { InstagramFlowBlockPreview } from "@/components/flows/FlowBlockPreview";
-import FlowDiagramPreviewDialog from "@/components/flows/FlowDiagramPreviewDialog";
+import { InstagramFlowsList } from "@/components/instagram/InstagramFlowsList";
 import { InstagramSettingsTab } from "@/components/instagram/InstagramSettingsTab";
 import {
   AlertDialog,
@@ -146,10 +76,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  CanvasLoadingSkeleton,
-  CardGridLoadingSkeleton
-} from "@/components/ui/loading-skeletons";
+import { CardGridLoadingSkeleton } from "@/components/ui/loading-skeletons";
 import {
   Select,
   SelectContent,
@@ -168,111 +95,7 @@ import { PermissionGate } from "@/components/common/NoAccess";
 type PageTab = "profile" | "settings" | "canvas" | "rules" | "media" | "setup";
 // Tabs that can be linked to with ?tab= (setup is an internal-only view).
 const URL_TABS = ["profile", "settings", "canvas", "rules", "media"] as const;
-type CanvasMode = "draft" | "published";
-const instagramEdgeStyle = { strokeWidth: 1.25, strokeDasharray: "4 5" };
-type MediaPickerTarget =
-  | { kind: "node"; type: "IMAGE" | "VIDEO" }
-  | { kind: "generic-card"; cardIndex: number; type: "IMAGE" | "VIDEO" };
 
-interface InstagramNodeData extends Record<string, unknown> {
-  name: string;
-  triggerType?: InstagramTriggerType;
-  triggerKey?: string;
-  blockType: InstagramBlockType;
-  content: InstagramCanvasContent;
-  actions: InstagramCanvasAction[];
-  locked?: boolean;
-  invalid?: boolean;
-  metadata?: Record<string, unknown>;
-}
-
-type InstagramFlowNode = Node<InstagramNodeData, "instagramBlock">;
-
-const blockMeta: Record<
-  InstagramBlockType,
-  { label: string; icon: React.ElementType; description: string }
-> = {
-  send_text: {
-    label: "Text",
-    icon: MessageCircle,
-    description: "Plain Instagram DM text"
-  },
-  send_image: {
-    label: "Image",
-    icon: ImageIcon,
-    description: "Send an image from media library"
-  },
-  send_video: {
-    label: "Video",
-    icon: Video,
-    description: "Send a video from media library"
-  },
-  quick_replies: {
-    label: "Quick Replies",
-    icon: Send,
-    description: "Up to 13 temporary reply choices"
-  },
-  button_template: {
-    label: "Button Template",
-    icon: MousePointerClick,
-    description: "Text with up to 3 URL or postback buttons"
-  },
-  generic_template: {
-    label: "Generic Template",
-    icon: Route,
-    description: "Carousel with up to 10 cards"
-  },
-  follow_condition: {
-    label: "Follower Check",
-    icon: UserCheck,
-    description: "Route by whether the person follows your account"
-  },
-  tag_subscriber: {
-    label: "Tag Subscriber",
-    icon: Tags,
-    description: "Apply tags for segmentation"
-  },
-  handoff_to_agent: {
-    label: "Handoff",
-    icon: UserRound,
-    description: "Escalate to the team inbox"
-  },
-  pause_automation: {
-    label: "Pause",
-    icon: PauseCircle,
-    description: "Pause Instagram automation"
-  },
-  end_flow: {
-    label: "End Flow",
-    icon: CheckCircle2,
-    description: "Resolve this automated path"
-  }
-};
-
-const triggerLabels: Record<InstagramTriggerType, string> = {
-  default: "Default",
-  first_dm: "First DM",
-  keyword: "Keyword",
-  story_reply: "Story Reply",
-  comment_private_reply_opened: "Comment opened",
-  manual_start: "Manual Start"
-};
-const visibleTriggerEntries = Object.entries(triggerLabels).filter(
-  ([value]) =>
-    value !== "comment_private_reply_opened" && value !== "manual_start"
-);
-
-const blockTypes = Object.keys(blockMeta) as InstagramBlockType[];
-const previewableInstagramBlockTypes = new Set<InstagramBlockType>([
-  "send_text",
-  "send_image",
-  "send_video",
-  "quick_replies",
-  "button_template",
-  "generic_template"
-]);
-
-const routeActionTypes = new Set<InstagramActionType>(["go_to_node"]);
 const INSTAGRAM_LOGIN_STATE_KEY = "whatching_instagram_login_state";
 const INSTAGRAM_LOGIN_REDIRECT_KEY = "whatching_instagram_login_redirect_uri";
 const instagramLoginScopes = [
@@ -328,416 +151,6 @@ const getErrorMessage = (error: unknown, fallback = "Something went wrong") => {
   );
 };
 
-const normalizeKey = (value: string) =>
-  value.trim().replace(/\s+/g, " ").toUpperCase();
-
-const createId = (prefix: string) =>
-  `${prefix}_${Date.now().toString(36)}_${Math.random()
-    .toString(36)
-    .slice(2, 7)}`;
-
-const makeReplyId = (label: string, fallback: string) =>
-  normalizeKey(label || fallback)
-    .replace(/[^A-Z0-9]+/g, "_")
-    .slice(0, 48) || fallback;
-
-const getRawNodeData = (node: InstagramCanvasNode): InstagramNodeData => {
-  const data = node.data || {};
-  return {
-    name: data.name || data.label || node.name || "Instagram block",
-    triggerType: data.triggerType || node.triggerType,
-    triggerKey: data.triggerKey || node.triggerKey,
-    blockType: data.blockType || node.blockType || "send_text",
-    content: data.content || node.content || {},
-    actions: data.actions || node.actions || [],
-    locked: Boolean(data.locked || node.locked),
-    invalid: false,
-    metadata: data.metadata || node.metadata || {}
-  };
-};
-
-const toFlowNodes = (
-  state?: InstagramCanvasState | null
-): InstagramFlowNode[] =>
-  (state?.nodes || []).map((node, index) => {
-    const data = getRawNodeData(node);
-    const triggerKey = data.triggerKey ? normalizeKey(data.triggerKey) : "";
-    const defaultTriggerKey = state?.defaultTriggerKey
-      ? normalizeKey(state.defaultTriggerKey)
-      : "";
-    return {
-      id: node.id || data.triggerKey || `ig_node_${index + 1}`,
-      type: "instagramBlock",
-      position: node.position || { x: 120 + index * 80, y: 120 + index * 100 },
-      data: {
-        ...data,
-        metadata: {
-          ...(data.metadata || {}),
-          isDefault:
-            Boolean(defaultTriggerKey && triggerKey === defaultTriggerKey) ||
-            Boolean(data.metadata?.isDefault)
-        }
-      }
-    };
-  });
-
-const toFlowEdges = (state?: InstagramCanvasState | null): Edge[] =>
-  (state?.edges || []).map((edge, index) => ({
-    id: edge.id || `ig_edge_${index + 1}`,
-    source: edge.source,
-    target: edge.target,
-    sourceHandle: edge.sourceHandle || edge.actionId || edge.replyId,
-    targetHandle: edge.targetHandle || "in",
-    type: "smoothstep",
-    style: instagramEdgeStyle,
-    data: {
-      actionId: edge.actionId,
-      replyId: edge.replyId,
-      ...(edge.data || {})
-    }
-  }));
-
-const defaultContentForType = (
-  type: InstagramBlockType
-): InstagramCanvasContent => {
-  if (type === "quick_replies") {
-    return {
-      text: "What would you like to do?",
-      quickReplies: [
-        {
-          label: "View products",
-          replyId: "VIEW_PRODUCTS",
-          contentType: "text"
-        },
-        { label: "Talk to team", replyId: "TALK_TO_TEAM", contentType: "text" }
-      ]
-    };
-  }
-  if (type === "button_template") {
-    return {
-      text: "Choose an option.",
-      buttons: [
-        { type: "postback", label: "Start", replyId: "START" },
-        { type: "web_url", label: "Website", url: "https://example.com" }
-      ]
-    };
-  }
-  if (type === "generic_template") {
-    return {
-      cards: [
-        {
-          title: "Featured item",
-          subtitle: "Add image/video and actions",
-          mediaType: "image",
-          buttons: [{ type: "postback", label: "View", replyId: "VIEW_ITEM" }]
-        }
-      ]
-    };
-  }
-  if (type === "follow_condition") {
-    return {};
-  }
-  if (type === "pause_automation") return { minutes: 60 };
-  if (type === "tag_subscriber") return { tags: ["instagram"] };
-  if (type === "handoff_to_agent") return { reason: "instagram_handoff" };
-  if (type === "end_flow") return { reason: "completed" };
-  return { text: "Write your Instagram message here." };
-};
-
-const deriveActions = (
-  blockType: InstagramBlockType,
-  content: InstagramCanvasContent
-): InstagramCanvasAction[] => {
-  if (blockType === "follow_condition") {
-    return [
-      {
-        actionId: "follows",
-        type: "go_to_node",
-        label: "Follows you",
-        condition: "follows",
-        metadata: { condition: "follows" }
-      },
-      {
-        actionId: "not_follows",
-        type: "go_to_node",
-        label: "Does not follow",
-        condition: "not_follows",
-        metadata: { condition: "not_follows" }
-      },
-      {
-        actionId: "unknown",
-        type: "go_to_node",
-        label: "Could not verify",
-        condition: "unknown",
-        metadata: { condition: "unknown" }
-      }
-    ];
-  }
-
-  if (blockType === "quick_replies") {
-    return ((content.quickReplies as InstagramQuickReply[]) || []).map(
-      (reply, index) => {
-        const label = reply.label || reply.title || `Reply ${index + 1}`;
-        const replyId =
-          reply.replyId ||
-          reply.payload ||
-          makeReplyId(label, `REPLY_${index + 1}`);
-        return {
-          actionId: replyId,
-          type: "go_to_node",
-          label,
-          replyId,
-          metadata: { contentType: reply.contentType || "text" }
-        };
-      }
-    );
-  }
-
-  if (blockType === "button_template") {
-    return ((content.buttons as InstagramTemplateButton[]) || []).map(
-      (button, index) => {
-        const label = button.label || button.title || `Button ${index + 1}`;
-        const buttonType = button.type || (button.url ? "web_url" : "postback");
-        const replyId =
-          button.replyId ||
-          button.payload ||
-          makeReplyId(label, `BUTTON_${index + 1}`);
-        return {
-          actionId: button.actionId || replyId,
-          type: buttonType === "web_url" ? "open_url" : "go_to_node",
-          label,
-          replyId: buttonType === "web_url" ? undefined : replyId,
-          url: buttonType === "web_url" ? button.url : undefined,
-          metadata: {}
-        };
-      }
-    );
-  }
-
-  if (blockType === "generic_template") {
-    const actions: InstagramCanvasAction[] = [];
-    ((content.cards as InstagramGenericCard[]) || []).forEach(
-      (card, cardIndex) => {
-        (card.buttons || []).forEach((button, buttonIndex) => {
-          const label =
-            button.label || button.title || `Button ${buttonIndex + 1}`;
-          const buttonType =
-            button.type || (button.url ? "web_url" : "postback");
-          const replyId =
-            button.replyId ||
-            button.payload ||
-            makeReplyId(label, `CARD_${cardIndex + 1}_${buttonIndex + 1}`);
-          actions.push({
-            actionId: button.actionId || replyId,
-            type: buttonType === "web_url" ? "open_url" : "go_to_node",
-            label,
-            replyId: buttonType === "web_url" ? undefined : replyId,
-            url: buttonType === "web_url" ? button.url : undefined,
-            metadata: { cardIndex }
-          });
-        });
-      }
-    );
-    return actions;
-  }
-
-  return [];
-};
-
-const toCanvasState = (
-  nodes: InstagramFlowNode[],
-  edges: Edge[],
-  version = 1
-): InstagramCanvasState => {
-  const defaultNode =
-    nodes.find((node) =>
-      Boolean(
-        (node.data.metadata as Record<string, unknown> | undefined)?.isDefault
-      )
-    ) || nodes[0];
-  const defaultTriggerKey = defaultNode?.data.triggerKey
-    ? normalizeKey(defaultNode.data.triggerKey)
-    : defaultNode?.id
-      ? normalizeKey(defaultNode.id)
-      : undefined;
-
-  return {
-    version,
-    defaultTriggerKey,
-    nodes: nodes.map((node) => {
-      const actions = deriveActions(node.data.blockType, node.data.content);
-      const triggerKey = node.data.triggerKey
-        ? normalizeKey(node.data.triggerKey)
-        : node.id === defaultNode?.id && defaultTriggerKey
-          ? defaultTriggerKey
-          : undefined;
-      const followRouteContent =
-        node.data.blockType === "follow_condition"
-          ? edges
-              .filter((edge) => edge.source === node.id && edge.sourceHandle)
-              .reduce<Record<string, string>>((routes, edge) => {
-                const target = nodes.find((item) => item.id === edge.target);
-                if (!target?.data.triggerKey) return routes;
-                const field =
-                  edge.sourceHandle === "follows"
-                    ? "followsTriggerKey"
-                    : edge.sourceHandle === "not_follows"
-                      ? "notFollowsTriggerKey"
-                      : edge.sourceHandle === "unknown"
-                        ? "unknownTriggerKey"
-                        : "";
-                if (field) routes[field] = normalizeKey(target.data.triggerKey);
-                return routes;
-              }, {})
-          : {};
-      return {
-        id: node.id,
-        type: "instagramBlock",
-        position: node.position,
-        data: {
-          name: node.data.name,
-          triggerType:
-            node.id === defaultNode?.id ? "default" : node.data.triggerType,
-          triggerKey,
-          blockType: node.data.blockType,
-          content: { ...node.data.content, ...followRouteContent },
-          actions,
-          locked: node.data.locked,
-          metadata: {
-            ...(node.data.metadata || {}),
-            isDefault: node.id === defaultNode?.id
-          }
-        }
-      };
-    }),
-    edges: edges.map((edge) => ({
-      id: edge.id,
-      source: edge.source,
-      target: edge.target,
-      sourceHandle: edge.sourceHandle || undefined,
-      targetHandle: edge.targetHandle || "in",
-      actionId:
-        edge.sourceHandle || (edge.data?.actionId as string) || undefined,
-      replyId: edge.sourceHandle || (edge.data?.replyId as string) || undefined,
-      data: {
-        actionId: edge.sourceHandle || (edge.data?.actionId as string),
-        replyId: edge.sourceHandle || (edge.data?.replyId as string)
-      }
-    })),
-    viewport: { x: 0, y: 0, zoom: 1 }
-  };
-};
-
-function InstagramBlockNode({
-  id,
-  data,
-  selected
-}: NodeProps<InstagramFlowNode>) {
-  const updateNodeInternals = useUpdateNodeInternals();
-  const meta = blockMeta[data.blockType] || blockMeta.send_text;
-  const Icon = meta.icon;
-  const isDefault = Boolean(
-    (data.metadata as Record<string, unknown> | undefined)?.isDefault
-  );
-  const actions = useMemo(
-    () =>
-      deriveActions(data.blockType, data.content).filter((action) =>
-        routeActionTypes.has(action.type)
-      ),
-    [data.blockType, data.content]
-  );
-  const outputHandleKey = useMemo(
-    () => actions.map((action) => action.actionId).join("|"),
-    [actions]
-  );
-
-  useEffect(() => {
-    updateNodeInternals(id);
-  }, [id, outputHandleKey, updateNodeInternals]);
-
-  return (
-    <div
-      className={cn(
-        "relative min-w-72 max-w-80 rounded-xl border bg-white shadow-sm transition",
-        selected && "border-pink-500 shadow-md ring-2 ring-pink-500/15",
-        isDefault && "border-2 border-pink-600 shadow-md",
-        data.invalid && "border-destructive ring-2 ring-destructive/15"
-      )}
-    >
-      {isDefault && (
-        <span className="absolute left-1/2 top-0 z-10 -translate-x-1/2 -translate-y-1/2 rounded-full bg-pink-600 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-white shadow">
-          Default
-        </span>
-      )}
-      <Handle
-        id="in"
-        type="target"
-        position={Position.Left}
-        className="!size-3.5 !border-2 !border-white !bg-pink-500"
-      />
-      <div className="flex items-start gap-3 border-b px-4 py-3">
-        <div className="flex size-10 items-center justify-center rounded-md bg-pink-50 text-pink-600">
-          <Icon className="size-5" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold">{data.name}</p>
-          <div className="mt-1 flex flex-wrap items-center gap-1.5">
-            {data.triggerType && (
-              <Badge variant="outline" className="text-[10px]">
-                {triggerLabels[data.triggerType]}
-              </Badge>
-            )}
-            <span className="text-xs text-muted-foreground">{meta.label}</span>
-          </div>
-        </div>
-      </div>
-      <div className="space-y-2 px-4 py-3">
-        <p className="line-clamp-3 text-sm text-muted-foreground">
-          {data.content.text ||
-            (data.content.cards as InstagramGenericCard[] | undefined)?.[0]
-              ?.title ||
-            data.content.reason ||
-            meta.description}
-        </p>
-        {(data.blockType === "send_image" || data.blockType === "send_video") &&
-          data.content.mediaName && (
-            <Badge variant="secondary" className="max-w-full truncate">
-              {data.content.mediaName}
-            </Badge>
-          )}
-      </div>
-      {actions.length > 0 && (
-        <div className="space-y-2 border-t bg-muted/30 px-4 py-3 pr-6">
-          {actions.map((action) => (
-            <div
-              key={action.actionId}
-              className="relative flex items-center justify-between gap-3 rounded-md bg-white px-2 py-1.5 text-xs shadow-xs"
-            >
-              <span className="truncate">{action.label || action.replyId}</span>
-              <Badge variant="secondary" className="text-[10px]">
-                route
-              </Badge>
-              <Handle
-                id={action.actionId}
-                type="source"
-                position={Position.Right}
-                style={{
-                  right: -18,
-                  top: "50%",
-                  transform: "translate(50%, -50%)"
-                }}
-                className="!size-3.5 !border-2 !border-white !bg-pink-500"
-              />
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-const nodeTypes = { instagramBlock: memo(InstagramBlockNode) };
-
 const emptyRule: InstagramCommentRulePayload = {
   name: "",
   status: "enabled",
@@ -756,18 +169,9 @@ const INSTAGRAM_FLOWS_PAGE_SIZE = 12;
 const INSTAGRAM_MEDIA_PAGE_SIZE = 36;
 const INSTAGRAM_RULES_PAGE_SIZE = 30;
 
-type InstagramPageProps = {
-  canvasOnly?: boolean;
-  forcedCanvasId?: string;
-};
-
-export function InstagramPage({
-  canvasOnly = false,
-  forcedCanvasId = ""
-}: InstagramPageProps = {}) {
+export function InstagramPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const canvasRef = useRef<HTMLDivElement | null>(null);
   const flowsLoadMoreRef = useRef<HTMLDivElement | null>(null);
   const mediaLoadMoreRef = useRef<HTMLDivElement | null>(null);
   const rulesLoadMoreRef = useRef<HTMLDivElement | null>(null);
@@ -776,17 +180,15 @@ export function InstagramPage({
     (state) => state.activeOrganization
   );
   const activeOrgId = activeOrganization?._id;
-  // The tab lives in the URL (?tab=settings) so refresh and back keep it;
-  // the canvas editor route always shows the canvas.
+  // The tab lives in the URL (?tab=settings) so refresh and back keep it.
   const [urlTab, setUrlTab] = useQueryState(
     "tab",
     parseAsStringLiteral(URL_TABS).withDefault("profile")
   );
   const [internalTab, setInternalTab] = useState<PageTab | null>(null);
-  const activeTab: PageTab = canvasOnly ? "canvas" : internalTab || urlTab;
+  const activeTab: PageTab = internalTab || urlTab;
   const setActiveTab = useCallback(
     (tab: PageTab) => {
-      if (canvasOnly) return;
       if (tab === "setup") {
         setInternalTab(tab);
         return;
@@ -794,20 +196,10 @@ export function InstagramPage({
       setInternalTab(null);
       void setUrlTab(tab);
     },
-    [canvasOnly, setUrlTab]
+    [setUrlTab]
   );
-  const [selectedCanvasId, setSelectedCanvasId] = useState(forcedCanvasId);
-  const [canvasMode, setCanvasMode] = useState<CanvasMode>("draft");
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [previewNodeId, setPreviewNodeId] = useState<string | null>(null);
-  const [flowPreviewOpen, setFlowPreviewOpen] = useState(false);
-  const [nodes, setNodes, onNodesChange] = useNodesState<InstagramFlowNode>([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
-  const [validationMessages, setValidationMessages] = useState<string[]>([]);
   const [isConnectOpen, setIsConnectOpen] = useState(false);
   const [isDisconnectOpen, setIsDisconnectOpen] = useState(false);
-  const [mediaPickerTarget, setMediaPickerTarget] =
-    useState<MediaPickerTarget | null>(null);
   const [mediaSearch, setMediaSearch] = useState("");
   const [mediaTypeFilter, setMediaTypeFilter] = useState("all");
   const [ruleDraft, setRuleDraft] =
@@ -818,11 +210,6 @@ export function InstagramPage({
   const [isRuleMediaPickerOpen, setIsRuleMediaPickerOpen] = useState(false);
   const [ruleToArchive, setRuleToArchive] =
     useState<InstagramCommentRule | null>(null);
-  const [canvasToRename, setCanvasToRename] =
-    useState<InstagramCanvasRecord | null>(null);
-  const [canvasRenameValue, setCanvasRenameValue] = useState("");
-  const [canvasToArchive, setCanvasToArchive] =
-    useState<InstagramCanvasRecord | null>(null);
   const [pendingRuleMediaIds, setPendingRuleMediaIds] = useState<string[]>([]);
   const [loginSelection, setLoginSelection] = useState<{
     code: string;
@@ -841,7 +228,8 @@ export function InstagramPage({
   const instagram = statusData?.data.instagram;
   const isReady = instagram?.status === "ready";
   const enabledForPlan = statusData?.data.enabledForPlan !== false;
-  const { data: canvasesData, isLoading: isCanvasesLoading } = useQuery({
+  // The Settings tab checks whether a flow is switched on.
+  const { data: canvasesData } = useQuery({
     queryKey: ["instagram-canvases", activeOrgId],
     queryFn: getInstagramCanvases,
     enabled: Boolean(activeOrgId && isReady)
@@ -850,54 +238,6 @@ export function InstagramPage({
     () => canvasesData?.data.canvases || [],
     [canvasesData?.data.canvases]
   );
-  const canvasDetailQueries = useQueries({
-    queries: canvases.map((canvas) => ({
-      queryKey: ["instagram-canvas", activeOrgId, canvas._id],
-      queryFn: () => getInstagramCanvas(canvas._id),
-      enabled: Boolean(activeOrgId && isReady)
-    }))
-  });
-  const canvasDetailsById = useMemo(
-    () =>
-      new Map(
-        canvasDetailQueries.flatMap((query) => {
-          const detail = query.data?.data.canvas;
-          return detail ? [[detail._id, detail] as const] : [];
-        })
-      ),
-    [canvasDetailQueries]
-  );
-  useEffect(() => {
-    if (forcedCanvasId && selectedCanvasId !== forcedCanvasId) {
-      setSelectedCanvasId(forcedCanvasId);
-      return;
-    }
-    if (forcedCanvasId || selectedCanvasId || !canvases.length) return;
-    setSelectedCanvasId(
-      canvases.find((canvas) => canvas.status === "active")?._id ||
-        canvases[0]._id
-    );
-  }, [canvases, forcedCanvasId, selectedCanvasId]);
-  const selectedCanvas =
-    canvases.find((canvas) => canvas._id === selectedCanvasId) || null;
-  const { data: canvasDetailData, isLoading: isCanvasDetailLoading } = useQuery(
-    {
-      queryKey: ["instagram-canvas", activeOrgId, selectedCanvasId],
-      queryFn: () => getInstagramCanvas(selectedCanvasId),
-      enabled: Boolean(activeOrgId && isReady && selectedCanvasId)
-    }
-  );
-  const canvasDetail = canvasDetailData?.data.canvas;
-  const { data: draftData, isLoading: isDraftLoading } = useQuery({
-    queryKey: ["instagram-canvas-draft", activeOrgId],
-    queryFn: getInstagramCanvasDraft,
-    enabled: Boolean(activeOrgId && isReady && !selectedCanvasId)
-  });
-  const { data: publishedData } = useQuery({
-    queryKey: ["instagram-canvas-published", activeOrgId],
-    queryFn: getInstagramCanvasPublished,
-    enabled: Boolean(activeOrgId && isReady && !selectedCanvasId)
-  });
   const {
     data: flowsData,
     isFetchingNextPage: isFetchingMoreFlows,
@@ -966,29 +306,6 @@ export function InstagramPage({
     enabled: Boolean(activeOrgId && isReady)
   });
 
-  const activeCanvasState =
-    canvasMode === "draft"
-      ? canvasDetail?.draftState || draftData?.data.draftState
-      : canvasDetail?.publishedState || publishedData?.data.publishedState;
-  const selectedNode = useMemo(
-    () => nodes.find((node) => node.id === selectedNodeId) || null,
-    [nodes, selectedNodeId]
-  );
-  const styledEdges = useMemo(
-    () =>
-      edges.map((edge) => ({
-        ...edge,
-        type: "smoothstep",
-        style: { ...edge.style, ...instagramEdgeStyle }
-      })),
-    [edges]
-  );
-  const previewNode = useMemo(() => {
-    const node = nodes.find((item) => item.id === previewNodeId) || null;
-    return node && previewableInstagramBlockTypes.has(node.data.blockType)
-      ? node
-      : null;
-  }, [nodes, previewNodeId]);
   const rules = useMemo(() => {
     const uniqueRules = new Map<string, InstagramCommentRule>();
     rulesData?.pages
@@ -1010,11 +327,6 @@ export function InstagramPage({
       .forEach((flow) => uniqueFlows.set(flow._id, flow));
     return Array.from(uniqueFlows.values());
   }, [flowsData?.pages]);
-  const selectedCanvasVersion =
-    canvasDetail?.draftState?.version ||
-    draftData?.data.draftState?.version ||
-    1;
-
   useEffect(() => {
     const sentinel = rulesLoadMoreRef.current;
     if (!sentinel || !hasMoreRules || activeTab !== "rules") return;
@@ -1080,15 +392,10 @@ export function InstagramPage({
   // Wait for the status before bouncing, or a refresh on ?tab=settings
   // would always land on Profile.
   useEffect(() => {
-    if (
-      !canvasOnly &&
-      !isStatusLoading &&
-      !isReady &&
-      activeTab !== "profile"
-    ) {
+    if (!isStatusLoading && !isReady && activeTab !== "profile") {
       setActiveTab("profile");
     }
-  }, [activeTab, canvasOnly, isReady, isStatusLoading, setActiveTab]);
+  }, [activeTab, isReady, isStatusLoading, setActiveTab]);
 
   useEffect(() => {
     if (!isReady) return;
@@ -1099,13 +406,6 @@ export function InstagramPage({
     sessionStorage.removeItem(INSTAGRAM_LOGIN_STATE_KEY);
     sessionStorage.removeItem(INSTAGRAM_LOGIN_REDIRECT_KEY);
   }, [isReady]);
-
-  useEffect(() => {
-    setNodes(toFlowNodes(activeCanvasState));
-    setEdges(toFlowEdges(activeCanvasState));
-    setSelectedNodeId(null);
-    setPreviewNodeId(null);
-  }, [activeCanvasState, setEdges, setNodes]);
 
   const connectMutation = useMutation({
     mutationFn: connectInstagramLogin,
@@ -1279,171 +579,6 @@ export function InstagramPage({
     onError: (error) => toast.error(getErrorMessage(error))
   });
 
-  const saveDraftMutation = useMutation({
-    mutationFn: () => {
-      const state = toCanvasState(nodes, edges, selectedCanvasVersion);
-      return selectedCanvasId
-        ? saveInstagramCanvasDraftById({
-            canvasId: selectedCanvasId,
-            draftState: state
-          })
-        : saveInstagramCanvasDraft(state);
-    },
-    meta: { showToast: false },
-    onSuccess: async () => {
-      const validation = selectedCanvasId
-        ? await validateInstagramCanvasById(selectedCanvasId)
-        : await validateInstagramCanvas();
-      setValidationMessages(validation.data.validation.errors);
-      toast.success(
-        validation.data.validation.valid
-          ? "Draft saved and validated"
-          : "Draft saved with validation issues"
-      );
-      queryClient.invalidateQueries({ queryKey: ["instagram-canvases"] });
-      queryClient.invalidateQueries({ queryKey: ["instagram-canvas"] });
-      queryClient.invalidateQueries({ queryKey: ["instagram-canvas-draft"] });
-    },
-    onError: (error) => toast.error(getErrorMessage(error))
-  });
-
-  const saveCurrentDraftBeforeMediaLibrary = useCallback(async () => {
-    if (canvasMode !== "draft") return;
-
-    try {
-      const state = toCanvasState(nodes, edges, selectedCanvasVersion);
-      if (selectedCanvasId) {
-        await saveInstagramCanvasDraftById({
-          canvasId: selectedCanvasId,
-          draftState: state
-        });
-      } else {
-        await saveInstagramCanvasDraft(state);
-      }
-      queryClient.invalidateQueries({ queryKey: ["instagram-canvas"] });
-      queryClient.invalidateQueries({ queryKey: ["instagram-canvas-draft"] });
-      toast.success("Draft saved before opening media library");
-    } catch (error) {
-      toast.error(getErrorMessage(error, "Instagram draft could not be saved"));
-      throw error;
-    }
-  }, [
-    canvasMode,
-    edges,
-    nodes,
-    queryClient,
-    selectedCanvasId,
-    selectedCanvasVersion
-  ]);
-
-  const validateMutation = useMutation({
-    mutationFn: () =>
-      selectedCanvasId
-        ? validateInstagramCanvasById(selectedCanvasId)
-        : validateInstagramCanvas(),
-    meta: { showToast: false },
-    onSuccess: (data) => {
-      setValidationMessages(data.data.validation.errors);
-      toast[data.data.validation.valid ? "success" : "error"](
-        data.data.validation.valid
-          ? "Instagram canvas is valid"
-          : "Fix validation errors before publishing"
-      );
-    },
-    onError: (error) => toast.error(getErrorMessage(error))
-  });
-
-  const publishMutation = useMutation({
-    mutationFn: async () => {
-      const state = toCanvasState(nodes, edges, selectedCanvasVersion);
-      if (selectedCanvasId) {
-        await saveInstagramCanvasDraftById({
-          canvasId: selectedCanvasId,
-          draftState: state
-        });
-        return publishInstagramCanvasById({
-          canvasId: selectedCanvasId,
-          draftState: state
-        });
-      }
-      await saveInstagramCanvasDraft(state);
-      return publishInstagramCanvas(state);
-    },
-    meta: { showToast: false },
-    onSuccess: (data) => {
-      setValidationMessages(data.data.validation.warnings || []);
-      toast.success("Instagram canvas published");
-      queryClient.invalidateQueries({ queryKey: ["instagram-canvases"] });
-      queryClient.invalidateQueries({ queryKey: ["instagram-canvas"] });
-      queryClient.invalidateQueries({ queryKey: ["instagram-canvas-draft"] });
-      queryClient.invalidateQueries({
-        queryKey: ["instagram-canvas-published"]
-      });
-      setCanvasMode("published");
-    },
-    onError: (error) => {
-      const message = getErrorMessage(error, "Instagram publish failed");
-      setValidationMessages([message]);
-      toast.error(message);
-    }
-  });
-
-  const createCanvasMutation = useMutation({
-    mutationFn: () =>
-      createInstagramCanvas({
-        name: `Instagram Canvas ${canvases.length + 1}`
-      }),
-    meta: { showToast: false },
-    onSuccess: (data) => {
-      toast.success("Instagram canvas created");
-      setSelectedCanvasId(data.data.canvas._id);
-      setCanvasMode("draft");
-      queryClient.invalidateQueries({ queryKey: ["instagram-canvases"] });
-      if (!canvasOnly) router.push(`/instagram/${data.data.canvas._id}`);
-    },
-    onError: (error) => toast.error(getErrorMessage(error))
-  });
-
-  const canvasStatusMutation = useMutation({
-    mutationFn: updateInstagramCanvasStatus,
-    meta: { showToast: false },
-    onSuccess: (_data, variables) => {
-      toast.success(
-        variables.status === "active"
-          ? "Instagram canvas activated"
-          : "Instagram canvas deactivated"
-      );
-      queryClient.invalidateQueries({ queryKey: ["instagram-canvases"] });
-      queryClient.invalidateQueries({ queryKey: ["instagram-canvas"] });
-    },
-    onError: (error) => toast.error(getErrorMessage(error))
-  });
-
-  const deleteCanvasMutation = useMutation({
-    mutationFn: deleteInstagramCanvas,
-    meta: { showToast: false },
-    onSuccess: () => {
-      toast.success("Instagram flow deleted");
-      setSelectedCanvasId("");
-      setCanvasToArchive(null);
-      queryClient.invalidateQueries({ queryKey: ["instagram-canvases"] });
-    },
-    onError: (error) => toast.error(getErrorMessage(error))
-  });
-
-  const renameCanvasMutation = useMutation({
-    mutationFn: ({ canvasId, name }: { canvasId: string; name: string }) =>
-      updateInstagramCanvas({ canvasId, name }),
-    meta: { showToast: false },
-    onSuccess: () => {
-      toast.success("Instagram canvas renamed");
-      setCanvasToRename(null);
-      queryClient.invalidateQueries({ queryKey: ["instagram-canvases"] });
-      queryClient.invalidateQueries({ queryKey: ["instagram-canvas"] });
-    },
-    onError: (error) => toast.error(getErrorMessage(error))
-  });
-
   const saveRuleMutation = useMutation({
     mutationFn: () =>
       editingRuleId
@@ -1490,284 +625,6 @@ export function InstagramPage({
     },
     onError: (error) => toast.error(getErrorMessage(error))
   });
-
-  const onConnect = useCallback(
-    (connection: Connection) => {
-      if (canvasMode === "published") {
-        toast.error("Switch to Draft to edit the Instagram canvas");
-        return;
-      }
-      if (!connection.sourceHandle) {
-        toast.error("Start the line from one of the block's route outputs");
-        return;
-      }
-      setEdges((currentEdges) => {
-        const withoutSameHandle = currentEdges.filter(
-          (edge) =>
-            !(
-              edge.source === connection.source &&
-              edge.sourceHandle === connection.sourceHandle
-            )
-        );
-        return addEdge(
-          {
-            ...connection,
-            id: `ig_edge_${connection.source}_${connection.sourceHandle}_${connection.target}`,
-            type: "smoothstep",
-            style: instagramEdgeStyle,
-            data: {
-              actionId: connection.sourceHandle,
-              replyId: connection.sourceHandle
-            }
-          },
-          withoutSameHandle
-        );
-      });
-    },
-    [canvasMode, setEdges]
-  );
-
-  const updateSelectedNode = useCallback(
-    (patch: Partial<InstagramNodeData>) => {
-      if (canvasMode === "published") {
-        toast.error("Published canvas is read-only. Switch to Draft to edit.");
-        return;
-      }
-      setNodes((current) =>
-        current.map((node) =>
-          node.id === selectedNodeId
-            ? { ...node, data: { ...node.data, ...patch } }
-            : node
-        )
-      );
-    },
-    [canvasMode, selectedNodeId, setNodes]
-  );
-
-  const setSelectedNodeAsDefault = useCallback(() => {
-    if (!selectedNode) return;
-    if (canvasMode === "published") {
-      toast.error("Published canvas is read-only. Switch to Draft to edit.");
-      return;
-    }
-    setNodes((current) =>
-      current.map((node) => {
-        const isDefault = node.id === selectedNode.id;
-        return {
-          ...node,
-          data: {
-            ...node.data,
-            triggerType: isDefault
-              ? "default"
-              : node.data.triggerType === "default"
-                ? "manual_start"
-                : node.data.triggerType,
-            triggerKey:
-              isDefault && !node.data.triggerKey
-                ? normalizeKey(node.data.name || node.id)
-                : node.data.triggerKey,
-            metadata: {
-              ...(node.data.metadata || {}),
-              isDefault
-            }
-          }
-        };
-      })
-    );
-  }, [canvasMode, selectedNode, setNodes]);
-
-  const setSelectedNodeTrigger = useCallback(
-    (value: string) => {
-      if (!selectedNode) return;
-      if (value === "default") {
-        setSelectedNodeAsDefault();
-        return;
-      }
-
-      const triggerType =
-        value === "none" ? undefined : (value as InstagramTriggerType);
-      const triggerKey =
-        triggerType === "first_dm"
-          ? "FIRST_DM"
-          : triggerType === "keyword"
-            ? selectedNode.data.triggerType === "keyword"
-              ? selectedNode.data.triggerKey
-              : ""
-            : triggerType === "story_reply"
-              ? selectedNode.data.triggerType === "story_reply"
-                ? selectedNode.data.triggerKey
-                : "*"
-              : selectedNode.data.triggerKey;
-
-      updateSelectedNode({
-        triggerType,
-        triggerKey,
-        metadata: {
-          ...(selectedNode.data.metadata || {}),
-          isDefault: false
-        }
-      });
-    },
-    [selectedNode, setSelectedNodeAsDefault, updateSelectedNode]
-  );
-
-  const updateContent = useCallback(
-    (patch: Partial<InstagramCanvasContent>) => {
-      updateSelectedNode({
-        content: { ...(selectedNode?.data.content || {}), ...patch }
-      });
-    },
-    [selectedNode?.data.content, updateSelectedNode]
-  );
-
-  const addNode = (
-    blockType: InstagramBlockType,
-    position?: { x: number; y: number }
-  ) => {
-    if (canvasMode === "published") {
-      toast.error("Switch to Draft to add Instagram blocks");
-      return;
-    }
-    const id = createId("ig_node");
-    const meta = blockMeta[blockType];
-    const shouldBeDefault = !nodes.some((node) =>
-      Boolean(
-        (node.data.metadata as Record<string, unknown> | undefined)?.isDefault
-      )
-    );
-    const node: InstagramFlowNode = {
-      id,
-      type: "instagramBlock",
-      position: position || {
-        x: 180 + nodes.length * 60,
-        y: 160 + nodes.length * 40
-      },
-      data: {
-        name: meta.label,
-        triggerType: blockType === "quick_replies" ? "manual_start" : undefined,
-        triggerKey: shouldBeDefault
-          ? normalizeKey(meta.label)
-          : blockType === "quick_replies"
-            ? normalizeKey(`${meta.label} ${nodes.length + 1}`)
-            : undefined,
-        blockType,
-        content: defaultContentForType(blockType),
-        actions: [],
-        metadata: { isDefault: shouldBeDefault }
-      }
-    };
-    setNodes((current) => [...current, node]);
-    setSelectedNodeId(id);
-  };
-
-  const handleCanvasDrop = (event: DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    const blockType = event.dataTransfer.getData(
-      "application/x-instagram-block"
-    ) as InstagramBlockType;
-    if (!blockType || !blockMeta[blockType]) return;
-    const bounds = canvasRef.current?.getBoundingClientRect();
-    addNode(blockType, {
-      x: Math.max(40, event.clientX - (bounds?.left || 0) - 120),
-      y: Math.max(40, event.clientY - (bounds?.top || 0) - 80)
-    });
-  };
-
-  const deleteSelectedNode = () => {
-    if (!selectedNode) return;
-    if (
-      Boolean(
-        (selectedNode.data.metadata as Record<string, unknown> | undefined)
-          ?.isDefault
-      )
-    ) {
-      toast.error(
-        "Choose another block as default before deleting this block."
-      );
-      return;
-    }
-    if (selectedNode.data.locked) {
-      toast.error("System blocks cannot be deleted.");
-      return;
-    }
-    setNodes((current) =>
-      current.filter((node) => node.id !== selectedNode.id)
-    );
-    setEdges((current) =>
-      current.filter(
-        (edge) =>
-          edge.source !== selectedNode.id && edge.target !== selectedNode.id
-      )
-    );
-    setSelectedNodeId(null);
-    setPreviewNodeId(null);
-  };
-
-  const handleNodesChange = useCallback(
-    (changes: NodeChange<InstagramFlowNode>[]) => {
-      const lockedNodeIds = new Set(
-        nodes.filter((node) => node.data.locked).map((node) => node.id)
-      );
-      const defaultNodeIds = new Set(
-        nodes
-          .filter((node) =>
-            Boolean(
-              (node.data.metadata as Record<string, unknown> | undefined)
-                ?.isDefault
-            )
-          )
-          .map((node) => node.id)
-      );
-      const defaultRemoval = changes.some(
-        (change) => change.type === "remove" && defaultNodeIds.has(change.id)
-      );
-      const lockedRemoval = changes.some(
-        (change) => change.type === "remove" && lockedNodeIds.has(change.id)
-      );
-
-      if (defaultRemoval) {
-        toast.error(
-          "Choose another block as default before deleting this block."
-        );
-      } else if (lockedRemoval) {
-        toast.error("System blocks cannot be deleted.");
-      }
-
-      const allowedChanges = changes.filter(
-        (change) =>
-          change.type !== "remove" ||
-          (!defaultNodeIds.has(change.id) && !lockedNodeIds.has(change.id))
-      );
-      if (!allowedChanges.length) return;
-      onNodesChange(allowedChanges);
-    },
-    [nodes, onNodesChange]
-  );
-
-  const onMediaSelected = (asset: MediaAsset) => {
-    if (!mediaPickerTarget || !selectedNode) return;
-    if (mediaPickerTarget.kind === "node") {
-      updateContent({
-        mediaId: asset._id,
-        mediaName: asset.name,
-        mediaUrl: asset.cloudinaryUrl
-      });
-    } else {
-      const cards = [
-        ...(((selectedNode.data.content.cards as InstagramGenericCard[]) ||
-          []) as InstagramGenericCard[])
-      ];
-      cards[mediaPickerTarget.cardIndex] = {
-        ...cards[mediaPickerTarget.cardIndex],
-        mediaId: asset._id,
-        mediaName: asset.name,
-        mediaType: asset.fileType === "video" ? "video" : "image",
-        imageUrl: asset.cloudinaryUrl
-      };
-      updateContent({ cards });
-    }
-    setMediaPickerTarget(null);
-  };
 
   const editRule = (rule: InstagramCommentRule) => {
     setEditingRuleId(rule._id);
@@ -1852,881 +709,6 @@ export function InstagramPage({
     }
     saveRuleMutation.mutate();
   };
-
-  const updateQuickReply = (
-    index: number,
-    patch: Partial<InstagramQuickReply>
-  ) => {
-    if (!selectedNode) return;
-    const replies = [
-      ...((selectedNode.data.content.quickReplies as InstagramQuickReply[]) ||
-        [])
-    ];
-    replies[index] = { ...replies[index], ...patch };
-    if (patch.label && !replies[index].replyId) {
-      replies[index].replyId = makeReplyId(patch.label, `REPLY_${index + 1}`);
-    }
-    updateContent({ quickReplies: replies });
-  };
-
-  const updateTemplateButton = (
-    index: number,
-    patch: Partial<InstagramTemplateButton>
-  ) => {
-    if (!selectedNode) return;
-    const buttons = [
-      ...((selectedNode.data.content.buttons as InstagramTemplateButton[]) ||
-        [])
-    ];
-    buttons[index] = { ...buttons[index], ...patch };
-    if (patch.label && !buttons[index].replyId) {
-      buttons[index].replyId = makeReplyId(patch.label, `BUTTON_${index + 1}`);
-    }
-    updateContent({ buttons });
-  };
-
-  const updateCard = (index: number, patch: Partial<InstagramGenericCard>) => {
-    if (!selectedNode) return;
-    const cards = [
-      ...((selectedNode.data.content.cards as InstagramGenericCard[]) || [])
-    ];
-    cards[index] = { ...cards[index], ...patch };
-    updateContent({ cards });
-  };
-
-  const renderProperties = () => {
-    if (!selectedNode) {
-      return (
-        <div className="flex min-h-48 flex-col items-center justify-center rounded-xl border border-dashed bg-muted/30 p-6 text-center">
-          <Settings2 className="size-8 text-muted-foreground" />
-          <p className="mt-3 text-sm font-medium">Select an Instagram block</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Configure message content, triggers, media, and route choices here.
-          </p>
-        </div>
-      );
-    }
-
-    const readOnly = canvasMode === "published";
-    const content = selectedNode.data.content;
-    const canPreview = previewableInstagramBlockTypes.has(
-      selectedNode.data.blockType
-    );
-    const isDefaultBlock = Boolean(
-      (selectedNode.data.metadata as Record<string, unknown> | undefined)
-        ?.isDefault
-    );
-
-    return (
-      <div className="space-y-5">
-        {canPreview && (
-          <Button
-            type="button"
-            variant={
-              previewNodeId === selectedNode.id ? "secondary" : "outline"
-            }
-            className="w-full"
-            tooltip={
-              previewNodeId === selectedNode.id
-                ? "Hide the live Instagram message preview"
-                : "Preview this block with its current Instagram message data"
-            }
-            onClick={() =>
-              setPreviewNodeId((current) =>
-                current === selectedNode.id ? null : selectedNode.id
-              )
-            }
-          >
-            <Eye className="size-4" />
-            {previewNodeId === selectedNode.id
-              ? "Hide preview"
-              : "Show preview"}
-          </Button>
-        )}
-        {readOnly && (
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-            Published mode is read-only. Switch to Draft to change this block.
-          </div>
-        )}
-        <div className="space-y-2">
-          <Label>Block name</Label>
-          <Input
-            value={selectedNode.data.name}
-            disabled={readOnly}
-            onChange={(event) =>
-              updateSelectedNode({ name: event.target.value })
-            }
-          />
-        </div>
-        <div className="flex items-center justify-between rounded-xl border p-3">
-          <div>
-            <p className="text-sm font-medium">Default start block</p>
-            <p className="text-xs text-muted-foreground">
-              Only one Instagram block can start this canvas.
-            </p>
-          </div>
-          <Switch
-            checked={isDefaultBlock}
-            disabled={readOnly || isDefaultBlock}
-            title="Make this the default Instagram message starting block"
-            onCheckedChange={(checked) => {
-              if (checked) setSelectedNodeAsDefault();
-            }}
-          />
-        </div>
-        <div className="space-y-3">
-          <div className="space-y-2">
-            <Label>Trigger</Label>
-            <Select
-              value={
-                selectedNode.data.triggerType === "manual_start"
-                  ? "none"
-                  : selectedNode.data.triggerType || "none"
-              }
-              disabled={readOnly}
-              onValueChange={setSelectedNodeTrigger}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">No trigger</SelectItem>
-                {visibleTriggerEntries.map(([value, label]) => (
-                  <SelectItem key={value} value={value}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          {selectedNode.data.triggerType === "keyword" && (
-            <div className="space-y-2">
-              <Label>Keyword</Label>
-              <Input
-                value={selectedNode.data.triggerKey || ""}
-                disabled={readOnly}
-                placeholder="SALE or HELP"
-                onChange={(event) =>
-                  updateSelectedNode({ triggerKey: event.target.value })
-                }
-              />
-              <p className="text-xs text-muted-foreground">
-                Starts this path when an incoming DM contains this keyword.
-              </p>
-            </div>
-          )}
-          {selectedNode.data.triggerType === "story_reply" && (
-            <div className="space-y-2">
-              <Label>Story reply match</Label>
-              <Input
-                value={selectedNode.data.triggerKey || "*"}
-                disabled={readOnly}
-                placeholder="* for every story reply"
-                onChange={(event) =>
-                  updateSelectedNode({ triggerKey: event.target.value })
-                }
-              />
-              <p className="text-xs text-muted-foreground">
-                Use * for every story reply, or enter text for a specific reply.
-              </p>
-            </div>
-          )}
-          {selectedNode.data.triggerType === "first_dm" && (
-            <p className="rounded-lg bg-pink-50 p-3 text-xs text-pink-800">
-              Runs once when a person starts their first Instagram DM
-              conversation.
-            </p>
-          )}
-        </div>
-
-        {(selectedNode.data.blockType === "send_text" ||
-          selectedNode.data.blockType === "quick_replies" ||
-          selectedNode.data.blockType === "button_template") && (
-          <div className="space-y-2">
-            <Label>Message text</Label>
-            <Textarea
-              value={content.text || ""}
-              disabled={readOnly}
-              maxLength={
-                selectedNode.data.blockType === "button_template" ? 640 : 1000
-              }
-              onChange={(event) => updateContent({ text: event.target.value })}
-              placeholder="Write the DM text"
-            />
-            <p className="text-xs text-muted-foreground">
-              {selectedNode.data.blockType === "button_template"
-                ? "Button template text limit: 640 characters."
-                : "Instagram DM text limit in this backend: 1000 characters."}
-            </p>
-          </div>
-        )}
-
-        {(selectedNode.data.blockType === "send_image" ||
-          selectedNode.data.blockType === "send_video") && (
-          <div className="space-y-3">
-            <Label>Media</Label>
-            <div className="rounded-xl border bg-muted/30 p-3">
-              <p className="text-sm font-medium">
-                {content.mediaName || "No media selected"}
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Backend requires a library mediaId for Instagram image/video
-                blocks.
-              </p>
-              <Button
-                type="button"
-                variant="outline"
-                className="mt-3"
-                disabled={readOnly}
-                onClick={() =>
-                  setMediaPickerTarget({
-                    kind: "node",
-                    type:
-                      selectedNode.data.blockType === "send_video"
-                        ? "VIDEO"
-                        : "IMAGE"
-                  })
-                }
-              >
-                Select{" "}
-                {selectedNode.data.blockType === "send_video"
-                  ? "video"
-                  : "image"}
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {selectedNode.data.blockType === "quick_replies" && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <Label>Quick replies</Label>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={
-                  readOnly ||
-                  ((content.quickReplies as InstagramQuickReply[]) || [])
-                    .length >= 13
-                }
-                onClick={() => {
-                  const replies = [
-                    ...((content.quickReplies as InstagramQuickReply[]) || [])
-                  ];
-                  if (replies.length >= 13) {
-                    toast.error("Instagram supports at most 13 quick replies");
-                    return;
-                  }
-                  replies.push({
-                    label: `Option ${replies.length + 1}`,
-                    replyId: `OPTION_${replies.length + 1}`,
-                    contentType: "text"
-                  });
-                  updateContent({ quickReplies: replies });
-                }}
-              >
-                <Plus className="mr-2 size-4" />
-                Add
-              </Button>
-            </div>
-            {((content.quickReplies as InstagramQuickReply[]) || []).map(
-              (reply, index) => (
-                <div
-                  key={index}
-                  className="space-y-2 rounded-xl bg-muted/40 p-3"
-                >
-                  <Input
-                    value={reply.label || reply.title || ""}
-                    disabled={readOnly}
-                    maxLength={20}
-                    onChange={(event) =>
-                      updateQuickReply(index, {
-                        label: event.target.value,
-                        replyId: makeReplyId(
-                          event.target.value,
-                          `REPLY_${index + 1}`
-                        )
-                      })
-                    }
-                    placeholder="Button label"
-                  />
-                  <div className="flex justify-end">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      disabled={readOnly}
-                      onClick={() =>
-                        updateContent({
-                          quickReplies: (
-                            (content.quickReplies as InstagramQuickReply[]) ||
-                            []
-                          ).filter((_, itemIndex) => itemIndex !== index)
-                        })
-                      }
-                    >
-                      <Trash2 className="size-4" />
-                    </Button>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground">
-                    Label limit: 20 characters. Text replies create route dots.
-                  </p>
-                </div>
-              )
-            )}
-          </div>
-        )}
-
-        {selectedNode.data.blockType === "button_template" && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <Label>Buttons</Label>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={
-                  readOnly ||
-                  ((content.buttons as InstagramTemplateButton[]) || [])
-                    .length >= 3
-                }
-                onClick={() => {
-                  const buttons = [
-                    ...((content.buttons as InstagramTemplateButton[]) || [])
-                  ];
-                  if (buttons.length >= 3) {
-                    toast.error(
-                      "Instagram button templates support at most 3 buttons"
-                    );
-                    return;
-                  }
-                  buttons.push({
-                    type: "postback",
-                    label: `Button ${buttons.length + 1}`,
-                    replyId: `BUTTON_${buttons.length + 1}`
-                  });
-                  updateContent({ buttons });
-                }}
-              >
-                <Plus className="mr-2 size-4" />
-                Add
-              </Button>
-            </div>
-            {((content.buttons as InstagramTemplateButton[]) || []).map(
-              (button, index) => (
-                <div
-                  key={index}
-                  className="space-y-2 rounded-xl bg-muted/40 p-3"
-                >
-                  <Input
-                    value={button.label || button.title || ""}
-                    disabled={readOnly}
-                    maxLength={20}
-                    onChange={(event) =>
-                      updateTemplateButton(index, {
-                        label: event.target.value,
-                        replyId: makeReplyId(
-                          event.target.value,
-                          `BUTTON_${index + 1}`
-                        )
-                      })
-                    }
-                    placeholder="Button label"
-                  />
-                  <Select
-                    value={button.type || "postback"}
-                    disabled={readOnly}
-                    onValueChange={(value) =>
-                      updateTemplateButton(index, {
-                        type: value as InstagramTemplateButton["type"]
-                      })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="postback">Send message</SelectItem>
-                      <SelectItem value="web_url">Open URL</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {(button.type || "postback") === "web_url" && (
-                    <Input
-                      value={button.url || ""}
-                      disabled={readOnly}
-                      onChange={(event) =>
-                        updateTemplateButton(index, { url: event.target.value })
-                      }
-                      placeholder="https://example.com"
-                    />
-                  )}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={readOnly}
-                    onClick={() =>
-                      updateContent({
-                        buttons: (
-                          (content.buttons as InstagramTemplateButton[]) || []
-                        ).filter((_, itemIndex) => itemIndex !== index)
-                      })
-                    }
-                  >
-                    <Trash2 className="mr-2 size-4" />
-                    Remove
-                  </Button>
-                </div>
-              )
-            )}
-          </div>
-        )}
-
-        {selectedNode.data.blockType === "generic_template" && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <Label>Cards</Label>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={
-                  readOnly ||
-                  ((content.cards as InstagramGenericCard[]) || []).length >= 10
-                }
-                onClick={() => {
-                  const cards = [
-                    ...((content.cards as InstagramGenericCard[]) || [])
-                  ];
-                  if (cards.length >= 10) {
-                    toast.error("Generic templates support at most 10 cards");
-                    return;
-                  }
-                  cards.push({
-                    title: `Card ${cards.length + 1}`,
-                    subtitle: "",
-                    mediaType: "image",
-                    buttons: []
-                  });
-                  updateContent({ cards });
-                }}
-              >
-                <Plus className="mr-2 size-4" />
-                Add
-              </Button>
-            </div>
-            {((content.cards as InstagramGenericCard[]) || []).map(
-              (card, cardIndex) => (
-                <div
-                  key={cardIndex}
-                  className="space-y-3 rounded-xl bg-muted/40 p-3"
-                >
-                  <Input
-                    value={card.title || ""}
-                    disabled={readOnly}
-                    maxLength={80}
-                    placeholder="Card title"
-                    onChange={(event) =>
-                      updateCard(cardIndex, { title: event.target.value })
-                    }
-                  />
-                  <Input
-                    value={card.subtitle || ""}
-                    disabled={readOnly}
-                    maxLength={80}
-                    placeholder="Subtitle"
-                    onChange={(event) =>
-                      updateCard(cardIndex, { subtitle: event.target.value })
-                    }
-                  />
-                  <div className="flex items-center justify-between rounded-lg bg-white p-2 text-xs">
-                    <span className="truncate">
-                      {card.mediaName || "No image/video selected"}
-                    </span>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={readOnly}
-                      onClick={() =>
-                        setMediaPickerTarget({
-                          kind: "generic-card",
-                          cardIndex,
-                          type: card.mediaType === "video" ? "VIDEO" : "IMAGE"
-                        })
-                      }
-                    >
-                      Pick media
-                    </Button>
-                  </div>
-                  <div className="space-y-2">
-                    {(card.buttons || []).map((button, buttonIndex) => (
-                      <div
-                        key={buttonIndex}
-                        className="rounded-lg bg-white p-2"
-                      >
-                        <div className="grid gap-2">
-                          <Input
-                            value={button.label || button.title || ""}
-                            disabled={readOnly}
-                            maxLength={20}
-                            placeholder="Button label"
-                            onChange={(event) => {
-                              const buttons = [...(card.buttons || [])];
-                              buttons[buttonIndex] = {
-                                ...buttons[buttonIndex],
-                                label: event.target.value,
-                                replyId: makeReplyId(
-                                  event.target.value,
-                                  `CARD_${cardIndex + 1}_${buttonIndex + 1}`
-                                )
-                              };
-                              updateCard(cardIndex, { buttons });
-                            }}
-                          />
-                          <Select
-                            value={button.type || "postback"}
-                            disabled={readOnly}
-                            onValueChange={(value) => {
-                              const buttons = [...(card.buttons || [])];
-                              buttons[buttonIndex] = {
-                                ...buttons[buttonIndex],
-                                type: value as InstagramTemplateButton["type"]
-                              };
-                              updateCard(cardIndex, { buttons });
-                            }}
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="postback">
-                                Send message
-                              </SelectItem>
-                              <SelectItem value="web_url">Open URL</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          {(button.type || "postback") === "web_url" && (
-                            <Input
-                              value={button.url || ""}
-                              disabled={readOnly}
-                              placeholder="https://example.com"
-                              onChange={(event) => {
-                                const buttons = [...(card.buttons || [])];
-                                buttons[buttonIndex] = {
-                                  ...buttons[buttonIndex],
-                                  url: event.target.value
-                                };
-                                updateCard(cardIndex, { buttons });
-                              }}
-                            />
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={readOnly || (card.buttons || []).length >= 3}
-                      onClick={() => {
-                        const buttons = [...(card.buttons || [])];
-                        if (buttons.length >= 3) {
-                          toast.error(
-                            "Each generic card supports at most 3 buttons"
-                          );
-                          return;
-                        }
-                        buttons.push({
-                          type: "postback",
-                          label: `Button ${buttons.length + 1}`,
-                          replyId: `CARD_${cardIndex + 1}_${buttons.length + 1}`
-                        });
-                        updateCard(cardIndex, { buttons });
-                      }}
-                    >
-                      Add button
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      disabled={readOnly}
-                      onClick={() =>
-                        updateContent({
-                          cards: (
-                            (content.cards as InstagramGenericCard[]) || []
-                          ).filter((_, itemIndex) => itemIndex !== cardIndex)
-                        })
-                      }
-                    >
-                      Remove card
-                    </Button>
-                  </div>
-                </div>
-              )
-            )}
-          </div>
-        )}
-
-        {selectedNode.data.blockType === "tag_subscriber" && (
-          <div className="space-y-2">
-            <Label>Tags</Label>
-            <Input
-              value={((content.tags as string[]) || []).join(", ")}
-              disabled={readOnly}
-              placeholder="lead, vip, support"
-              onChange={(event) =>
-                updateContent({
-                  tags: event.target.value
-                    .split(",")
-                    .map((tag) => tag.trim())
-                    .filter(Boolean)
-                })
-              }
-            />
-          </div>
-        )}
-        {selectedNode.data.blockType === "follow_condition" && (
-          <div className="rounded-lg border border-pink-200 bg-pink-50/60 p-4">
-            <p className="text-sm font-semibold">Follower routes</p>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              Connect each output on the block to its next message. If Meta
-              cannot verify follower status, the unknown path is used; the
-              backend then falls back to the “Does not follow” route if needed.
-            </p>
-          </div>
-        )}
-        {selectedNode.data.blockType === "pause_automation" && (
-          <div className="space-y-2">
-            <Label>Pause minutes</Label>
-            <Input
-              type="number"
-              min={1}
-              value={Number(content.minutes || content.pauseMinutes || 60)}
-              disabled={readOnly}
-              onChange={(event) =>
-                updateContent({ minutes: Number(event.target.value) })
-              }
-            />
-          </div>
-        )}
-        {(selectedNode.data.blockType === "handoff_to_agent" ||
-          selectedNode.data.blockType === "end_flow") && (
-          <div className="space-y-2">
-            <Label>Reason</Label>
-            <Input
-              value={String(content.reason || "")}
-              disabled={readOnly}
-              onChange={(event) =>
-                updateContent({ reason: event.target.value })
-              }
-            />
-          </div>
-        )}
-
-        <Button
-          variant="destructive"
-          className="w-full"
-          disabled={readOnly}
-          onClick={deleteSelectedNode}
-        >
-          <Trash2 className="mr-2 size-4" />
-          Delete block
-        </Button>
-      </div>
-    );
-  };
-
-  const renderCanvasList = () => (
-    <div className="min-h-0 flex-1 overflow-y-auto p-5">
-      <div className="mx-auto max-w-7xl space-y-6">
-        <section className="rounded-lg bg-white p-5 shadow-xs">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="text-sm font-medium text-pink-600">
-                Instagram automation
-              </p>
-              <h2 className="font-heading text-3xl font-semibold">
-                Message Flow
-              </h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Manage Instagram canvases. Publish any canvas, but only one can
-                be active for Instagram automation at a time.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                className="cursor-pointer"
-                tooltip="Refresh the Instagram message-flow list"
-                onClick={() =>
-                  queryClient.invalidateQueries({
-                    queryKey: ["instagram-canvases"]
-                  })
-                }
-              >
-                <RefreshCcw className="size-4" />
-                Refresh
-              </Button>
-              <Button
-                type="button"
-                className="cursor-pointer bg-pink-600 hover:bg-pink-700"
-                disabled={createCanvasMutation.isPending}
-                tooltip="Create another Instagram message flow"
-                onClick={() => createCanvasMutation.mutate()}
-              >
-                {createCanvasMutation.isPending ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <Plus className="size-4" />
-                )}
-                Add flow
-              </Button>
-            </div>
-          </div>
-        </section>
-
-        <section className="grid gap-4 lg:grid-cols-3">
-          {isCanvasesLoading ? (
-            <div className="lg:col-span-3">
-              <CardGridLoadingSkeleton count={6} />
-            </div>
-          ) : canvases.length ? (
-            canvases.map((canvas) => {
-              const isActive = canvas.status === "active";
-              const detailedCanvas = canvasDetailsById.get(canvas._id);
-              const nodeCount =
-                detailedCanvas?.draftState?.nodes?.length ??
-                detailedCanvas?.publishedState?.nodes?.length ??
-                0;
-              return (
-                <div
-                  key={canvas._id}
-                  className="rounded-lg border bg-white p-5 shadow-xs transition hover:border-pink-200 hover:shadow-md"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <Instagram className="size-4 text-pink-600" />
-                        <h3 className="truncate font-heading text-xl font-semibold">
-                          {canvas.name}
-                        </h3>
-                      </div>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        Updated {formatDate(canvas.updatedAt)}
-                      </p>
-                    </div>
-                    <Badge
-                      variant={isActive ? "default" : "secondary"}
-                      className={cn("capitalize", isActive && "bg-pink-600")}
-                    >
-                      {canvas.status}
-                    </Badge>
-                  </div>
-
-                  <div className="mt-4 rounded-md bg-muted/50 p-3 text-sm">
-                    <p className="text-xs text-muted-foreground">Blocks</p>
-                    <p className="mt-1 font-semibold">
-                      {canvasDetailsById.has(canvas._id) ? (
-                        nodeCount
-                      ) : (
-                        <Loader2 className="size-4 animate-spin text-muted-foreground" />
-                      )}
-                    </p>
-                  </div>
-
-                  <div className="mt-4 flex items-center justify-between rounded-md border px-3 py-2">
-                    <div>
-                      <p className="text-sm font-medium">Active canvas</p>
-                      <p className="text-xs text-muted-foreground">
-                        Only one flow handles live Instagram messages.
-                      </p>
-                    </div>
-                    <Switch
-                      checked={isActive}
-                      disabled={canvasStatusMutation.isPending}
-                      title={
-                        isActive
-                          ? "This is the active Instagram message flow"
-                          : "Make this the active Instagram message flow"
-                      }
-                      onCheckedChange={(checked) => {
-                        if (checked && !canvas.latestPublishedVersionId) {
-                          toast.error(
-                            "Publish this Instagram canvas before activating it."
-                          );
-                          return;
-                        }
-                        canvasStatusMutation.mutate({
-                          canvasId: canvas._id,
-                          status: checked ? "active" : "inactive"
-                        });
-                      }}
-                    />
-                  </div>
-
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      className="cursor-pointer bg-pink-600 hover:bg-pink-700"
-                      tooltip="Open this Instagram message flow editor"
-                      onClick={() => router.push(`/instagram/${canvas._id}`)}
-                    >
-                      <Route className="size-4" />
-                      Edit
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="cursor-pointer"
-                      disabled={renameCanvasMutation.isPending}
-                      tooltip="Rename this Instagram message flow"
-                      onClick={() => {
-                        setCanvasRenameValue(canvas.name);
-                        setCanvasToRename(canvas);
-                      }}
-                    >
-                      Rename
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="cursor-pointer text-destructive hover:text-destructive"
-                      disabled={deleteCanvasMutation.isPending || isActive}
-                      tooltip={
-                        isActive
-                          ? "Activate another flow before deleting this one"
-                          : "Delete this Instagram message flow"
-                      }
-                      onClick={() => setCanvasToArchive(canvas)}
-                    >
-                      <Trash2 className="size-4" />
-                      Delete
-                    </Button>
-                  </div>
-                </div>
-              );
-            })
-          ) : (
-            <div className="flex flex-col items-center justify-center rounded-lg bg-white p-10 text-center shadow-xs lg:col-span-3">
-              <Instagram className="mb-3 size-10 text-pink-600" />
-              <h2 className="font-heading text-2xl font-semibold">
-                No Instagram flows yet
-              </h2>
-              <p className="mt-2 max-w-md text-sm text-muted-foreground">
-                Create a canvas to start building Instagram DM automation.
-              </p>
-              <Button
-                className="mt-4 cursor-pointer bg-pink-600 hover:bg-pink-700"
-                disabled={createCanvasMutation.isPending}
-                onClick={() => createCanvasMutation.mutate()}
-              >
-                <Plus className="size-4" />
-                Add flow
-              </Button>
-            </div>
-          )}
-        </section>
-      </div>
-    </div>
-  );
 
   const renderProfile = () => (
     <div className="min-h-0 flex-1 overflow-y-auto p-5">
@@ -2894,29 +876,9 @@ export function InstagramPage({
               <Instagram className="size-5" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                {canvasOnly && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    className="h-8 cursor-pointer px-2"
-                    onClick={() => router.push("/instagram")}
-                  >
-                    <ArrowLeft className="size-4" />
-                    Back
-                  </Button>
-                )}
-                <h1 className="text-lg font-semibold">
-                  {canvasOnly
-                    ? selectedCanvas?.name || "Instagram Flow"
-                    : "Instagram Automation"}
-                </h1>
-              </div>
+              <h1 className="text-lg font-semibold">Instagram Automation</h1>
               <p className="text-xs text-muted-foreground">
-                {canvasOnly
-                  ? "Edit draft, review published state, and publish Instagram automation."
-                  : "DM canvas, media, and comment automations."}
+                Message flows, media and comment automations.
               </p>
             </div>
           </div>
@@ -2957,263 +919,56 @@ export function InstagramPage({
           </div>
         </div>
 
-        {!canvasOnly && (
-          <div className="flex shrink-0 items-center justify-between border-b bg-white px-5 py-2">
-            <Tabs
-              value={activeTab}
-              onValueChange={(value) => {
-                if (value !== "profile" && !isReady) {
-                  setActiveTab("profile");
-                  toast.error("Connect Instagram first.");
-                  return;
-                }
-                setActiveTab(value as PageTab);
-              }}
-            >
-              <TabsList>
-                <TabsTrigger value="profile">Profile</TabsTrigger>
-                <TabsTrigger value="settings" disabled={!isReady}>
-                  Settings
-                </TabsTrigger>
-                <TabsTrigger value="canvas" disabled={!isReady}>
-                  Message Flow
-                </TabsTrigger>
-                <TabsTrigger value="rules" disabled={!isReady}>
-                  Comment Automation
-                </TabsTrigger>
-                <TabsTrigger value="media" disabled={!isReady}>
-                  Media
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
-            <div className="text-xs text-muted-foreground">
-              Last sync: {formatDate(instagram?.lastHealthCheckAt)}
-            </div>
+        <div className="flex shrink-0 items-center justify-between border-b bg-white px-5 py-2">
+          <Tabs
+            value={activeTab}
+            onValueChange={(value) => {
+              if (value !== "profile" && !isReady) {
+                setActiveTab("profile");
+                toast.error("Connect Instagram first.");
+                return;
+              }
+              setActiveTab(value as PageTab);
+            }}
+          >
+            <TabsList>
+              <TabsTrigger value="profile">Profile</TabsTrigger>
+              <TabsTrigger value="settings" disabled={!isReady}>
+                Settings
+              </TabsTrigger>
+              <TabsTrigger value="canvas" disabled={!isReady}>
+                Flows
+              </TabsTrigger>
+              <TabsTrigger value="rules" disabled={!isReady}>
+                Comment Automation
+              </TabsTrigger>
+              <TabsTrigger value="media" disabled={!isReady}>
+                Media
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <div className="text-xs text-muted-foreground">
+            Last sync: {formatDate(instagram?.lastHealthCheckAt)}
           </div>
-        )}
+        </div>
 
         {(activeTab === "canvas" || activeTab === "rules") &&
           isReady &&
           !enabledForPlan && (
             <div className="border-b bg-amber-50 px-5 py-2 text-xs text-amber-800">
               Your current plan doesn&apos;t include Instagram automation. You
-              can keep building this flow, but saving and publishing will be
+              can keep building flows, but saving and applying changes will be
               blocked until you upgrade.
             </div>
           )}
 
-        {activeTab === "profile" && !canvasOnly && renderProfile()}
-        {canvasOnly && !isReady && renderProfile()}
+        {activeTab === "profile" && renderProfile()}
 
-        {activeTab === "canvas" && !canvasOnly && isReady && renderCanvasList()}
-
-        {activeTab === "canvas" && canvasOnly && isReady && (
-          <div className="grid min-h-0 flex-1 grid-cols-[280px_minmax(0,1fr)_360px]">
-            <aside className="min-h-0 overflow-y-auto border-r bg-white p-4">
-              <div className="mb-4 space-y-3">
-                <Tabs
-                  value={canvasMode}
-                  onValueChange={(value) => {
-                    setCanvasMode(value as CanvasMode);
-                    setSelectedNodeId(null);
-                    setPreviewNodeId(null);
-                  }}
-                >
-                  <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="draft">Draft</TabsTrigger>
-                    <TabsTrigger value="published">Published</TabsTrigger>
-                  </TabsList>
-                </Tabs>
-              </div>
-              <div className="space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Add blocks
-                </p>
-                {blockTypes.map((type) => {
-                  const meta = blockMeta[type];
-                  const Icon = meta.icon;
-                  return (
-                    <button
-                      key={type}
-                      type="button"
-                      draggable={canvasMode === "draft"}
-                      onDragStart={(event) => {
-                        event.dataTransfer.setData(
-                          "application/x-instagram-block",
-                          type
-                        );
-                        event.dataTransfer.effectAllowed = "copy";
-                      }}
-                      onClick={() => addNode(type)}
-                      className="flex w-full cursor-pointer items-center gap-3 rounded-xl border bg-white p-3 text-left transition hover:border-pink-200 hover:bg-pink-50"
-                    >
-                      <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-pink-50 text-pink-600">
-                        <Icon className="size-4" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium">{meta.label}</p>
-                        <p className="line-clamp-2 text-xs text-muted-foreground">
-                          {meta.description}
-                        </p>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="mt-5 rounded-xl border bg-muted/30 p-3 text-xs text-muted-foreground">
-                Quick replies support 13 choices. Button templates support 3
-                buttons. Generic templates support 10 cards and 3 buttons per
-                card.
-              </div>
-            </aside>
-
-            <main
-              ref={canvasRef}
-              className="relative min-h-0"
-              onDragOver={(event) => {
-                event.preventDefault();
-                event.dataTransfer.dropEffect = "copy";
-              }}
-              onDrop={handleCanvasDrop}
-            >
-              {isDraftLoading || isCanvasDetailLoading || isCanvasesLoading ? (
-                <CanvasLoadingSkeleton />
-              ) : (
-                <ReactFlowProvider>
-                  <ReactFlow
-                    nodes={nodes}
-                    edges={styledEdges}
-                    nodeTypes={nodeTypes}
-                    onNodesChange={
-                      canvasMode === "draft" ? handleNodesChange : undefined
-                    }
-                    onEdgesChange={
-                      canvasMode === "draft" ? onEdgesChange : undefined
-                    }
-                    onConnect={onConnect}
-                    connectionLineType={ConnectionLineType.SmoothStep}
-                    defaultEdgeOptions={{
-                      type: "smoothstep",
-                      style: instagramEdgeStyle
-                    }}
-                    onlyRenderVisibleElements
-                    onNodeClick={(_, node) => {
-                      if (node.id !== selectedNodeId) setPreviewNodeId(null);
-                      setSelectedNodeId(node.id);
-                    }}
-                    onPaneClick={() => {
-                      setSelectedNodeId(null);
-                      setPreviewNodeId(null);
-                    }}
-                    nodesDraggable={canvasMode === "draft"}
-                    nodesConnectable={canvasMode === "draft"}
-                    elementsSelectable
-                    fitView
-                    fitViewOptions={{ padding: 0.35, maxZoom: 0.85 }}
-                    defaultViewport={{ x: 0, y: 0, zoom: 0.75 }}
-                    className="bg-white"
-                  >
-                    <Background gap={20} size={1} />
-                    <Controls />
-                    <MiniMap pannable zoomable className="!h-28 !w-40" />
-                    <ViewportPortal>
-                      {previewNode && (
-                        <div
-                          className="nodrag nopan nowheel absolute z-[1000] w-[280px] max-w-[calc(100vw-2rem)]"
-                          style={{
-                            transform: `translate(${previewNode.position.x - 26}px, ${previewNode.position.y - 18}px) translateY(-100%)`
-                          }}
-                        >
-                          <InstagramFlowBlockPreview
-                            blockType={previewNode.data.blockType}
-                            content={previewNode.data.content}
-                            onClose={() => setPreviewNodeId(null)}
-                          />
-                        </div>
-                      )}
-                    </ViewportPortal>
-                  </ReactFlow>
-                </ReactFlowProvider>
-              )}
-              <div className="absolute left-4 top-4 flex flex-wrap gap-2 rounded-xl border bg-white/95 p-2 shadow-sm backdrop-blur">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  tooltip="Save the current Instagram flow draft"
-                  disabled={
-                    canvasMode === "published" || saveDraftMutation.isPending
-                  }
-                  onClick={() => saveDraftMutation.mutate()}
-                >
-                  {saveDraftMutation.isPending ? (
-                    <Loader2 className="mr-2 size-4 animate-spin" />
-                  ) : (
-                    <Save className="mr-2 size-4" />
-                  )}
-                  Save draft
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  tooltip="Check this flow against backend publishing rules"
-                  onClick={() => validateMutation.mutate()}
-                  disabled={validateMutation.isPending}
-                >
-                  <ShieldAlert className="mr-2 size-4" />
-                  Validate
-                </Button>
-                <Button
-                  size="sm"
-                  className="bg-pink-600 hover:bg-pink-700"
-                  tooltip="Publish this Instagram message flow"
-                  disabled={
-                    canvasMode === "published" || publishMutation.isPending
-                  }
-                  onClick={() => publishMutation.mutate()}
-                >
-                  {publishMutation.isPending ? (
-                    <Loader2 className="mr-2 size-4 animate-spin" />
-                  ) : (
-                    <Send className="mr-2 size-4" />
-                  )}
-                  Publish
-                </Button>
-              </div>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="absolute right-4 top-4 bg-white/95 shadow-xs backdrop-blur"
-                tooltip="Open a read-only diagram of every Instagram block and connection"
-                disabled={!nodes.length}
-                onClick={() => setFlowPreviewOpen(true)}
-              >
-                <Workflow className="size-4" />
-                Preview flow
-              </Button>
-            </main>
-
-            <aside className="min-h-0 overflow-y-auto border-l bg-white p-4">
-              <div className="mb-4">
-                <h2 className="text-sm font-semibold">Properties</h2>
-                <p className="text-xs text-muted-foreground">
-                  Configure the selected Instagram automation block.
-                </p>
-              </div>
-              {validationMessages.length > 0 && (
-                <div className="mb-4 space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-                  <p className="font-semibold">Publish checks</p>
-                  {validationMessages.slice(0, 5).map((message, index) => (
-                    <p key={index}>{message}</p>
-                  ))}
-                </div>
-              )}
-              {renderProperties()}
-            </aside>
-          </div>
+        {activeTab === "canvas" && isReady && (
+          <InstagramFlowsList username={instagram?.username} />
         )}
 
-        {activeTab === "settings" && !canvasOnly && isReady && (
+        {activeTab === "settings" && isReady && (
           <div className="min-h-0 flex-1 overflow-y-auto p-5">
             <div className="mx-auto max-w-7xl">
               <InstagramSettingsTab
@@ -3594,57 +1349,6 @@ export function InstagramPage({
         </AlertDialogContent>
       </AlertDialog>
 
-      <Dialog
-        open={Boolean(canvasToRename)}
-        onOpenChange={(open) => {
-          if (!open && !renameCanvasMutation.isPending) setCanvasToRename(null);
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Rename Instagram canvas</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor="instagram-canvas-name">Canvas name</Label>
-            <Input
-              id="instagram-canvas-name"
-              value={canvasRenameValue}
-              onChange={(event) => setCanvasRenameValue(event.target.value)}
-              placeholder="Main Instagram flow"
-            />
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              className="cursor-pointer"
-              onClick={() => setCanvasToRename(null)}
-            >
-              Cancel
-            </Button>
-            <Button
-              className="cursor-pointer"
-              disabled={
-                !canvasToRename ||
-                !canvasRenameValue.trim() ||
-                renameCanvasMutation.isPending
-              }
-              onClick={() => {
-                if (!canvasToRename) return;
-                renameCanvasMutation.mutate({
-                  canvasId: canvasToRename._id,
-                  name: canvasRenameValue.trim()
-                });
-              }}
-            >
-              {renameCanvasMutation.isPending && (
-                <Loader2 className="size-4 animate-spin" />
-              )}
-              Save
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       <AlertDialog
         open={isDisconnectOpen}
         onOpenChange={(open) => {
@@ -3678,43 +1382,6 @@ export function InstagramPage({
                 <Loader2 className="size-4 animate-spin" />
               )}
               Disconnect
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog
-        open={Boolean(canvasToArchive)}
-        onOpenChange={(open) => {
-          if (!open && !deleteCanvasMutation.isPending)
-            setCanvasToArchive(null);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete this Instagram flow?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {canvasToArchive ? `“${canvasToArchive.name}”` : "This canvas"}{" "}
-              will be deleted -- permanently removed in 30 days.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteCanvasMutation.isPending}>
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-white hover:bg-destructive/90"
-              disabled={deleteCanvasMutation.isPending || !canvasToArchive}
-              onClick={(event) => {
-                event.preventDefault();
-                if (!canvasToArchive) return;
-                deleteCanvasMutation.mutate(canvasToArchive._id);
-              }}
-            >
-              {deleteCanvasMutation.isPending && (
-                <Loader2 className="size-4 animate-spin" />
-              )}
-              Delete flow
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -4236,33 +1903,6 @@ export function InstagramPage({
           </div>
         </DialogContent>
       </Dialog>
-
-      <MediaPickerDialog
-        open={Boolean(mediaPickerTarget)}
-        onOpenChange={(open) => !open && setMediaPickerTarget(null)}
-        onSelect={onMediaSelected}
-        onBeforeOpenMediaLibrary={saveCurrentDraftBeforeMediaLibrary}
-        requiredType={mediaPickerTarget?.type}
-        selectedMediaId={
-          mediaPickerTarget?.kind === "node"
-            ? selectedNode?.data.content.mediaId
-            : mediaPickerTarget?.kind === "generic-card"
-              ? (
-                  selectedNode?.data.content.cards as
-                    | InstagramGenericCard[]
-                    | undefined
-                )?.[mediaPickerTarget.cardIndex]?.mediaId
-              : undefined
-        }
-      />
-      <FlowDiagramPreviewDialog
-        open={flowPreviewOpen}
-        onOpenChange={setFlowPreviewOpen}
-        title={`${selectedCanvas?.name || "Instagram flow"} preview`}
-        platform="Instagram"
-        nodes={nodes}
-        edges={styledEdges}
-      />
     </AppLayout>
   );
 }

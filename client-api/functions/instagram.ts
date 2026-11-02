@@ -7,11 +7,13 @@ import {
   InstagramAutomationSettingsPatch,
   InstagramAutomationSettingsResponse,
   InstagramCanvasDetailResponse,
+  InstagramCanvasDraftSaveResponse,
   InstagramCanvasPublishResponse,
   InstagramCanvasResponse,
   InstagramCanvasRecord,
   InstagramCanvasState,
   InstagramCanvasValidationResponse,
+  InstagramCanvasVersionsResponse,
   InstagramCanvasesResponse,
   InstagramCommentRulePayload,
   InstagramCommentRuleResponse,
@@ -205,39 +207,92 @@ export const updateInstagramCanvas = async ({
   return res.data;
 };
 
+// baseRevision is the draftRevision the editor last received; a save on
+// top of someone else's newer one comes back as 409 DRAFT_CONFLICT.
 export const saveInstagramCanvasDraftById = async ({
   canvasId,
-  draftState
+  draftState,
+  baseRevision
 }: {
   canvasId: string;
   draftState: InstagramCanvasState;
-}): Promise<InstagramCanvasResponse> => {
-  const res = await api.put<InstagramCanvasResponse>(
+  baseRevision?: number;
+}): Promise<InstagramCanvasDraftSaveResponse> => {
+  const res = await api.put<InstagramCanvasDraftSaveResponse>(
     INSTAGRAM_ENDPOINTS.CANVAS_DRAFT_BY_ID(canvasId),
-    { draftState }
+    { draftState, baseRevision }
   );
   return res.data;
 };
 
+// Checks the draft on screen when one is sent, else the saved draft.
 export const validateInstagramCanvasById = async (
-  canvasId: string
+  canvasId: string,
+  draftState?: InstagramCanvasState
 ): Promise<InstagramCanvasValidationResponse> => {
   const res = await api.post<InstagramCanvasValidationResponse>(
-    INSTAGRAM_ENDPOINTS.CANVAS_VALIDATE_BY_ID(canvasId)
+    INSTAGRAM_ENDPOINTS.CANVAS_VALIDATE_BY_ID(canvasId),
+    draftState ? { draftState } : {}
   );
   return res.data;
 };
 
+// Saves and applies in one request. Blocking problems come back as 400
+// FLOW_INVALID with details.issues.
 export const publishInstagramCanvasById = async ({
   canvasId,
-  draftState
+  draftState,
+  baseRevision
 }: {
   canvasId: string;
   draftState?: InstagramCanvasState;
+  baseRevision?: number;
 }): Promise<InstagramCanvasPublishResponse> => {
   const res = await api.post<InstagramCanvasPublishResponse>(
     INSTAGRAM_ENDPOINTS.CANVAS_PUBLISH_BY_ID(canvasId),
-    draftState ? { draftState } : {}
+    draftState ? { draftState, baseRevision } : { baseRevision }
+  );
+  return res.data;
+};
+
+// Resets the draft to the version customers get. Answers like a draft save.
+export const discardInstagramCanvasDraftById = async ({
+  canvasId,
+  baseRevision
+}: {
+  canvasId: string;
+  baseRevision?: number;
+}): Promise<InstagramCanvasDraftSaveResponse> => {
+  const res = await api.post<InstagramCanvasDraftSaveResponse>(
+    INSTAGRAM_ENDPOINTS.CANVAS_DISCARD_BY_ID(canvasId),
+    { baseRevision }
+  );
+  return res.data;
+};
+
+export const listInstagramCanvasVersions = async (
+  canvasId: string
+): Promise<InstagramCanvasVersionsResponse> => {
+  const res = await api.get<InstagramCanvasVersionsResponse>(
+    INSTAGRAM_ENDPOINTS.CANVAS_VERSIONS_BY_ID(canvasId)
+  );
+  return res.data;
+};
+
+// Copies an applied version into the draft; customers keep the current
+// version until the next Apply. Answers like a draft save.
+export const restoreInstagramCanvasVersionById = async ({
+  canvasId,
+  versionId,
+  baseRevision
+}: {
+  canvasId: string;
+  versionId: string;
+  baseRevision?: number;
+}): Promise<InstagramCanvasDraftSaveResponse> => {
+  const res = await api.post<InstagramCanvasDraftSaveResponse>(
+    INSTAGRAM_ENDPOINTS.CANVAS_VERSION_RESTORE_BY_ID(canvasId, versionId),
+    { baseRevision }
   );
   return res.data;
 };

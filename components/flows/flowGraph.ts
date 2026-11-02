@@ -20,11 +20,15 @@ const triggerKeyOf = (node: Node) => String(nodeData(node).triggerKey || "");
 export const isSystemEntryNode = (node: Node) =>
   SYSTEM_TRIGGER_KEYS.has(triggerKeyOf(node));
 
-/** The flow's default block: where a new conversation starts. */
+/**
+ * Where a new conversation starts: WhatsApp's start block, Instagram's
+ * main menu.
+ */
 export const getStartNodeId = (nodes: Node[]) => {
   const marked = nodes.find(
     (node) =>
-      (nodeData(node).metadata as LooseRecord | undefined)?.isDefault === true
+      (nodeData(node).metadata as LooseRecord | undefined)?.isDefault ===
+        true || nodeData(node).triggerType === "default"
   );
   return (
     marked?.id ||
@@ -77,7 +81,7 @@ export const getRouteOptions = (
     Array.isArray(content.quickReplies)
   ) {
     (content.quickReplies as LooseRecord[]).forEach((reply, index) => {
-      const id = reply.replyId || reply.payload;
+      const id = reply.actionId || reply.replyId || reply.payload;
       if (id)
         options.push({
           id: String(id),
@@ -89,6 +93,14 @@ export const getRouteOptions = (
   if (data.blockType === "generic_template" && Array.isArray(content.cards)) {
     (content.cards as LooseRecord[]).forEach((card) =>
       pushButtons(card.buttons)
+    );
+  }
+  // "Couldn't check" is optional: unwired, it takes the "Doesn't follow"
+  // path. A "Then" step is optional too, so it isn't listed.
+  if (data.blockType === "follow_condition") {
+    options.push(
+      { id: "follows", label: "Follows you" },
+      { id: "not_follows", label: "Doesn't follow you" }
     );
   }
   return options;
