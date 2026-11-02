@@ -89,6 +89,22 @@ export const parseWhatsAppFormatting = (text: string): FormattedText[] => {
   return nodes;
 };
 
+const flattenFormatting = (nodes: FormattedText[]): string =>
+  nodes
+    .map((node) =>
+      typeof node === "string"
+        ? node
+        : node.type === "mono"
+          ? `\`\`\`${flattenFormatting(node.children)}\`\`\``
+          : flattenFormatting(node.children)
+    )
+    .join("");
+
+// For one-line previews: drops the *, _ and ~ that format text, and keeps
+// any that are just part of it ("file_name", "2 * 3").
+export const stripWhatsAppFormatting = (text: string) =>
+  flattenFormatting(parseWhatsAppFormatting(text));
+
 // ---------------------------------------------------------------------------
 // Dates and times. Everything takes `now` so tests don't depend on the clock.
 

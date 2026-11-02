@@ -9,7 +9,8 @@ import {
   getCarouselCards,
   insertMessageInOrder,
   parseWhatsAppFormatting,
-  rewriteSystemNote
+  rewriteSystemNote,
+  stripWhatsAppFormatting
 } from "./inbox";
 
 describe("parseWhatsAppFormatting", () => {
@@ -40,6 +41,19 @@ describe("parseWhatsAppFormatting", () => {
     ]);
     expect(parseWhatsAppFormatting("2 * 3 * 4")).toEqual(["2 * 3 * 4"]);
     expect(parseWhatsAppFormatting("* not bold *")).toEqual(["* not bold *"]);
+  });
+
+  it("strips formatting markers for previews", () => {
+    expect(stripWhatsAppFormatting("Welcome to *Watching*!")).toBe(
+      "Welcome to Watching!"
+    );
+    expect(stripWhatsAppFormatting("*_Both_* and ~old~ price")).toBe(
+      "Both and old price"
+    );
+    expect(stripWhatsAppFormatting("file_name_here 2 * 3")).toBe(
+      "file_name_here 2 * 3"
+    );
+    expect(stripWhatsAppFormatting("```code```")).toBe("```code```");
   });
 
   it("keeps markup as text", () => {

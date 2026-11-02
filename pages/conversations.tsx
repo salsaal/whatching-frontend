@@ -168,7 +168,8 @@ import {
   insertMessageInOrder,
   messageTimestamp,
   parseWhatsAppFormatting,
-  rewriteSystemNote
+  rewriteSystemNote,
+  stripWhatsAppFormatting
 } from "@/lib/inbox";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
@@ -884,7 +885,9 @@ function ConversationListItem({
           </span>
         </div>
         <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
-          {conversation.lastMessage || "No messages yet"}
+          {conversation.lastMessage
+            ? stripWhatsAppFormatting(conversation.lastMessage)
+            : "No messages yet"}
         </p>
         <div className="mt-1.5 flex flex-wrap items-center gap-1">
           <Badge
