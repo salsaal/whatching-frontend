@@ -263,6 +263,8 @@ function subscriberHandle(conversation?: Conversation | null) {
 
 // Who is answering the customer right now, in plain words.
 const replyingLabel = (conversation: Conversation) => {
+  // The bot stays quiet while a chat is Pending, whatever its mode.
+  if (conversation.status === "pending") return "Waiting for a person";
   if (conversation.mode === "agent_manual") {
     const name = getString(
       conversation.takeoverState?.manualTakeoverBy?.name,
@@ -3096,7 +3098,8 @@ function ConversationsPageContent() {
                       </DropdownMenuContent>
                     </DropdownMenu>
                     <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                      {contextConversation.mode === "agent_manual" ? (
+                      {contextConversation.mode === "agent_manual" ||
+                      contextConversation.status === "pending" ? (
                         <ContactRound className="size-3.5" />
                       ) : (
                         <Bot className="size-3.5" />
