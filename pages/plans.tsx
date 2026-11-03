@@ -172,8 +172,7 @@ export default function PlansPage() {
                 <span className="font-semibold">
                   {formatDate(activeOrganization?.subscriptionCurrentPeriodEnd)}
                 </span>
-                . Backend billing prevents starting another paid subscription
-                before this period ends.
+                . You can choose a new plan once it ends.
               </p>
             </div>
           </section>

@@ -262,6 +262,16 @@ export default function CheckoutPage() {
     [billingProfile]
   );
   const hasBillingErrors = Object.values(validation).some(Boolean);
+  // Errors show once a field has been left or the button pressed, not while
+  // someone is still filling the form in.
+  const [touchedFields, setTouchedFields] = useState<
+    Partial<Record<keyof BillingProfile, boolean>>
+  >({});
+  const [showAllErrors, setShowAllErrors] = useState(false);
+  const touchField = (key: keyof BillingProfile) =>
+    setTouchedFields((current) => ({ ...current, [key]: true }));
+  const fieldError = (key: keyof typeof validation) =>
+    touchedFields[key] || showAllErrors ? validation[key] : "";
 
   const saveBillingProfileMutation = useMutation({
     mutationFn: (payload: BillingProfile) => updateBillingProfile(payload),
@@ -495,7 +505,7 @@ export default function CheckoutPage() {
     isGranted ||
     (isDowngrade && (isTeamLoading || seatCheck.excess > 0)) ||
     isProceeding ||
-    (isPaidAction && (isBillingProfileLoading || hasBillingErrors));
+    (isPaidAction && isBillingProfileLoading);
   const [isDowngradeConfirmOpen, setIsDowngradeConfirmOpen] = useState(false);
 
   const updateBillingField = (key: keyof BillingProfile, value: string) => {
@@ -518,12 +528,17 @@ export default function CheckoutPage() {
       return;
     }
 
-    if (isPaidAction && isDowngrade && !hasBillingErrors) {
+    if (isPaidAction && hasBillingErrors) {
+      setShowAllErrors(true);
+      return;
+    }
+
+    if (isPaidAction && isDowngrade) {
       setIsDowngradeConfirmOpen(true);
       return;
     }
 
-    if (!isPaidAction || hasBillingErrors) return;
+    if (!isPaidAction) return;
     paidCheckoutMutation.mutate(paidPlan.id);
   };
 
@@ -650,9 +665,8 @@ export default function CheckoutPage() {
                   </div>
                 )}
                 <div className="rounded-md border bg-muted/40 p-4 text-sm text-muted-foreground">
-                  Fields marked required are required by the backend before
-                  Razorpay checkout can be created. GSTIN is optional, but must
-                  be valid if entered.
+                  We need these details to send your GST invoice. GSTIN is
+                  optional, but must be valid if you enter it.
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-2">
@@ -665,11 +679,12 @@ export default function CheckoutPage() {
                       onChange={(event) =>
                         updateBillingField("legalName", event.target.value)
                       }
-                      aria-invalid={Boolean(validation.legalName)}
+                      aria-invalid={Boolean(fieldError("legalName"))}
+                      onBlur={() => touchField("legalName")}
                     />
-                    {validation.legalName ? (
+                    {fieldError("legalName") ? (
                       <p className="text-xs text-destructive">
-                        {validation.legalName}
+                        {fieldError("legalName")}
                       </p>
                     ) : null}
                   </div>
@@ -684,11 +699,12 @@ export default function CheckoutPage() {
                       onChange={(event) =>
                         updateBillingField("billingEmail", event.target.value)
                       }
-                      aria-invalid={Boolean(validation.billingEmail)}
+                      aria-invalid={Boolean(fieldError("billingEmail"))}
+                      onBlur={() => touchField("billingEmail")}
                     />
-                    {validation.billingEmail ? (
+                    {fieldError("billingEmail") ? (
                       <p className="text-xs text-destructive">
-                        {validation.billingEmail}
+                        {fieldError("billingEmail")}
                       </p>
                     ) : null}
                   </div>
@@ -700,6 +716,9 @@ export default function CheckoutPage() {
                       onValueChange={(value) =>
                         updateBillingField("state", value)
                       }
+                      onOpenChange={(open) => {
+                        if (!open) touchField("state");
+                      }}
                     >
                       <SelectTrigger id="state" className="h-11 w-full">
                         <SelectValue placeholder="Select state" />
@@ -712,9 +731,9 @@ export default function CheckoutPage() {
                         ))}
                       </SelectContent>
                     </Select>
-                    {validation.state ? (
+                    {fieldError("state") ? (
                       <p className="text-xs text-destructive">
-                        {validation.state}
+                        {fieldError("state")}
                       </p>
                     ) : null}
                   </div>
@@ -730,11 +749,12 @@ export default function CheckoutPage() {
                       onChange={(event) =>
                         updateBillingField("pinCode", event.target.value)
                       }
-                      aria-invalid={Boolean(validation.pinCode)}
+                      aria-invalid={Boolean(fieldError("pinCode"))}
+                      onBlur={() => touchField("pinCode")}
                     />
-                    {validation.pinCode ? (
+                    {fieldError("pinCode") ? (
                       <p className="text-xs text-destructive">
-                        {validation.pinCode}
+                        {fieldError("pinCode")}
                       </p>
                     ) : null}
                   </div>
@@ -749,11 +769,12 @@ export default function CheckoutPage() {
                       onChange={(event) =>
                         updateBillingField("address", event.target.value)
                       }
-                      aria-invalid={Boolean(validation.address)}
+                      aria-invalid={Boolean(fieldError("address"))}
+                      onBlur={() => touchField("address")}
                     />
-                    {validation.address ? (
+                    {fieldError("address") ? (
                       <p className="text-xs text-destructive">
-                        {validation.address}
+                        {fieldError("address")}
                       </p>
                     ) : null}
                   </div>
@@ -767,15 +788,16 @@ export default function CheckoutPage() {
                       onChange={(event) =>
                         updateBillingField("gstin", event.target.value)
                       }
-                      aria-invalid={Boolean(validation.gstin)}
+                      aria-invalid={Boolean(fieldError("gstin"))}
+                      onBlur={() => touchField("gstin")}
                     />
-                    {validation.gstin ? (
+                    {fieldError("gstin") ? (
                       <p className="text-xs text-destructive">
-                        {validation.gstin}
+                        {fieldError("gstin")}
                       </p>
                     ) : (
                       <p className="text-xs text-muted-foreground">
-                        Leave blank if the customer is not claiming GST credit.
+                        Leave blank if you&apos;re not claiming GST credit.
                       </p>
                     )}
                   </div>
@@ -828,7 +850,7 @@ export default function CheckoutPage() {
                       </p>
                       <p className="mt-1 text-xs text-muted-foreground">
                         If you pay by UPI AutoPay, Razorpay can&apos;t change
-                        the mandate mid-cycle. In that case you&apos;ll
+                        the autopay mid-cycle. In that case you&apos;ll
                         authorise the upgrade now and it starts at your next
                         renewal.
                       </p>
@@ -868,8 +890,8 @@ export default function CheckoutPage() {
               <div className="flex gap-3">
                 <ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" />
                 <p className="text-sm text-muted-foreground">
-                  Razorpay checkout opens after confirmation. Backend webhooks
-                  and the sync route confirm the subscription status.
+                  You&apos;ll pay securely on Razorpay. Your plan switches on as
+                  soon as the payment is confirmed.
                 </p>
               </div>
             </section>
@@ -949,9 +971,9 @@ export default function CheckoutPage() {
               </AlertDialogContent>
             </AlertDialog>
 
-            {isPaidAction && !isBillingProfileLoading && hasBillingErrors ? (
-              <p className="text-center text-xs text-muted-foreground">
-                Complete the required billing fields to enable checkout.
+            {isPaidAction && showAllErrors && hasBillingErrors ? (
+              <p className="text-center text-xs text-destructive">
+                Complete the highlighted billing fields to continue.
               </p>
             ) : null}
 

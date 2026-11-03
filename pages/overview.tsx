@@ -433,7 +433,7 @@ export default function OverviewPage() {
 
       if (!session.phoneNumberId) {
         setLastSignupError(
-          "Meta returned the WhatsApp Business app onboarding event without a phone number id. Backend onboarding needs the phone number id before it can connect this account."
+          "Meta didn't send the phone number for this WhatsApp account. Please try connecting again."
         );
         return;
       }
@@ -847,9 +847,8 @@ export default function OverviewPage() {
                 </div>
                 {signupSession && !isMetaReady && (
                   <div className="rounded-sm bg-white p-3 text-xs text-muted-foreground">
-                    Received WABA {signupSession.wabaId} and phone number{" "}
-                    {signupSession.phoneNumberId}. Waiting for authorization to
-                    finish.
+                    WhatsApp account and phone number received. Waiting for
+                    authorization to finish.
                   </div>
                 )}
               </div>

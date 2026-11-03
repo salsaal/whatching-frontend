@@ -630,9 +630,7 @@ export function KnowledgeBaseSection({
         <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-2xl">
           <DialogHeader className="shrink-0 pr-8">
             <DialogTitle>{selectedSource?.title}</DialogTitle>
-            <DialogDescription>
-              Knowledge source details from the current backend record.
-            </DialogDescription>
+            <DialogDescription>Details of this source.</DialogDescription>
           </DialogHeader>
           {selectedSource && (
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overflow-x-hidden pr-1">

@@ -3855,7 +3855,7 @@ function ConversationsPageContent() {
                                       key={trigger.triggerKey}
                                       value={trigger.triggerKey}
                                     >
-                                      {trigger.name} · {trigger.triggerKey}
+                                      {trigger.name}
                                     </SelectItem>
                                   ))}
                                 </SelectContent>

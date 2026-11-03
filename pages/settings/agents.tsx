@@ -654,7 +654,7 @@ function AgentsSettingsPageContent() {
               <div>
                 <p className="font-medium">Owner protected</p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Backend prevents removing the organization owner.
+                  The owner can&apos;t be removed.
                 </p>
               </div>
             </CardContent>
@@ -769,8 +769,8 @@ function AgentsSettingsPageContent() {
             <DialogTitle>Add agent</DialogTitle>
           </DialogHeader>
           <div className="rounded-lg bg-muted/40 p-3 text-sm text-muted-foreground">
-            The backend creates a verified staff account or links an existing
-            Whatching user to this organization as an agent.
+            We create an account for them, or add their existing Whatching
+            account to this business.
           </div>
           <AgentForm
             onSubmit={createAgent}

@@ -56,12 +56,13 @@ export default function ManualConnectDialog({
         <form onSubmit={handleSubmit} className="space-y-4">
           <p className="text-sm text-muted-foreground">
             Use this only if Embedded Signup isn&apos;t available. You&apos;ll
-            need the WABA ID, phone number ID, and a Meta system-user access
-            token with permission for this WhatsApp Business Account.
+            need the WhatsApp Business Account ID, phone number ID, and a Meta
+            system-user access token with permission for this WhatsApp Business
+            Account.
           </p>
 
           <div>
-            <Label>WABA ID</Label>
+            <Label>WhatsApp Business Account ID</Label>
             <Input
               value={wabaId}
               onChange={(event) => setWabaId(event.target.value)}

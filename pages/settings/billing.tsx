@@ -163,7 +163,7 @@ export default function BillingSettingsPage() {
     meta: { showToast: false },
     onSuccess: (res) => {
       upsertOrganization(res.data.organization);
-      toast.success("Billing status synced.");
+      toast.success("Billing status refreshed.");
       refetch();
     }
   });
@@ -287,7 +287,7 @@ export default function BillingSettingsPage() {
                 ) : (
                   <RefreshCw className="size-4" />
                 )}
-                Sync billing
+                Refresh status
               </Button>
 
               {canceledWithAccess && (

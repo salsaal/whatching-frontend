@@ -12,8 +12,7 @@ import {
   RefreshCcw,
   Search,
   Settings2,
-  X,
-  XCircle
+  X
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -163,6 +162,20 @@ const emptyRule: InstagramCommentRulePayload = {
   sendPrivateReply: true,
   cooldownSeconds: 0,
   mediaIds: []
+};
+
+const flowStartLabels: Partial<Record<InstagramFlow["triggerType"], string>> = {
+  first_dm: "Welcome message",
+  keyword: "Keyword",
+  story_reply: "Story reply",
+  comment_private_reply_opened: "Comment reply",
+  manual_start: "Started by another block"
+};
+
+const flowStatusLabels: Record<InstagramFlow["status"], string> = {
+  draft: "Draft",
+  published: "Published",
+  archived: "Archived"
 };
 
 const INSTAGRAM_FLOWS_PAGE_SIZE = 12;
@@ -727,9 +740,8 @@ export function InstagramPage() {
                   <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
                     Connect an Instagram professional account before using
                     message flows, comment automation, media sync, and
-                    automations. We use Instagram Business Login and send only
-                    the returned authorization code to the backend for token
-                    exchange.
+                    automations. You&apos;ll sign in with Instagram, and we
+                    never see your password.
                   </p>
                 </div>
               </div>
@@ -1222,46 +1234,23 @@ export function InstagramPage() {
         {activeTab === "setup" && isReady && (
           <div className="min-h-0 flex-1 overflow-y-auto p-5">
             <div className="grid gap-4 lg:grid-cols-3">
-              <div className="rounded-xl border bg-white p-5 lg:col-span-2">
+              <div className="rounded-xl border bg-white p-5 lg:col-span-3">
                 <h2 className="text-base font-semibold">
-                  Backend-supported features
+                  What you can do here
                 </h2>
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   {[
-                    "Instagram Business Login connection",
-                    "Instagram media sync and search",
-                    "Draft and published DM canvas",
-                    "Text, image, video, quick replies",
-                    "Button and generic templates",
-                    "Tag, handoff, pause, and end nodes",
-                    "Named flow listing",
-                    "Comment automations"
+                    "Connect your Instagram professional account",
+                    "Bring in and search your Instagram posts",
+                    "Build message flows, save drafts and publish",
+                    "Send text, images, videos and quick replies",
+                    "Send buttons and swipeable cards",
+                    "Tag people, hand chats to your team, pause or end a flow",
+                    "Keep several named flows",
+                    "Reply to comments automatically"
                   ].map((item) => (
                     <div key={item} className="flex items-center gap-2 text-sm">
                       <CheckCircle2 className="size-4 text-emerald-600" />
-                      {item}
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="rounded-xl border bg-white p-5">
-                <h2 className="text-base font-semibold">Docs excluded here</h2>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  These Meta doc features are not exposed in the current backend
-                  organization routes, so this UI does not pretend to configure
-                  them.
-                </p>
-                <div className="mt-4 space-y-2 text-sm">
-                  {[
-                    "Persistent menu setup",
-                    "Ice breakers setup",
-                    "ig.me link generation",
-                    "Instagram user profile lookup",
-                    "Sender actions: typing_on / mark_seen",
-                    "Direct one-off Send API composer outside conversations"
-                  ].map((item) => (
-                    <div key={item} className="flex items-center gap-2">
-                      <XCircle className="size-4 text-muted-foreground" />
                       {item}
                     </div>
                   ))}
@@ -1278,10 +1267,11 @@ export function InstagramPage() {
                         {flow.name}
                       </p>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        {flow.triggerType} {flow.triggerKey || ""}
+                        {flowStartLabels[flow.triggerType] ||
+                          "Started by another block"}
                       </p>
                       <Badge variant="outline" className="mt-3">
-                        v{flow.version} {flow.status}
+                        Version {flow.version} · {flowStatusLabels[flow.status]}
                       </Badge>
                     </div>
                   ))}
@@ -1579,7 +1569,7 @@ export function InstagramPage() {
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                Each chip is sent as one item in the backend keywords array.
+                Each keyword is matched on its own.
               </p>
             </div>
 
@@ -1825,9 +1815,8 @@ export function InstagramPage() {
           <DialogHeader>
             <DialogTitle>Connect Instagram Business</DialogTitle>
             <DialogDescription>
-              Continue with Instagram Business Login. The frontend sends the
-              returned authorization code to the backend; token exchange and
-              storage happen server-side.
+              Sign in with your Instagram professional account to connect it. We
+              never see your password.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">

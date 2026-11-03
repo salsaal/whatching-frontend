@@ -165,7 +165,7 @@ export default function CongratulationsPage() {
             ? "Pro turns on as soon as the payment is confirmed."
             : "You're now on Pro. Razorpay charged the difference for the rest of this billing cycle."
           : wentThroughRazorpay
-            ? "Razorpay payment has been submitted. Whatching will keep syncing the subscription status through backend webhooks and the billing sync route."
+            ? "Payment received. We're confirming it with Razorpay; this usually takes a few seconds."
             : lastCheckout?.outcomeMessage
               ? humanizeBillingMessage(lastCheckout.outcomeMessage)
               : "Your plan request was processed. Whatching will keep syncing the subscription status.";
@@ -275,9 +275,8 @@ export default function CongratulationsPage() {
 
           {syncMutation.isError ? (
             <p className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-              Payment was submitted, but live subscription sync did not respond.
-              The backend webhook can still activate the plan. Check Billing if
-              the status is not updated yet.
+              Your payment was submitted. It can take a minute for your plan to
+              switch on. Check Billing if it hasn&apos;t after that.
             </p>
           ) : null}
 
