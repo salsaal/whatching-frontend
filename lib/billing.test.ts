@@ -7,6 +7,7 @@ import {
   formatCurrency,
   getDaysUntil,
   getChangeKind,
+  getComplimentaryNotice,
   getDowngradeSeatCheck,
   getPaymentState,
   getOrganizationStatusLabel,
@@ -467,5 +468,61 @@ describe("a plan change with an authorised replacement", () => {
     });
     expect(isSubscriptionCanceledWithAccess(leaving)).toBe(true);
     expect(getOrganizationStatusLabel(leaving)).toBe("Cancelled");
+  });
+});
+
+describe("getComplimentaryNotice", () => {
+  const day = 86_400_000;
+  const now = Date.now();
+  const granted = (untilMs: number) =>
+    org({
+      planTier: "pro",
+      subscriptionStatus: "active",
+      complimentaryPlan: {
+        tier: "pro",
+        until: new Date(untilMs).toISOString(),
+        grantedAt: new Date(now - 27 * day).toISOString()
+      },
+      trialConsumedAt: new Date(now - 27 * day).toISOString(),
+      trialConsumedReason: "complimentary_plan"
+    });
+
+  it("reminds in the last 3 days only", () => {
+    expect(getComplimentaryNotice(granted(now + 2 * day), now)).toMatchObject({
+      kind: "ending",
+      planName: "Pro"
+    });
+    expect(getComplimentaryNotice(granted(now + 3 * day), now)?.kind).toBe(
+      "ending"
+    );
+    expect(getComplimentaryNotice(granted(now + 4 * day), now)).toBeNull();
+  });
+
+  it("says it ended once there is no plan", () => {
+    const ended = org({
+      ...granted(now - day),
+      planTier: "none",
+      subscriptionStatus: "canceled"
+    });
+    expect(getComplimentaryNotice(ended, now)).toEqual({ kind: "ended" });
+  });
+
+  it("is quiet once a paid plan replaced it", () => {
+    const paying = org({
+      ...granted(now - day),
+      planTier: "basic",
+      razorpaySubscriptionId: "sub_1"
+    });
+    expect(getComplimentaryNotice(paying, now)).toBeNull();
+  });
+
+  it("never offers the free trial after a grant", () => {
+    const ended = org({
+      ...granted(now - day),
+      planTier: "none",
+      subscriptionStatus: "canceled"
+    });
+    expect(canStartFreeTrial(ended)).toBe(false);
+    expect(buildPlanAction(plans[0], ended).kind).toBe("subscribe");
   });
 });

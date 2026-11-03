@@ -69,6 +69,14 @@ export interface Organization {
   trialStartedAt?: string;
   trialEndsAt?: string;
   trialConsumedAt?: string;
+  /** Why the trial is used up: taken, or replaced by free access. */
+  trialConsumedReason?: "free_trial" | "complimentary_plan" | null;
+  /** The latest free access from the Whatching team, kept after it ends. */
+  complimentaryPlan?: {
+    tier?: string | null;
+    until?: string | null;
+    grantedAt?: string | null;
+  } | null;
   trialStartedBy?: string | null;
   billingProfile?: OrganizationBillingProfile | null;
   metaConfig: OrganizationMetaConfig;

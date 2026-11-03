@@ -47,6 +47,7 @@ import {
   isSubscriptionCanceledWithAccess,
   formatDate,
   getDaysUntil,
+  getComplimentaryNotice,
   getPaymentState,
   getPlanByTier
 } from "@/lib/billing";
@@ -142,6 +143,7 @@ export default function AppLayout({
   const currentPlan = activeOrganization?.planTier || "none";
   const isNoPlan = currentPlan === "none";
   const paymentState = getPaymentState(activeOrganization);
+  const complimentaryNotice = getComplimentaryNotice(activeOrganization);
   const currentPlanName = getPlanByTier(currentPlan)?.name || currentPlan;
   const planChipLabel = isNoPlan
     ? "No plan"
@@ -505,6 +507,29 @@ export default function AppLayout({
             </div>
           )}
 
+        {!hideHeader && complimentaryNotice?.kind === "ending" && (
+          <div className="px-4 pt-3 sm:px-6 lg:px-8">
+            <div className="mx-auto flex max-w-7xl items-center gap-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+              <AlertCircle className="size-4 shrink-0 text-amber-600" />
+              <p className="min-w-0 flex-1">
+                Your free {complimentaryNotice.planName} access ends on{" "}
+                <span className="font-semibold">
+                  {formatDate(complimentaryNotice.until)}
+                </span>
+                . Choose a plan to keep everything running.
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                className="h-8 shrink-0"
+                onClick={() => router.push("/plans")}
+              >
+                Choose a plan
+              </Button>
+            </div>
+          </div>
+        )}
+
         {!hideHeader &&
           isNoPlan &&
           paymentState !== "ended" &&
@@ -513,8 +538,9 @@ export default function AppLayout({
               <div className="mx-auto flex max-w-7xl items-center gap-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
                 <Zap className="size-4 shrink-0 text-amber-600" />
                 <p className="min-w-0 flex-1">
-                  Choose a plan to unlock broadcasts, automation, analytics, and
-                  team features.
+                  {complimentaryNotice?.kind === "ended"
+                    ? "Your free month from the Whatching team has ended. Choose a plan to continue."
+                    : "Choose a plan to unlock broadcasts, automation, analytics, and team features."}
                 </p>
                 <Button
                   type="button"

@@ -478,3 +478,41 @@ export const getChangeKind = (
       return undefined;
   }
 };
+
+const COMPLIMENTARY_ENDING_SOON_MS = 3 * 24 * 60 * 60 * 1000;
+
+export type ComplimentaryNotice =
+  | { kind: "ending"; planName: string; until: string }
+  | { kind: "ended" }
+  | null;
+
+// Free access from the Whatching team: a reminder in its last 3 days, and a
+// note once it has ended and nothing replaced it.
+export const getComplimentaryNotice = (
+  organization: Organization | null | undefined,
+  now = Date.now()
+): ComplimentaryNotice => {
+  const until = organization?.complimentaryPlan?.until;
+  if (!until) return null;
+  const untilTime = new Date(until).getTime();
+  if (!Number.isFinite(untilTime)) return null;
+
+  if (
+    isAdminGrantedPlan(organization) &&
+    untilTime > now &&
+    untilTime - now <= COMPLIMENTARY_ENDING_SOON_MS
+  ) {
+    return {
+      kind: "ending",
+      planName:
+        getPlanByTier(
+          organization?.complimentaryPlan?.tier || organization?.planTier
+        )?.name || "paid",
+      until
+    };
+  }
+  if ((organization?.planTier || "none") === "none" && untilTime <= now) {
+    return { kind: "ended" };
+  }
+  return null;
+};
