@@ -182,7 +182,11 @@ export default function CheckoutPage() {
   const paymentState = getPaymentState(activeOrganization);
   const currentPlanName =
     getPlanByTier(activeOrganization?.planTier)?.name || "current";
-  const isGranted = isAdminGrantedPlan(activeOrganization);
+  // Set when the backend says the plan is team-managed even though the org
+  // we have doesn't look granted (e.g. it changed since we loaded it).
+  const [grantBlockedMessage, setGrantBlockedMessage] = useState("");
+  const isGranted =
+    isAdminGrantedPlan(activeOrganization) || Boolean(grantBlockedMessage);
   // Basic has fewer agent seats; the backend 409s a downgrade over the
   // limit, so check first and let the owner choose who to remove.
   const {
@@ -192,7 +196,7 @@ export default function CheckoutPage() {
   } = useQuery({
     queryKey: ["team", activeOrganization?._id],
     queryFn: getTeam,
-    enabled: Boolean(activeOrganization?._id && isDowngrade),
+    enabled: Boolean(activeOrganization?._id && isDowngrade && !isGranted),
     refetchOnMount: "always",
     refetchOnWindowFocus: true
   });
@@ -200,7 +204,7 @@ export default function CheckoutPage() {
     (member) => member.role === "agent" && member.status === "active"
   ).length;
   const seatCheck =
-    isDowngrade && teamData
+    isDowngrade && !isGranted && teamData
       ? getDowngradeSeatCheck(activeAgentCount, "basic")
       : { excess: 0, message: "" };
   const [downgradeBlockedMessage, setDowngradeBlockedMessage] = useState("");
@@ -486,7 +490,10 @@ export default function CheckoutPage() {
     },
     onError: (error) => {
       const message = getErrorMessage(error);
-      if (isDowngrade && (error as AxiosError).response?.status === 409) {
+      const isConflict = (error as AxiosError).response?.status === 409;
+      if (isConflict && /managed by the Whatching team/i.test(message)) {
+        setGrantBlockedMessage(message);
+      } else if (isDowngrade && isConflict) {
         setDowngradeBlockedMessage(message);
         refetchTeam();
       }
@@ -503,7 +510,7 @@ export default function CheckoutPage() {
     isCurrentActivePlan ||
     canceledWithAccess ||
     isGranted ||
-    (isDowngrade && (isTeamLoading || seatCheck.excess > 0)) ||
+    (isDowngrade && !isGranted && (isTeamLoading || seatCheck.excess > 0)) ||
     isProceeding ||
     (isPaidAction && isBillingProfileLoading);
   const [isDowngradeConfirmOpen, setIsDowngradeConfirmOpen] = useState(false);
@@ -521,7 +528,7 @@ export default function CheckoutPage() {
   };
 
   const handleProceed = () => {
-    if (!paidPlan) return;
+    if (!paidPlan || isGranted) return;
 
     if (isTrialAction) {
       startTrialMutation.mutate(paidPlan.id);
@@ -609,13 +616,19 @@ export default function CheckoutPage() {
           <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
             <div className="flex gap-3">
               <AlertCircle className="mt-0.5 size-4 shrink-0 text-amber-600" />
-              <p>
-                Your plan is managed by the Whatching team until{" "}
-                <span className="font-semibold">
-                  {formatDate(activeOrganization?.subscriptionCurrentPeriodEnd)}
-                </span>
-                . Contact support to change it.
-              </p>
+              {grantBlockedMessage ? (
+                <p>{grantBlockedMessage}</p>
+              ) : (
+                <p>
+                  Your plan is managed by the Whatching team until{" "}
+                  <span className="font-semibold">
+                    {formatDate(
+                      activeOrganization?.subscriptionCurrentPeriodEnd
+                    )}
+                  </span>
+                  . Contact support to change it.
+                </p>
+              )}
             </div>
           </section>
         )}
@@ -841,7 +854,12 @@ export default function CheckoutPage() {
                       {monthlyTotal}
                     </span>
                   </div>
-                  {isUpgrade ? (
+                  {isGranted ? (
+                    <p className="mt-2 text-foreground">
+                      Your plan is managed by the Whatching team, so nothing
+                      changes here.
+                    </p>
+                  ) : isUpgrade ? (
                     <>
                       <p className="mt-2 text-foreground">
                         Razorpay charges the difference for the rest of this
@@ -896,7 +914,7 @@ export default function CheckoutPage() {
               </div>
             </section>
 
-            {isDowngrade && seatMessage ? (
+            {isDowngrade && !isGranted && seatMessage ? (
               <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
                 <div className="flex gap-3">
                   <AlertCircle className="mt-0.5 size-4 shrink-0 text-amber-600" />
@@ -928,13 +946,15 @@ export default function CheckoutPage() {
               )}
               {isProceeding
                 ? "Processing"
-                : isTrialAction
-                  ? "Start free trial"
-                  : action?.kind === "change"
-                    ? isDowngrade
-                      ? "Confirm downgrade"
-                      : "Confirm plan change"
-                    : "Proceed to Razorpay"}
+                : isGranted
+                  ? "Managed by Whatching"
+                  : isTrialAction
+                    ? "Start free trial"
+                    : action?.kind === "change"
+                      ? isDowngrade
+                        ? "Confirm downgrade"
+                        : "Confirm plan change"
+                      : "Proceed to Razorpay"}
             </Button>
 
             <AlertDialog
