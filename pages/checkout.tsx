@@ -89,6 +89,8 @@ type PaidCheckoutResponseData = {
   organization?: Organization;
   startsAt?: string | null;
   outcome?: ChangePlanOutcome;
+  appliesImmediately?: boolean;
+  upfrontAmountPaise?: number | null;
   changed?: boolean;
   scheduled?: boolean;
   requiresAuthorization?: boolean;
@@ -335,6 +337,7 @@ export default function CheckoutPage() {
               outcome,
               changeKind,
               changed: outcome === "upgraded",
+              appliesImmediately: Boolean(responseData?.appliesImmediately),
               effectiveAt
             }
           : {};
@@ -426,10 +429,15 @@ export default function CheckoutPage() {
         );
 
         if (outcome === "replacement_requires_authorization") {
+          const upfrontPaise = responseData?.upfrontAmountPaise;
           toast.info(
-            `Your payment method can't be changed mid-cycle, so the upgrade starts at your next renewal on ${formatDate(
-              effectiveAt
-            )}. Authorise it now.`,
+            responseData?.appliesImmediately && upfrontPaise
+              ? `Pay ${formatCurrency(upfrontPaise / 100)} now for the rest of this billing cycle and Pro starts right away. Your autopay switches to Pro from ${formatDate(
+                  effectiveAt
+                )}.`
+              : `Your payment method can't be changed mid-cycle, so the upgrade starts at your next renewal on ${formatDate(
+                  effectiveAt
+                )}. Authorise it now.`,
             { duration: 10000 }
           );
         }
@@ -867,10 +875,9 @@ export default function CheckoutPage() {
                         {monthlyTotal}/month.
                       </p>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        If you pay by UPI AutoPay, Razorpay can&apos;t change
-                        the autopay mid-cycle. In that case you&apos;ll
-                        authorise the upgrade now and it starts at your next
-                        renewal.
+                        If you pay by UPI AutoPay, you&apos;ll authorise a new
+                        autopay for Pro and see what&apos;s due today before you
+                        pay.
                       </p>
                     </>
                   ) : isDowngrade ? (

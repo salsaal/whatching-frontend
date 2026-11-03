@@ -60,6 +60,7 @@ import {
   formatDate,
   getDaysUntil,
   getPlanByTier,
+  getPrepaidUpgrade,
   getSubscriptionStatusLabel,
   humanizeBillingMessage,
   isAdminGrantedPlan,
@@ -245,6 +246,9 @@ export default function BillingSettingsPage() {
   // actually switches over) -- so it alone can't tell us whether action is
   // still needed. `pendingRazorpaySubscriptionStatus` can: 'authenticated'
   // means the payment already cleared and we're just waiting on the date.
+  // After an autopay upgrade is paid, Pro already applies; the scheduled
+  // change only moves the autopay over at the next renewal.
+  const prepaidUpgrade = getPrepaidUpgrade(activeOrganization);
   const pendingReplacementNeedsAuthorization =
     Boolean(activeOrganization?.pendingRazorpaySubscriptionCheckoutUrl) &&
     activeOrganization?.pendingRazorpaySubscriptionStatus !== "authenticated";
@@ -407,8 +411,21 @@ export default function BillingSettingsPage() {
           </section>
         ) : null}
 
-        {activeOrganization?.scheduledPlanTier &&
-        pendingReplacementNeedsAuthorization ? (
+        {prepaidUpgrade ? (
+          <section className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950">
+            <span className="font-semibold">Pro</span> (paid until{" "}
+            {formatDate(prepaidUpgrade.until)}). Autopay switches to Pro on{" "}
+            <span className="font-semibold">
+              {formatDate(
+                activeOrganization?.scheduledPlanChangeAt ||
+                  activeOrganization?.pendingRazorpaySubscriptionStartsAt ||
+                  prepaidUpgrade.until
+              )}
+            </span>
+            .
+          </section>
+        ) : activeOrganization?.scheduledPlanTier &&
+          pendingReplacementNeedsAuthorization ? (
           <section className="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
             <div>
               <p>

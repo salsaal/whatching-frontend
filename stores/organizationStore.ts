@@ -62,6 +62,9 @@ export interface Organization {
   lastPlanChangeFailureAt?: string | null;
   paymentFailedAt?: string | null;
   paymentGraceUntil?: string | null;
+  /** Pro paid up front until the new autopay takes over at this date. */
+  prepaidUpgradeTier?: "pro" | null;
+  prepaidUpgradeUntil?: string | null;
   trialPlanTier?: "basic" | "pro" | null;
   trialStartedAt?: string;
   trialEndsAt?: string;

@@ -392,6 +392,18 @@ export const getSubscriptionStatusLabel = (status?: string | null) =>
 export const humanizeBillingMessage = (message: string) =>
   message.replace(/\d{4}-\d{2}-\d{2}T[\d:.]+Z/g, (iso) => formatDate(iso));
 
+// Pro paid up front for the rest of the cycle after an autopay upgrade; the
+// new autopay takes over at `until`. Null once that date has passed.
+export const getPrepaidUpgrade = (
+  organization: Organization | null | undefined
+) => {
+  const until = organization?.prepaidUpgradeUntil;
+  if (organization?.prepaidUpgradeTier !== "pro" || !until) return null;
+  const untilTime = new Date(until).getTime();
+  if (!Number.isFinite(untilTime) || untilTime <= Date.now()) return null;
+  return { tier: "pro" as const, until };
+};
+
 export type ChangeKind = "upgrade" | "downgrade" | "replacement";
 
 type ChangePlanResult = {

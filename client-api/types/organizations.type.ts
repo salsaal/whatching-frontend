@@ -346,6 +346,9 @@ export interface ChangePlanResponse {
     key?: string;
     paymentUrl?: string;
     outcome?: ChangePlanOutcome;
+    /** replacement_requires_authorization: Pro starts once authorised. */
+    appliesImmediately?: boolean;
+    upfrontAmountPaise?: number | null;
     changed?: boolean;
     scheduled?: boolean;
     requiresAuthorization?: boolean;

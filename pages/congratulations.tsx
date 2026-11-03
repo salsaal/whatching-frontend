@@ -42,6 +42,7 @@ type LastCheckout = {
   changed?: boolean;
   outcome?: ChangePlanOutcome;
   effectiveAt?: string | null;
+  appliesImmediately?: boolean;
 };
 
 const checkoutStorageKey = "whatching:checkout:last";
@@ -117,8 +118,12 @@ export default function CongratulationsPage() {
   const startsAt = lastCheckout?.startsAt || activeOrganization?.trialEndsAt;
   const changeKind =
     lastCheckout?.action === "change" ? lastCheckout.changeKind : undefined;
+  // An autopay upgrade paid up front: Pro now, new autopay from effectiveAt.
+  const isPrepaidUpgrade =
+    changeKind === "replacement" && Boolean(lastCheckout?.appliesImmediately);
   const isScheduledChange =
-    changeKind === "downgrade" || changeKind === "replacement";
+    changeKind === "downgrade" ||
+    (changeKind === "replacement" && !isPrepaidUpgrade);
   const isUpgradePending =
     changeKind === "upgrade" &&
     (lastCheckout?.outcome
@@ -158,28 +163,32 @@ export default function CongratulationsPage() {
     ? `Your ${planName || "Whatching"} trial is active for this organisation.`
     : startsLater
       ? `Your ${planName || "Whatching"} plan starts on ${formatDate(startsAt)}. You won't be charged until then.`
-      : isScheduledChange
-        ? `Your plan changes to ${planName || "the new plan"} on ${formatDate(lastCheckout?.effectiveAt)}. You keep your current plan until then.`
-        : changeKind === "upgrade"
-          ? isUpgradePending
-            ? "Pro turns on as soon as the payment is confirmed."
-            : "You're now on Pro. Razorpay charged the difference for the rest of this billing cycle."
-          : wentThroughRazorpay
-            ? "Payment received. We're confirming it with Razorpay; this usually takes a few seconds."
-            : lastCheckout?.outcomeMessage
-              ? humanizeBillingMessage(lastCheckout.outcomeMessage)
-              : "Your plan request was processed. Whatching will keep syncing the subscription status.";
+      : isPrepaidUpgrade
+        ? `Pro is active. Your autopay switches to Pro on ${formatDate(lastCheckout?.effectiveAt)}.`
+        : isScheduledChange
+          ? `Your plan changes to ${planName || "the new plan"} on ${formatDate(lastCheckout?.effectiveAt)}. You keep your current plan until then.`
+          : changeKind === "upgrade"
+            ? isUpgradePending
+              ? "Pro turns on as soon as the payment is confirmed."
+              : "You're now on Pro. Razorpay charged the difference for the rest of this billing cycle."
+            : wentThroughRazorpay
+              ? "Payment received. We're confirming it with Razorpay; this usually takes a few seconds."
+              : lastCheckout?.outcomeMessage
+                ? humanizeBillingMessage(lastCheckout.outcomeMessage)
+                : "Your plan request was processed. Whatching will keep syncing the subscription status.";
   const heading = isTrial
     ? "Free trial started"
     : startsLater
       ? "Your plan is set up"
-      : isScheduledChange
-        ? "Plan change scheduled"
-        : changeKind === "upgrade"
-          ? isUpgradePending
-            ? "Upgrade submitted"
-            : "Plan upgraded"
-          : "Plan purchased";
+      : isPrepaidUpgrade
+        ? "Plan upgraded"
+        : isScheduledChange
+          ? "Plan change scheduled"
+          : changeKind === "upgrade"
+            ? isUpgradePending
+              ? "Upgrade submitted"
+              : "Plan upgraded"
+            : "Plan purchased";
   const statusLabel = isTrial
     ? "Free trial"
     : startsLater

@@ -23,6 +23,7 @@ import {
   buildPlanAction,
   formatDate,
   getPaymentState,
+  getPrepaidUpgrade,
   humanizeBillingMessage,
   isAdminGrantedPlan,
   isSubscriptionCanceledWithAccess,
@@ -59,6 +60,9 @@ export default function PlansPage() {
   // See the matching comment in settings/billing.tsx: the checkout URL stays
   // populated even after the mandate payment clears, so only
   // pendingRazorpaySubscriptionStatus tells us whether action is still needed.
+  // After an autopay upgrade is paid, Pro already applies; the scheduled
+  // change only moves the autopay over at the next renewal.
+  const prepaidUpgrade = getPrepaidUpgrade(activeOrganization);
   const pendingReplacementNeedsAuthorization =
     Boolean(activeOrganization?.pendingRazorpaySubscriptionCheckoutUrl) &&
     activeOrganization?.pendingRazorpaySubscriptionStatus !== "authenticated";
@@ -133,8 +137,21 @@ export default function PlansPage() {
           </section>
         )}
 
-        {activeOrganization?.scheduledPlanTier &&
-        pendingReplacementNeedsAuthorization ? (
+        {prepaidUpgrade ? (
+          <section className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950">
+            <span className="font-semibold">Pro</span> (paid until{" "}
+            {formatDate(prepaidUpgrade.until)}). Autopay switches to Pro on{" "}
+            <span className="font-semibold">
+              {formatDate(
+                activeOrganization?.scheduledPlanChangeAt ||
+                  activeOrganization?.pendingRazorpaySubscriptionStartsAt ||
+                  prepaidUpgrade.until
+              )}
+            </span>
+            .
+          </section>
+        ) : activeOrganization?.scheduledPlanTier &&
+          pendingReplacementNeedsAuthorization ? (
           <section className="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950 sm:flex-row sm:items-center sm:justify-between">
             <p>
               You started switching to{" "}

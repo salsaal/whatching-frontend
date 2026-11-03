@@ -9,6 +9,7 @@ import {
   getChangeKind,
   getDowngradeSeatCheck,
   getPaymentState,
+  getPrepaidUpgrade,
   getSubscriptionStatusLabel,
   humanizeBillingMessage,
   isAdminGrantedPlan,
@@ -415,5 +416,27 @@ describe("getChangeKind", () => {
     expect(getChangeKind("already_on_plan")).toBeUndefined();
     expect(getChangeKind("pending_change_canceled")).toBeUndefined();
     expect(getChangeKind("scheduled_change_canceled")).toBeUndefined();
+  });
+});
+
+describe("getPrepaidUpgrade", () => {
+  const day = 86_400_000;
+
+  it("is set only while the prepaid Pro period is still running", () => {
+    const until = new Date(Date.now() + 5 * day).toISOString();
+    expect(
+      getPrepaidUpgrade(
+        org({ prepaidUpgradeTier: "pro", prepaidUpgradeUntil: until })
+      )
+    ).toEqual({ tier: "pro", until });
+    expect(
+      getPrepaidUpgrade(
+        org({
+          prepaidUpgradeTier: "pro",
+          prepaidUpgradeUntil: new Date(Date.now() - day).toISOString()
+        })
+      )
+    ).toBeNull();
+    expect(getPrepaidUpgrade(org({ prepaidUpgradeTier: null }))).toBeNull();
   });
 });
