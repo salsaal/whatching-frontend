@@ -343,7 +343,9 @@ export default function BillingSettingsPage() {
                               ? "Cancel the pending plan change"
                               : "Stop renewal at the end of the current billing period"
                       }
-                      disabled={!canCancel || isCancelling}
+                      disabled={
+                        !canCancel || isCancelling || Boolean(replacementPlan)
+                      }
                     >
                       <XCircle className="size-4" />
                       {isTrialWithoutSubscription
@@ -403,6 +405,13 @@ export default function BillingSettingsPage() {
               <p className="max-w-sm text-sm text-muted-foreground lg:text-right">
                 Your plan is managed by the Whatching team, so there is no
                 subscription to cancel. Contact support to change or end it.
+              </p>
+            )}
+            {replacementPlan && !canceledWithAccess && (
+              <p className="max-w-sm text-sm text-muted-foreground lg:text-right">
+                Your plan change is already paid for and starts on{" "}
+                {formatDate(replacementStartsAt)}. To cancel after that, use
+                Cancel subscription then, or contact support.
               </p>
             )}
           </div>
