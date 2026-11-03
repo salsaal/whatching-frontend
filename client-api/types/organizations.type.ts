@@ -325,6 +325,17 @@ export interface ResumeSubscriptionResponse {
   };
 }
 
+export type ChangePlanOutcome =
+  | "upgraded"
+  | "upgrade_pending"
+  | "downgrade_scheduled"
+  | "already_on_plan"
+  | "already_scheduled"
+  | "pending_change_canceled"
+  | "scheduled_change_canceled"
+  | "replacement_pending"
+  | "replacement_requires_authorization";
+
 export interface ChangePlanResponse {
   status: string;
   message?: string;
@@ -334,6 +345,7 @@ export interface ChangePlanResponse {
     replacementSubscriptionId?: string;
     key?: string;
     paymentUrl?: string;
+    outcome?: ChangePlanOutcome;
     changed?: boolean;
     scheduled?: boolean;
     requiresAuthorization?: boolean;

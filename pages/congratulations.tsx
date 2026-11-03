@@ -13,6 +13,7 @@ import {
 import { useRouter } from "next/router";
 
 import { syncBillingSubscription } from "@/client-api/functions/organizations";
+import type { ChangePlanOutcome } from "@/client-api/types/organizations.type";
 import { Button } from "@/components/ui/button";
 import AppLayout from "@/layouts/AppLayout";
 import {
@@ -39,6 +40,7 @@ type LastCheckout = {
   startsAt?: string | null;
   changeKind?: "upgrade" | "downgrade" | "replacement";
   changed?: boolean;
+  outcome?: ChangePlanOutcome;
   effectiveAt?: string | null;
 };
 
@@ -119,7 +121,9 @@ export default function CongratulationsPage() {
     changeKind === "downgrade" || changeKind === "replacement";
   const isUpgradePending =
     changeKind === "upgrade" &&
-    !lastCheckout?.changed &&
+    (lastCheckout?.outcome
+      ? lastCheckout.outcome === "upgrade_pending"
+      : !lastCheckout?.changed) &&
     activeOrganization?.planTier !== "pro";
   const isDone = isActive || startsLater || Boolean(changeKind);
 

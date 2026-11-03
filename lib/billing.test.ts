@@ -6,12 +6,15 @@ import {
   canStartFreeTrial,
   formatCurrency,
   getDaysUntil,
+  getChangeKind,
+  getDowngradeSeatCheck,
   getPaymentState,
   getSubscriptionStatusLabel,
   humanizeBillingMessage,
   isAdminGrantedPlan,
   isSubscriptionCanceledWithAccess,
   plans,
+  resolveChangePlanOutcome,
   validateBillingProfile
 } from "./billing";
 import type { BillingProfile } from "@/client-api/types/organizations.type";
@@ -333,5 +336,84 @@ describe("isSubscriptionCanceledWithAccess", () => {
     expect(
       isSubscriptionCanceledWithAccess(org({ subscriptionStatus: "active" }))
     ).toBe(false);
+  });
+});
+
+describe("getDowngradeSeatCheck", () => {
+  it("matches the backend's downgrade message", () => {
+    expect(getDowngradeSeatCheck(5, "basic")).toEqual({
+      excess: 3,
+      message:
+        "Basic includes 2 team members besides the owner, and you have 5. Remove 3 team members before switching plans."
+    });
+    expect(getDowngradeSeatCheck(3, "basic").message).toContain(
+      "Remove 1 team member before"
+    );
+    expect(getDowngradeSeatCheck(2, "basic")).toEqual({
+      excess: 0,
+      message: ""
+    });
+  });
+});
+
+describe("plans", () => {
+  it("lists role-based permissions under Basic only", () => {
+    const feature = "Role-Based Team Permissions";
+    expect(plans.find((plan) => plan.id === "basic")!.features).toContain(
+      feature
+    );
+    expect(plans.find((plan) => plan.id === "pro")!.features).not.toContain(
+      feature
+    );
+  });
+});
+
+describe("resolveChangePlanOutcome", () => {
+  it("uses the backend outcome when present", () => {
+    expect(
+      resolveChangePlanOutcome({ outcome: "already_on_plan", changed: false })
+    ).toBe("already_on_plan");
+  });
+
+  it("falls back to the response flags", () => {
+    expect(resolveChangePlanOutcome({ changed: true })).toBe("upgraded");
+    expect(
+      resolveChangePlanOutcome({ changed: false, requestedPlanTier: "pro" })
+    ).toBe("upgrade_pending");
+    expect(
+      resolveChangePlanOutcome({ scheduled: true, requestedPlanTier: "basic" })
+    ).toBe("downgrade_scheduled");
+    expect(
+      resolveChangePlanOutcome({
+        scheduled: true,
+        requiresAuthorization: true,
+        paymentMethodReplacement: true
+      })
+    ).toBe("replacement_requires_authorization");
+    expect(
+      resolveChangePlanOutcome({
+        scheduled: true,
+        replacementSubscriptionId: "sub_2"
+      })
+    ).toBe("replacement_pending");
+    expect(
+      resolveChangePlanOutcome({ changed: false, scheduled: false })
+    ).toBeUndefined();
+  });
+});
+
+describe("getChangeKind", () => {
+  it("groups outcomes by what the customer sees", () => {
+    expect(getChangeKind("upgraded")).toBe("upgrade");
+    expect(getChangeKind("upgrade_pending")).toBe("upgrade");
+    expect(getChangeKind("downgrade_scheduled")).toBe("downgrade");
+    expect(getChangeKind("already_scheduled", "basic")).toBe("downgrade");
+    expect(getChangeKind("already_scheduled", "pro")).toBe("replacement");
+    expect(getChangeKind("replacement_requires_authorization")).toBe(
+      "replacement"
+    );
+    expect(getChangeKind("already_on_plan")).toBeUndefined();
+    expect(getChangeKind("pending_change_canceled")).toBeUndefined();
+    expect(getChangeKind("scheduled_change_canceled")).toBeUndefined();
   });
 });

@@ -1,4 +1,7 @@
-import type { BillingProfile } from "@/client-api/types/organizations.type";
+import type {
+  BillingProfile,
+  ChangePlanOutcome
+} from "@/client-api/types/organizations.type";
 import type { Organization } from "@/stores/organizationStore";
 
 export type PaidPlanTier = "basic" | "pro";
@@ -27,6 +30,29 @@ export type PlanAction = {
 
 export const GST_RATE = 0.18;
 
+// Agent seats per plan, on top of the owner (backend config/planConfig.ts).
+export const planAgentLimits: Record<PaidPlanTier, number> = {
+  basic: 2,
+  pro: 5
+};
+
+// How many agents must go before moving to `tier`, and the same sentence the
+// backend's change-plan 409 uses.
+export const getDowngradeSeatCheck = (
+  activeAgents: number,
+  tier: PaidPlanTier
+) => {
+  const allowed = planAgentLimits[tier];
+  const excess = Math.max(0, activeAgents - allowed);
+  const name = tier === "basic" ? "Basic" : "Pro";
+  return {
+    excess,
+    message: excess
+      ? `${name} includes ${allowed} team member${allowed === 1 ? "" : "s"} besides the owner, and you have ${activeAgents}. Remove ${excess} team member${excess === 1 ? "" : "s"} before switching plans.`
+      : ""
+  };
+};
+
 export const plans: PlanDefinition[] = [
   {
     id: "basic",
@@ -44,6 +70,7 @@ export const plans: PlanDefinition[] = [
       "WhatsApp AI Agent",
       "1M AI Message Tokens",
       "Owner + 2 Team Members",
+      "Role-Based Team Permissions",
       "Sync WhatsApp Business App",
       "Single Phone Number Integration",
       "Messaging Template Management",
@@ -65,7 +92,6 @@ export const plans: PlanDefinition[] = [
       "25k WhatsApp Contacts",
       "Upto 2 Phone Numbers per Organization",
       "Owner + 5 Team Members",
-      "Role-Based Team Permissions",
       "3M AI Message Tokens"
     ],
     bonusFeatures: {
@@ -365,3 +391,58 @@ export const getSubscriptionStatusLabel = (status?: string | null) =>
 // Backend billing messages can carry raw ISO timestamps; show them as dates.
 export const humanizeBillingMessage = (message: string) =>
   message.replace(/\d{4}-\d{2}-\d{2}T[\d:.]+Z/g, (iso) => formatDate(iso));
+
+export type ChangeKind = "upgrade" | "downgrade" | "replacement";
+
+type ChangePlanResult = {
+  outcome?: ChangePlanOutcome;
+  changed?: boolean;
+  scheduled?: boolean;
+  requiresAuthorization?: boolean;
+  paymentMethodReplacement?: boolean;
+  replacementSubscriptionId?: string;
+  requestedPlanTier?: string;
+};
+
+// The backend names the change-plan outcome; responses without one (older
+// deploys) are read from the flags they carry instead.
+export const resolveChangePlanOutcome = (
+  data?: ChangePlanResult | null
+): ChangePlanOutcome | undefined => {
+  if (!data) return undefined;
+  if (data.outcome) return data.outcome;
+  if (data.requiresAuthorization && data.paymentMethodReplacement) {
+    return "replacement_requires_authorization";
+  }
+  if (data.scheduled) {
+    if (data.replacementSubscriptionId) return "replacement_pending";
+    return data.requestedPlanTier === "basic"
+      ? "downgrade_scheduled"
+      : "already_scheduled";
+  }
+  if (data.changed) return "upgraded";
+  // Of the unscheduled responses, only the upgrade carries requestedPlanTier.
+  if (data.requestedPlanTier === "pro") return "upgrade_pending";
+  return undefined;
+};
+
+// What the congratulations page shows; undefined means nothing changed.
+export const getChangeKind = (
+  outcome: ChangePlanOutcome | undefined,
+  requestedPlanTier?: string
+): ChangeKind | undefined => {
+  switch (outcome) {
+    case "upgraded":
+    case "upgrade_pending":
+      return "upgrade";
+    case "downgrade_scheduled":
+      return "downgrade";
+    case "replacement_pending":
+    case "replacement_requires_authorization":
+      return "replacement";
+    case "already_scheduled":
+      return requestedPlanTier === "basic" ? "downgrade" : "replacement";
+    default:
+      return undefined;
+  }
+};

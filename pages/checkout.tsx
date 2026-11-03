@@ -13,17 +13,22 @@ import {
   ReceiptText,
   ShieldCheck
 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/router";
 import { toast } from "sonner";
 
 import {
   changeSubscriptionPlan,
   getBillingProfile,
+  getTeam,
   purchaseSubscription,
   startFreeTrial,
   updateBillingProfile
 } from "@/client-api/functions/organizations";
-import type { BillingProfile } from "@/client-api/types/organizations.type";
+import type {
+  BillingProfile,
+  ChangePlanOutcome
+} from "@/client-api/types/organizations.type";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -56,6 +61,8 @@ import {
   emptyBillingProfile,
   formatCurrency,
   formatDate,
+  getChangeKind,
+  getDowngradeSeatCheck,
   getPaymentState,
   getPlanByTier,
   humanizeBillingMessage,
@@ -63,6 +70,7 @@ import {
   isAdminGrantedPlan,
   isSubscriptionCanceledWithAccess,
   PaidPlanTier,
+  resolveChangePlanOutcome,
   validateBillingProfile
 } from "@/lib/billing";
 import { cn } from "@/lib/utils";
@@ -80,6 +88,7 @@ type PaidCheckoutResponseData = {
   paymentUrl?: string;
   organization?: Organization;
   startsAt?: string | null;
+  outcome?: ChangePlanOutcome;
   changed?: boolean;
   scheduled?: boolean;
   requiresAuthorization?: boolean;
@@ -88,8 +97,6 @@ type PaidCheckoutResponseData = {
   planTier?: string;
   requestedPlanTier?: PaidPlanTier;
 };
-
-type ChangeKind = "upgrade" | "downgrade" | "replacement";
 
 const checkoutStorageKey = "whatching:checkout:last";
 
@@ -176,6 +183,28 @@ export default function CheckoutPage() {
   const currentPlanName =
     getPlanByTier(activeOrganization?.planTier)?.name || "current";
   const isGranted = isAdminGrantedPlan(activeOrganization);
+  // Basic has fewer agent seats; the backend 409s a downgrade over the
+  // limit, so check first and let the owner choose who to remove.
+  const {
+    data: teamData,
+    isLoading: isTeamLoading,
+    refetch: refetchTeam
+  } = useQuery({
+    queryKey: ["team", activeOrganization?._id],
+    queryFn: getTeam,
+    enabled: Boolean(activeOrganization?._id && isDowngrade),
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true
+  });
+  const activeAgentCount = (teamData?.data.team || []).filter(
+    (member) => member.role === "agent" && member.status === "active"
+  ).length;
+  const seatCheck =
+    isDowngrade && teamData
+      ? getDowngradeSeatCheck(activeAgentCount, "basic")
+      : { excess: 0, message: "" };
+  const [downgradeBlockedMessage, setDowngradeBlockedMessage] = useState("");
+  const seatMessage = seatCheck.message || downgradeBlockedMessage;
   const [billingProfile, setBillingProfile] =
     useState<BillingProfile>(emptyBillingProfile);
 
@@ -278,36 +307,31 @@ export default function CheckoutPage() {
       const razorpayKey = responseData?.key;
       const startsAt = responseData?.startsAt ?? null;
       const effectiveAt = responseData?.effectiveAt ?? null;
-      const isReplacement = Boolean(
-        responseData?.requiresAuthorization &&
-          responseData?.paymentMethodReplacement
+      const outcome =
+        action?.kind === "change"
+          ? resolveChangePlanOutcome(responseData)
+          : undefined;
+      const changeKind = getChangeKind(
+        outcome,
+        responseData?.requestedPlanTier
       );
-      // Only the upgrade responses carry requestedPlanTier without being
-      // scheduled; "already on this plan" and "pending change cancelled"
-      // leave it out, so they fall through to the backend message.
-      const isUpgradeOutcome =
-        !responseData?.scheduled &&
-        (responseData?.changed || responseData?.requestedPlanTier === "pro");
-      const changeKind: ChangeKind | undefined =
-        action?.kind !== "change"
-          ? undefined
-          : isReplacement
-            ? "replacement"
-            : responseData?.scheduled
-              ? responseData.requestedPlanTier === "basic"
-                ? "downgrade"
-                : "replacement"
-              : isUpgradeOutcome
-                ? "upgrade"
-                : undefined;
       const changeDetails =
         action?.kind === "change"
           ? {
+              outcome,
               changeKind,
-              changed: Boolean(responseData?.changed),
+              changed: outcome === "upgraded",
               effectiveAt
             }
           : {};
+      // A replacement that is already authorised only waits for its start
+      // date; there is nothing to pay in Razorpay.
+      const needsRazorpay =
+        Boolean(subscriptionId && razorpayKey) &&
+        !(
+          outcome === "replacement_pending" &&
+          !responseData?.requiresAuthorization
+        );
       const callbackUrl =
         typeof window !== "undefined"
           ? `${window.location.origin}/congratulations?tier=${tier}`
@@ -317,7 +341,7 @@ export default function CheckoutPage() {
         upsertOrganization(responseData.organization);
       }
 
-      if (!subscriptionId || !razorpayKey) {
+      if (!needsRazorpay || !subscriptionId || !razorpayKey) {
         const requestedName =
           getPlanByTier(responseData?.requestedPlanTier)?.name ||
           paidPlan?.name;
@@ -326,7 +350,7 @@ export default function CheckoutPage() {
               startsAt ?? activeOrganization?.trialEndsAt
             )}.`
           : changeKind === "upgrade"
-            ? responseData?.changed
+            ? outcome === "upgraded"
               ? "You're now on Pro. Razorpay charged the difference for the rest of this billing cycle."
               : "Razorpay accepted the upgrade. Pro turns on as soon as the payment is confirmed."
             : changeKind && effectiveAt
@@ -387,7 +411,7 @@ export default function CheckoutPage() {
           JSON.stringify(checkoutSnapshot)
         );
 
-        if (isReplacement) {
+        if (outcome === "replacement_requires_authorization") {
           toast.info(
             `Your payment method can't be changed mid-cycle, so the upgrade starts at your next renewal on ${formatDate(
               effectiveAt
@@ -450,7 +474,14 @@ export default function CheckoutPage() {
         }
       }
     },
-    onError: (error) => toast.error(getErrorMessage(error))
+    onError: (error) => {
+      const message = getErrorMessage(error);
+      if (isDowngrade && (error as AxiosError).response?.status === 409) {
+        setDowngradeBlockedMessage(message);
+        refetchTeam();
+      }
+      toast.error(message);
+    }
   });
 
   const isProceeding =
@@ -462,6 +493,7 @@ export default function CheckoutPage() {
     isCurrentActivePlan ||
     canceledWithAccess ||
     isGranted ||
+    (isDowngrade && (isTeamLoading || seatCheck.excess > 0)) ||
     isProceeding ||
     (isPaidAction && (isBillingProfileLoading || hasBillingErrors));
   const [isDowngradeConfirmOpen, setIsDowngradeConfirmOpen] = useState(false);
@@ -841,6 +873,23 @@ export default function CheckoutPage() {
                 </p>
               </div>
             </section>
+
+            {isDowngrade && seatMessage ? (
+              <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+                <div className="flex gap-3">
+                  <AlertCircle className="mt-0.5 size-4 shrink-0 text-amber-600" />
+                  <div>
+                    <p>{seatMessage}</p>
+                    <Link
+                      href="/settings/agents"
+                      className="mt-2 inline-block font-medium text-primary underline-offset-2 hover:underline"
+                    >
+                      Manage team
+                    </Link>
+                  </div>
+                </div>
+              </section>
+            ) : null}
 
             <Button
               size="lg"
