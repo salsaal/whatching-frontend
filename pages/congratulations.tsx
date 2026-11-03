@@ -20,7 +20,8 @@ import {
   formatCurrency,
   formatDate,
   getPlanByTier,
-  getSubscriptionStatusLabel,
+  getOrganizationStatusLabel,
+  hasAuthorizedReplacement,
   humanizeBillingMessage,
   isSubscriptionCanceledWithAccess
 } from "@/lib/billing";
@@ -108,7 +109,9 @@ export default function CongratulationsPage() {
   const canceledWithAccess =
     isSubscriptionCanceledWithAccess(activeOrganization);
   const isActive =
-    activeOrganization?.subscriptionStatus === "active" && !canceledWithAccess;
+    (activeOrganization?.subscriptionStatus === "active" ||
+      hasAuthorizedReplacement(activeOrganization)) &&
+    !canceledWithAccess;
   // Subscribing during a trial: the org stays "trialing" until the trial
   // ends, so "active" never arrives here.
   const startsLater =
@@ -193,8 +196,7 @@ export default function CongratulationsPage() {
     ? "Free trial"
     : startsLater
       ? `Free trial, ${planName || "plan"} starts ${formatDate(startsAt)}`
-      : getSubscriptionStatusLabel(activeOrganization?.subscriptionStatus) ||
-        "Checking status";
+      : getOrganizationStatusLabel(activeOrganization) || "Checking status";
 
   return (
     <AppLayout>

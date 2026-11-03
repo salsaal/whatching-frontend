@@ -61,7 +61,9 @@ import {
   getDaysUntil,
   getPlanByTier,
   getPrepaidUpgrade,
-  getSubscriptionStatusLabel,
+  getOrganizationStatusLabel,
+  getPaymentState,
+  hasAuthorizedReplacement,
   humanizeBillingMessage,
   isAdminGrantedPlan,
   isSubscriptionCanceledWithAccess
@@ -249,6 +251,22 @@ export default function BillingSettingsPage() {
   // After an autopay upgrade is paid, Pro already applies; the scheduled
   // change only moves the autopay over at the next renewal.
   const prepaidUpgrade = getPrepaidUpgrade(activeOrganization);
+  const paymentState = getPaymentState(activeOrganization);
+  // When an authorised replacement takes over, the next charge is the new
+  // plan's, on the day it starts.
+  const replacementPlan = hasAuthorizedReplacement(activeOrganization)
+    ? getPlanByTier(
+        activeOrganization?.pendingRazorpaySubscriptionTier || undefined
+      )
+    : null;
+  const replacementTotals =
+    typeof replacementPlan?.monthlyPrice === "number"
+      ? calculatePlanTotals(replacementPlan.monthlyPrice)
+      : null;
+  const replacementStartsAt = replacementPlan
+    ? activeOrganization?.pendingRazorpaySubscriptionStartsAt ||
+      activeOrganization?.scheduledPlanChangeAt
+    : null;
   const pendingReplacementNeedsAuthorization =
     Boolean(activeOrganization?.pendingRazorpaySubscriptionCheckoutUrl) &&
     activeOrganization?.pendingRazorpaySubscriptionStatus !== "authenticated";
@@ -413,8 +431,8 @@ export default function BillingSettingsPage() {
 
         {prepaidUpgrade ? (
           <section className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950">
-            <span className="font-semibold">Pro</span> (paid until{" "}
-            {formatDate(prepaidUpgrade.until)}). Autopay switches to Pro on{" "}
+            <span className="font-semibold">Pro</span>. Autopay switches to Pro
+            on{" "}
             <span className="font-semibold">
               {formatDate(
                 activeOrganization?.scheduledPlanChangeAt ||
@@ -500,9 +518,8 @@ export default function BillingSettingsPage() {
             <p className="mt-1 text-sm text-muted-foreground">
               {isGranted
                 ? "Complimentary"
-                : getSubscriptionStatusLabel(
-                    activeOrganization?.subscriptionStatus
-                  ) || "Not started"}
+                : getOrganizationStatusLabel(activeOrganization) ||
+                  "Not started"}
             </p>
           </div>
 
@@ -548,6 +565,17 @@ export default function BillingSettingsPage() {
                   </span>
                   . You won&apos;t be charged.
                 </>
+              ) : replacementStartsAt && replacementTotals ? (
+                <>
+                  {formatCurrency(replacementTotals.totalAmount)} will be
+                  deducted on{" "}
+                  <span className="font-semibold text-foreground">
+                    {formatDate(replacementStartsAt)}
+                  </span>
+                  .
+                </>
+              ) : paymentState === "grace" ? (
+                "Razorpay is retrying your payment."
               ) : isActiveSubscription && totals ? (
                 <>
                   {formatCurrency(totals.totalAmount)} will be deducted on{" "}

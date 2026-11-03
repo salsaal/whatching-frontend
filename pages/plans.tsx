@@ -113,7 +113,7 @@ export default function PlansPage() {
               <p className="mt-1 font-heading font-semibold uppercase">
                 {currentPlan === "none" ? "No plan" : currentPlan}
                 {isTrialing ? " trial" : ""}
-                {paymentState === "grace" ? " (payment failed)" : ""}
+                {paymentState === "grace" ? " · Payment failed" : ""}
               </p>
             </div>
           </div>
@@ -139,8 +139,8 @@ export default function PlansPage() {
 
         {prepaidUpgrade ? (
           <section className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950">
-            <span className="font-semibold">Pro</span> (paid until{" "}
-            {formatDate(prepaidUpgrade.until)}). Autopay switches to Pro on{" "}
+            <span className="font-semibold">Pro</span>. Autopay switches to Pro
+            on{" "}
             <span className="font-semibold">
               {formatDate(
                 activeOrganization?.scheduledPlanChangeAt ||

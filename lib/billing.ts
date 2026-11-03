@@ -337,11 +337,21 @@ export const buildPlanAction = (
   };
 };
 
+// An authorised replacement subscription is waiting to take over (a plan
+// change paid by autopay). The old subscription is set to end as part of
+// that change, so its "canceled" status doesn't mean the customer is leaving.
+export const hasAuthorizedReplacement = (
+  organization: Organization | null | undefined
+) =>
+  organization?.pendingRazorpaySubscriptionStatus === "authenticated" &&
+  Boolean(organization?.pendingRazorpaySubscriptionId);
+
 export const isSubscriptionCanceledWithAccess = (
   organization: Organization | null | undefined
 ) => {
   const periodEnd = organization?.subscriptionCurrentPeriodEnd;
   return (
+    !hasAuthorizedReplacement(organization) &&
     organization?.subscriptionStatus === "canceled" &&
     Boolean(periodEnd) &&
     new Date(periodEnd as string).getTime() > Date.now()
@@ -387,6 +397,16 @@ const subscriptionStatusLabels: Record<string, string> = {
 // Empty for a missing or unknown status, so each page picks its own fallback.
 export const getSubscriptionStatusLabel = (status?: string | null) =>
   (status && subscriptionStatusLabels[status]) || "";
+
+// The status as the customer should read it: a plan whose old subscription
+// ends because an authorised replacement takes over is still active.
+export const getOrganizationStatusLabel = (
+  organization: Organization | null | undefined
+) =>
+  organization?.subscriptionStatus === "canceled" &&
+  hasAuthorizedReplacement(organization)
+    ? "Active"
+    : getSubscriptionStatusLabel(organization?.subscriptionStatus);
 
 // Backend billing messages can carry raw ISO timestamps; show them as dates.
 export const humanizeBillingMessage = (message: string) =>

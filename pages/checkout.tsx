@@ -911,15 +911,17 @@ export default function CheckoutPage() {
               </div>
             </section>
 
-            <section className="rounded-lg border border-primary/20 bg-primary/5 p-5">
-              <div className="flex gap-3">
-                <ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" />
-                <p className="text-sm text-muted-foreground">
-                  You&apos;ll pay securely on Razorpay. Your plan switches on as
-                  soon as the payment is confirmed.
-                </p>
-              </div>
-            </section>
+            {!isGranted ? (
+              <section className="rounded-lg border border-primary/20 bg-primary/5 p-5">
+                <div className="flex gap-3">
+                  <ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" />
+                  <p className="text-sm text-muted-foreground">
+                    You&apos;ll pay securely on Razorpay. Your plan switches on
+                    as soon as the payment is confirmed.
+                  </p>
+                </div>
+              </section>
+            ) : null}
 
             {isDowngrade && !isGranted && seatMessage ? (
               <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">

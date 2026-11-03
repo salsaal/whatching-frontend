@@ -9,6 +9,7 @@ import {
   getChangeKind,
   getDowngradeSeatCheck,
   getPaymentState,
+  getOrganizationStatusLabel,
   getPrepaidUpgrade,
   getSubscriptionStatusLabel,
   humanizeBillingMessage,
@@ -438,5 +439,33 @@ describe("getPrepaidUpgrade", () => {
       )
     ).toBeNull();
     expect(getPrepaidUpgrade(org({ prepaidUpgradeTier: null }))).toBeNull();
+  });
+});
+
+describe("a plan change with an authorised replacement", () => {
+  const upgrading = org({
+    planTier: "pro",
+    subscriptionStatus: "canceled",
+    subscriptionCancelAtPeriodEnd: true,
+    subscriptionCurrentPeriodEnd: new Date(
+      Date.now() + 5 * 86_400_000
+    ).toISOString(),
+    pendingRazorpaySubscriptionId: "sub_new",
+    pendingRazorpaySubscriptionStatus: "authenticated"
+  });
+
+  it("is not a cancellation", () => {
+    expect(isSubscriptionCanceledWithAccess(upgrading)).toBe(false);
+    expect(getOrganizationStatusLabel(upgrading)).toBe("Active");
+  });
+
+  it("still treats a real cancellation as cancelled", () => {
+    const leaving = org({
+      ...upgrading,
+      pendingRazorpaySubscriptionId: null,
+      pendingRazorpaySubscriptionStatus: null
+    });
+    expect(isSubscriptionCanceledWithAccess(leaving)).toBe(true);
+    expect(getOrganizationStatusLabel(leaving)).toBe("Cancelled");
   });
 });

@@ -47,7 +47,8 @@ import {
   isSubscriptionCanceledWithAccess,
   formatDate,
   getDaysUntil,
-  getPaymentState
+  getPaymentState,
+  getPlanByTier
 } from "@/lib/billing";
 import { cn } from "@/lib/utils";
 import { useCurrentMembership } from "@/hooks/useCurrentMembership";
@@ -141,9 +142,10 @@ export default function AppLayout({
   const currentPlan = activeOrganization?.planTier || "none";
   const isNoPlan = currentPlan === "none";
   const paymentState = getPaymentState(activeOrganization);
+  const currentPlanName = getPlanByTier(currentPlan)?.name || currentPlan;
   const planChipLabel = isNoPlan
     ? "No plan"
-    : `${currentPlan}${paymentState === "grace" ? " (payment failed)" : ""}`;
+    : `${currentPlanName}${paymentState === "grace" ? " · Payment failed" : ""}`;
   // Checkout and congratulations are mid-payment; plans and billing render
   // the same notice in their own layout.
   const shouldShowPaymentFailedBanner = ![
@@ -480,7 +482,7 @@ export default function AppLayout({
               <div className="flex items-center justify-start gap-3 lg:justify-end">
                 <div className="text-left lg:text-right">
                   <p className="text-xs text-muted-foreground">Current plan</p>
-                  <p className="font-heading text-sm font-semibold uppercase">
+                  <p className="font-heading text-sm font-semibold whitespace-nowrap">
                     {planChipLabel}
                   </p>
                 </div>
@@ -601,7 +603,7 @@ export default function AppLayout({
             <div className="space-y-3 p-4 shadow-xs">
               <div className="rounded-sm bg-background p-3">
                 <p className="text-xs text-muted-foreground">Current plan</p>
-                <p className="mt-1 font-heading text-sm font-semibold uppercase">
+                <p className="mt-1 font-heading text-sm font-semibold">
                   {planChipLabel}
                 </p>
               </div>
