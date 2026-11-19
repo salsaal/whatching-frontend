@@ -3,6 +3,7 @@ import { Area, AreaChart, ResponsiveContainer } from "recharts";
 
 import { AnalyticsTrend } from "@/client-api/types/analytics.type";
 import { categorical } from "@/lib/analyticsColors";
+import { describeTrend } from "@/lib/analyticsFormat";
 import { cn } from "@/lib/utils";
 
 const numberFormat = new Intl.NumberFormat("en-IN");
@@ -11,28 +12,40 @@ interface VolumeRow {
   label: string;
   value: string;
   trend?: AnalyticsTrend;
+  /** A rate moves in points, not as a percentage of itself. */
+  trendKind?: "count" | "rate";
   sparkline?: number[];
 }
 
-function TrendChip({ trend }: { trend: AnalyticsTrend }) {
-  const isUp = trend.changePercent > 0;
-  const isDown = trend.changePercent < 0;
-  const isNew = trend.previous === 0 && trend.current > 0;
-  if (trend.previous === 0 && trend.current === 0) return null;
-  const Icon = isUp || isNew ? TrendingUp : isDown ? TrendingDown : Minus;
+function TrendChip({
+  trend,
+  kind
+}: {
+  trend: AnalyticsTrend;
+  kind?: "count" | "rate";
+}) {
+  const described = describeTrend(trend, kind);
+  if (!described) return null;
+  const Icon =
+    described.direction === "up"
+      ? TrendingUp
+      : described.direction === "down"
+        ? TrendingDown
+        : Minus;
   return (
     <span
       className={cn(
         "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
-        isUp || isNew
+        described.direction === "up"
           ? "bg-emerald-50 text-emerald-700"
-          : isDown
+          : described.direction === "down"
             ? "bg-red-50 text-red-700"
             : "bg-muted text-muted-foreground"
       )}
+      title={described.title}
     >
       <Icon className="size-3" />
-      {isNew ? "New" : `${isUp ? "+" : ""}${trend.changePercent}%`}
+      {described.label}
     </span>
   );
 }
@@ -81,7 +94,9 @@ export function VolumeSummaryCard({ rows }: { rows: VolumeRow[] }) {
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-3">
-              {row.trend && <TrendChip trend={row.trend} />}
+              {row.trend && (
+                <TrendChip trend={row.trend} kind={row.trendKind} />
+              )}
               {row.sparkline && row.sparkline.length > 1 && (
                 <Sparkline data={row.sparkline} />
               )}

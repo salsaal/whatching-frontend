@@ -39,7 +39,7 @@ import {
   TooltipTrigger
 } from "@/components/ui/tooltip";
 import { WhatsAppPreview } from "@/components/whatsapp/WhatsAppPreview";
-import { formatRelative } from "@/lib/displayFormat";
+import { formatLanguage, formatRelative } from "@/lib/displayFormat";
 import { templateStatusHint } from "@/lib/statusPresentation";
 import { cn } from "@/lib/utils";
 import { templateNeedsMedia } from "./templateUtils";
@@ -281,7 +281,7 @@ export default function TemplatesTable({
                     <TypeLabel template={template} />
                   </td>
                   <td className="px-4 py-3 text-xs text-muted-foreground">
-                    {template.language}
+                    {formatLanguage(template.language)}
                   </td>
                   <td className="px-4 py-3 text-xs text-muted-foreground">
                     {formatRelative(template.updatedAt || template.createdAt)}

@@ -16,43 +16,44 @@ import {
 } from "@/client-api/types/analytics.type";
 import { ChartTooltip } from "@/components/analytics/ChartTooltip";
 import { categorical, chartInk } from "@/lib/analyticsColors";
+import { describeTrend, fillDailyGaps } from "@/lib/analyticsFormat";
+import { formatDayKey } from "@/lib/displayFormat";
 import { cn } from "@/lib/utils";
 
 const numberFormat = new Intl.NumberFormat("en-IN");
 const EMPTY_DAILY: ConversationCostDailyPoint[] = [];
 
-const formatDateShort = (dateKey: string) =>
-  new Date(`${dateKey}T00:00:00`).toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "short"
-  });
+const formatDateShort = (dateKey: string) => formatDayKey(dateKey);
 
 function DeltaBadge({
-  percent,
-  invertColor = false
+  current,
+  previous
 }: {
-  percent: number;
-  invertColor?: boolean;
+  current: number;
+  previous: number;
 }) {
-  const isIncrease = percent > 0;
-  const isDecrease = percent < 0;
-  const Icon = isIncrease ? TrendingUp : isDecrease ? TrendingDown : Minus;
-  const isGood = invertColor ? isDecrease : isIncrease;
-  const isBad = invertColor ? isIncrease : isDecrease;
+  const described = describeTrend({ current, previous, changePercent: 0 });
+  if (!described) return null;
+  const Icon =
+    described.direction === "up"
+      ? TrendingUp
+      : described.direction === "down"
+        ? TrendingDown
+        : Minus;
   return (
     <span
       className={cn(
         "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
-        isGood
+        described.direction === "up"
           ? "bg-emerald-50 text-emerald-700"
-          : isBad
+          : described.direction === "down"
             ? "bg-red-50 text-red-700"
             : "bg-muted text-muted-foreground"
       )}
+      title={described.title}
     >
       <Icon className="size-3" />
-      {isIncrease ? "+" : ""}
-      {percent}%
+      {described.label}
     </span>
   );
 }
@@ -74,16 +75,17 @@ export function SpendHeroCard({
   };
   const billable = costs.billable || { conversationCount: 0, cost: 0 };
   const freeTier = costs.freeTier || { conversationCount: 0, cost: 0 };
-  const daily = costs.daily || EMPTY_DAILY;
-
-  const volumeChangePercent =
-    previousPeriod.conversationCount > 0
-      ? Math.round(
-          ((totals.conversationCount - previousPeriod.conversationCount) /
-            previousPeriod.conversationCount) *
-            1000
-        ) / 10
-      : 0;
+  const rawDaily = costs.daily || EMPTY_DAILY;
+  // Meta only reports days that had conversations; quiet days are zeros.
+  const daily = useMemo(
+    () =>
+      fillDailyGaps(rawDaily, costs.range?.start, costs.range?.end, (date) => ({
+        date,
+        conversationCount: 0,
+        cost: 0
+      })),
+    [rawDaily, costs.range?.start, costs.range?.end]
+  );
 
   const billableShare =
     totals.conversationCount > 0
@@ -123,14 +125,17 @@ export function SpendHeroCard({
       <div className="flex flex-wrap items-start justify-between gap-6">
         <div>
           <p className="text-sm text-muted-foreground">
-            Conversation volume · period total
+            Conversations in this period
           </p>
           <div className="mt-1 flex items-center gap-3">
             <p className="font-heading text-4xl font-semibold">
               {numberFormat.format(totals.conversationCount)}
             </p>
             {previousPeriod.conversationCount > 0 && (
-              <DeltaBadge percent={volumeChangePercent} />
+              <DeltaBadge
+                current={totals.conversationCount}
+                previous={previousPeriod.conversationCount}
+              />
             )}
           </div>
           {previousPeriod.conversationCount > 0 && (
@@ -151,7 +156,7 @@ export function SpendHeroCard({
           </div>
           <p className="mt-2 text-sm text-muted-foreground">
             {numberFormat.format(billable.conversationCount)} billable ·{" "}
-            {numberFormat.format(freeTier.conversationCount)} free-tier
+            {numberFormat.format(freeTier.conversationCount)} free
           </p>
         </div>
       </div>

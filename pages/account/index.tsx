@@ -11,16 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useLogout } from "@/hooks/useLogout";
 import AccountLayout from "@/layouts/AccountLayout";
+import { formatDate } from "@/lib/displayFormat";
 import { useAuthStore } from "@/stores/authStore";
-
-const formatDate = (date?: string) =>
-  date
-    ? new Intl.DateTimeFormat("en-IN", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric"
-      }).format(new Date(date))
-    : "-";
 
 const roleLabel = { owner: "Owner", admin: "Admin", agent: "Agent" } as const;
 

@@ -255,6 +255,24 @@ export const rewriteSystemNote = (text: string) => {
   return text;
 };
 
+// Meta passes some messages on only as "unsupported" (for example buttons or
+// lists sent from another business's WhatsApp), and the server stores them
+// with this text. The inbox explains it instead of showing the bare label.
+const UNSUPPORTED_MESSAGE_TEXT = "Unsupported message";
+export const UNSUPPORTED_MESSAGE_PREVIEW = "Message can't be shown here";
+export const UNSUPPORTED_MESSAGE_EXPLANATION =
+  "This message can't be shown here. WhatsApp doesn't pass on some kinds of message, such as buttons or lists sent by another business.";
+
+export const isUnsupportedMessageText = (text?: string | null) =>
+  typeof text === "string" && text.trim() === UNSUPPORTED_MESSAGE_TEXT;
+
+/** The chat list preview, with the unsupported label reworded. */
+export const describeLastMessage = (text?: string | null) => {
+  if (!text) return "No messages yet";
+  if (isUnsupportedMessageText(text)) return UNSUPPORTED_MESSAGE_PREVIEW;
+  return stripWhatsAppFormatting(text);
+};
+
 export const messageTimestamp = (
   message: Pick<ChatMessage, "sentAt" | "createdAt">
 ) => message.sentAt || message.createdAt;

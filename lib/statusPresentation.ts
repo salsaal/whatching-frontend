@@ -124,7 +124,7 @@ export const broadcastStatusPresentation = (
     case "failed":
       return { label: "Failed", tone: "red" };
     case "canceled":
-      return { label: "Canceled", tone: "grey" };
+      return { label: "Cancelled", tone: "grey" };
     default:
       return { label: "Unknown", tone: "grey" };
   }

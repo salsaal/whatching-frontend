@@ -21,6 +21,7 @@ import {
   AlertDialogTitle
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { formatDate } from "@/lib/displayFormat";
 import {
   Popover,
   PopoverAnchor,
@@ -331,11 +332,8 @@ export default function AdAccountConnection() {
                   {isDisconnectCoolingDown && (
                     <p className="mt-1 text-xs text-muted-foreground">
                       You can disconnect again on{" "}
-                      {new Date(disconnectAvailableAt).toLocaleDateString(
-                        "en-IN",
-                        { day: "numeric", month: "short", year: "numeric" }
-                      )}
-                      . Ad accounts can be disconnected once every 15 days.
+                      {formatDate(new Date(disconnectAvailableAt))}. Ad accounts
+                      can be disconnected once every 15 days.
                     </p>
                   )}
                 </div>

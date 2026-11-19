@@ -9,6 +9,7 @@ import {
   updateCampaignSource
 } from "@/client-api/functions/campaigns";
 import { CampaignSource } from "@/client-api/types/campaigns.type";
+import { formatDate } from "@/lib/displayFormat";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,24 +31,32 @@ const decimalFormat = new Intl.NumberFormat("en-IN", {
   maximumFractionDigits: 2
 });
 
+// Only names that might be wrong get a note; a name from Meta, or one set
+// in the ad's link, is just the name.
 const labelSourceBadge: Record<
   CampaignSource["labelSource"],
-  { text: string; className: string }
+  { text: string; className: string } | null
 > = {
-  meta_api: {
-    text: "Ads Manager name",
-    className: "bg-primary/10 text-primary"
+  meta_api: null,
+  ref: null,
+  manual: {
+    text: "Renamed by you",
+    className: "bg-muted text-muted-foreground"
   },
-  ref: { text: "From ref tag", className: "bg-primary/10 text-primary" },
-  manual: { text: "Manually set", className: "bg-muted text-muted-foreground" },
   headline: {
-    text: "Guessed (headline)",
+    text: "Name taken from the ad's headline",
     className: "bg-amber-100 text-amber-800"
   },
   fallback: {
-    text: "Guessed (fallback)",
+    text: "No name yet. Rename it",
     className: "bg-amber-100 text-amber-800"
   }
+};
+
+const SOURCE_TYPE_LABELS: Record<string, string> = {
+  ad: "Ad",
+  post: "Post",
+  unknown: "Not known"
 };
 
 function EditCampaignLabelDialog({
@@ -82,7 +91,7 @@ function EditCampaignLabelDialog({
         <DialogHeader>
           <DialogTitle>Rename campaign</DialogTitle>
           <DialogDescription>
-            Overrides the guessed label for every subscriber attributed to this
+            Overrides the guessed label for every contact attributed to this
             source. This can&apos;t be undone automatically.
           </DialogDescription>
         </DialogHeader>
@@ -286,8 +295,8 @@ export default function CampaignsTab() {
                 <th className="p-3">Campaign</th>
                 <th className="p-3">Type</th>
                 <th className="p-3">Contacts</th>
-                <th className="p-3">Touches</th>
-                <th className="p-3">Last touch</th>
+                <th className="p-3">Chats started</th>
+                <th className="p-3">Latest chat</th>
                 <th className="p-3 text-right">Actions</th>
               </tr>
             </thead>
@@ -300,25 +309,26 @@ export default function CampaignsTab() {
                       <p className="truncate font-medium">
                         {campaign.campaignName || campaign.label}
                       </p>
-                      <Badge
-                        variant="secondary"
-                        className={`mt-1 ${badge.className}`}
-                      >
-                        {badge.text}
-                      </Badge>
+                      {badge && (
+                        <Badge
+                          variant="secondary"
+                          className={`mt-1 ${badge.className}`}
+                        >
+                          {badge.text}
+                        </Badge>
+                      )}
                     </td>
-                    <td className="p-3 capitalize">{campaign.sourceType}</td>
+                    <td className="p-3">
+                      {SOURCE_TYPE_LABELS[campaign.sourceType] ||
+                        campaign.sourceType}
+                    </td>
                     <td className="p-3">
                       {numberFormat.format(campaign.subscriberCount)}
                     </td>
                     <td className="p-3">
                       {numberFormat.format(campaign.touchCount)}
                     </td>
-                    <td className="p-3">
-                      {new Date(campaign.lastTouchAt).toLocaleDateString(
-                        "en-IN"
-                      )}
-                    </td>
+                    <td className="p-3">{formatDate(campaign.lastTouchAt)}</td>
                     <td className="p-3">
                       <div className="flex justify-end gap-1">
                         <Button

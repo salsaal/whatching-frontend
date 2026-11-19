@@ -16,6 +16,7 @@ import { TemplateCategoryBadge } from "@/components/shared/StatusBadges";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { formatLanguage } from "@/lib/displayFormat";
 
 export const templateKind = (template: MessageTemplate) => {
   const has = (type: string) =>
@@ -125,7 +126,7 @@ export function TemplatePickerList({
                 <span className="flex items-center gap-1.5">
                   <TemplateCategoryBadge category={template.category} />
                   <span className="text-[11px] text-muted-foreground">
-                    {kind.label} · {template.language}
+                    {kind.label} · {formatLanguage(template.language)}
                   </span>
                 </span>
                 <span className="line-clamp-2 text-xs text-muted-foreground">

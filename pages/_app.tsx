@@ -49,7 +49,7 @@ const isForbidden = (error: unknown) =>
 const forbiddenMessage = (error: unknown) => {
   const data = (error as ErrorData)?.response?.data;
   if (data?.requiredRoles?.includes("owner")) {
-    return "Only the organization owner can do this.";
+    return "Only the organisation owner can do this.";
   }
   if (data?.requiredPermission) {
     const schema = queryClient
@@ -59,7 +59,7 @@ const forbiddenMessage = (error: unknown) => {
     return `You need ${describePermission(
       data.requiredPermission,
       schema
-    )} access. Ask your organization owner.`;
+    )} access. Ask your organisation owner.`;
   }
   return data?.message || "You don't have permission to do this.";
 };
@@ -89,7 +89,7 @@ const pageMeta: Record<string, PageMeta> = {
   },
   "/auth/forgot-password": {
     title: "Forgot Password | Whatching",
-    description: "Reset access to your Whatching workspace."
+    description: "Reset access to your Whatching account."
   },
   "/auth/login": {
     title: "Login | Whatching",
@@ -132,7 +132,7 @@ const pageMeta: Record<string, PageMeta> = {
   "/bot/flows": {
     title: "Bot Flows | Whatching",
     description:
-      "Build, publish, and assign visual WhatsApp automation flows by organization or phone number."
+      "Build, publish, and assign visual WhatsApp automation flows by organisation or phone number."
   },
   "/bot/flows/[canvasId]": {
     title: "Flow Builder | Whatching",
@@ -168,6 +168,11 @@ const pageMeta: Record<string, PageMeta> = {
     description:
       "Compare Whatching plans, trial eligibility, GST-inclusive pricing, and available upgrades."
   },
+  "/campaigns": {
+    title: "Ad Campaigns | Whatching",
+    description:
+      "See which Click-to-WhatsApp ads and posts bring customers into your chats."
+  },
   "/checkout": {
     title: "Checkout | Whatching",
     description:
@@ -181,12 +186,12 @@ const pageMeta: Record<string, PageMeta> = {
   "/organisations": {
     title: "Organisations | Whatching",
     description:
-      "Choose or create an organization workspace for WhatsApp and Instagram operations."
+      "Choose or create an organisation for WhatsApp and Instagram operations."
   },
   "/overview": {
     title: "Overview | Whatching",
     description:
-      "Review workspace setup, integration health, message limits, and broadcast readiness."
+      "Review setup, integration health, message limits, and broadcast readiness."
   },
   "/account": {
     title: "Profile | Whatching",
@@ -202,18 +207,21 @@ const pageMeta: Record<string, PageMeta> = {
   },
   "/settings": {
     title: "Settings | Whatching",
-    description:
-      "Manage team members, billing, AI knowledge, and workspace support settings."
+    description: "Manage team members, billing, AI knowledge, and support."
   },
   "/settings/agents": {
     title: "Agents and Permissions | Whatching",
     description:
-      "Invite, edit, and manage team permissions for your Whatching organization."
+      "Invite, edit, and manage team permissions for your Whatching organisation."
   },
   "/settings/billing": {
     title: "Billing | Whatching",
     description:
       "Review plan, subscription, payments, and billing history for Whatching."
+  },
+  "/settings/general": {
+    title: "General Settings | Whatching",
+    description: "Your business details and timezone on Whatching."
   },
   "/settings/help": {
     title: "Help and Support | Whatching",

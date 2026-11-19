@@ -85,7 +85,7 @@ const statusTabs: Array<{ value: string; label: string; server?: string }> = [
     server: "in_progress,processing,paused_limit"
   },
   { value: "completed", label: "Completed", server: "completed" },
-  { value: "ended", label: "Failed/Canceled", server: "failed,canceled" }
+  { value: "ended", label: "Failed/Cancelled", server: "failed,canceled" }
 ];
 
 const whenText = (broadcast: Broadcast) => {
@@ -447,7 +447,7 @@ function BroadcastsPageContent() {
                 <p className="mt-1 max-w-3xl text-sm text-amber-900/80">
                   {readinessData?.data.blocker?.message ||
                     readiness?.failureMessage ||
-                    "We send a one-time test template to verify that this sender can start paid business messages. The test costs approximately Rs. 0.115."}
+                    "We send a one-time test template to verify that this sender can start paid business messages. The test costs approximately ₹0.115."}
                 </p>
               </div>
               {readiness?.status !== "testing" && (

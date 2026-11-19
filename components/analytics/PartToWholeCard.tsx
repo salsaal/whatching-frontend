@@ -8,10 +8,13 @@ export interface PartToWholeSegment {
 
 export function PartToWholeCard({
   title,
+  description,
   data,
   emptyMessage
 }: {
   title: string;
+  /** What is being counted, so panels that count different things agree. */
+  description?: string;
   data: PartToWholeSegment[];
   emptyMessage?: string;
 }) {
@@ -20,6 +23,9 @@ export function PartToWholeCard({
   return (
     <div className="rounded-lg bg-white p-5 shadow-xs">
       <h2 className="font-heading text-lg font-semibold">{title}</h2>
+      {description && (
+        <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
+      )}
 
       {total === 0 ? (
         <div className="mt-6 rounded-sm bg-muted/50 p-6 text-center text-sm text-muted-foreground">

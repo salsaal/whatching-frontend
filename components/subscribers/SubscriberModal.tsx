@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { getSubscriberCampaignTouches } from "@/client-api/functions/campaigns";
+import { formatDate } from "@/lib/displayFormat";
 import { updateSubscriberBroadcastEligibility } from "@/client-api/functions/subscribers";
 import {
   Subscriber,
@@ -97,7 +98,7 @@ export default function SubscriberModal({
       <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>
-            {subscriber ? "Edit subscriber" : "Add subscriber"}
+            {subscriber ? "Edit contact" : "Add contact"}
           </DialogTitle>
         </DialogHeader>
 
@@ -232,8 +233,8 @@ export default function SubscriberModal({
                   <ul className="max-h-32 space-y-1 overflow-y-auto text-xs text-muted-foreground">
                     {campaignTouches.map((touch) => (
                       <li key={touch._id}>
-                        {new Date(touch.occurredAt).toLocaleDateString("en-IN")}{" "}
-                        — {touch.headline || touch.sourceId}
+                        {formatDate(touch.occurredAt)} —{" "}
+                        {touch.headline || touch.sourceId}
                       </li>
                     ))}
                   </ul>

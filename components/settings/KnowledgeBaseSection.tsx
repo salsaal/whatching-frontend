@@ -60,21 +60,13 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useOrganizationStore } from "@/stores/organizationStore";
+import { formatWhen } from "@/lib/displayFormat";
 
 type SourceFormType = "text" | "faq" | "file";
 
 const emptyFaqEntry = () => ({ question: "", answer: "" });
 
-const formatDate = (value?: string) =>
-  value
-    ? new Intl.DateTimeFormat("en-IN", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit"
-      }).format(new Date(value))
-    : "-";
+const formatDate = (value?: string) => formatWhen(value);
 
 const sourceIcon = (type: KnowledgeSource["type"]) =>
   type === "faq" ? HelpCircle : FileText;
@@ -128,7 +120,7 @@ export function KnowledgeBaseSection({
       queryClient.invalidateQueries({ queryKey: chunksQueryKey });
     },
     onError: () => {
-      toast.error("Couldn't update that chunk. Try again.");
+      toast.error("Couldn't update that section. Try again.");
     }
   });
 
@@ -333,7 +325,7 @@ export function KnowledgeBaseSection({
                       )}
                     </div>
                     <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                      <span>{source.chunkCount || 0} chunks</span>
+                      <span>{source.chunkCount || 0} sections</span>
                       <span>
                         {source.filename ||
                           `Updated ${formatDate(source.updatedAt)}`}
@@ -648,7 +640,7 @@ export function KnowledgeBaseSection({
                   </p>
                 </div>
                 <div className="rounded-md bg-muted/40 p-3">
-                  <p className="text-xs text-muted-foreground">Chunks</p>
+                  <p className="text-xs text-muted-foreground">Sections</p>
                   <p className="mt-1 font-medium">
                     {selectedSource.chunkCount || 0}
                   </p>
@@ -713,8 +705,8 @@ export function KnowledgeBaseSection({
 
               <div>
                 <p className="mb-2 text-xs font-medium text-muted-foreground">
-                  Chunks -- toggle off any the AI shouldn&apos;t use, without
-                  deleting them
+                  Sections. Turn off any the AI shouldn&apos;t use; they
+                  aren&apos;t deleted.
                 </p>
                 {isLoadingChunks ? (
                   <ListLoadingSkeleton rows={3} />
@@ -738,8 +730,7 @@ export function KnowledgeBaseSection({
                               {chunk.content}
                             </p>
                             <p className="mt-1 text-xs text-muted-foreground">
-                              Chunk {chunk.order + 1} &middot;{" "}
-                              {chunk.tokenEstimate} tokens
+                              Section {chunk.order + 1}
                             </p>
                           </div>
                           <Switch
@@ -750,8 +741,8 @@ export function KnowledgeBaseSection({
                             }
                             title={
                               isEnabled
-                                ? "Disable this chunk"
-                                : "Enable this chunk"
+                                ? "Disable this section"
+                                : "Enable this section"
                             }
                             onCheckedChange={(checked) =>
                               toggleChunkMutate({
@@ -766,7 +757,7 @@ export function KnowledgeBaseSection({
                   </div>
                 ) : (
                   <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-                    No chunks stored for this source.
+                    No sections stored for this source.
                   </p>
                 )}
               </div>
@@ -797,8 +788,8 @@ export function KnowledgeBaseSection({
               {sourceToArchive?.title
                 ? `"${sourceToArchive.title}"`
                 : "This source"}{" "}
-              and all of its chunks will stop being used by the AI immediately,
-              and will be permanently removed in 30 days.
+              and all of its sections will stop being used by the AI
+              immediately, and will be permanently removed in 30 days.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

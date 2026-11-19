@@ -40,7 +40,7 @@ const settingsLinks = [
   {
     href: "/settings/general",
     title: "General",
-    description: "Workspace name, slug, and timezone.",
+    description: "Organisation name and timezone.",
     icon: SlidersHorizontal,
     ownerOnly: false
   },
@@ -62,7 +62,7 @@ const settingsLinks = [
     href: "/settings/help",
     title: "Help & support",
     description:
-      "Create support tickets and track requests for this workspace.",
+      "Create support tickets and track requests for this organisation.",
     icon: LifeBuoy,
     ownerOnly: false
   }
@@ -89,14 +89,14 @@ export default function SettingsPage() {
     // (pages/_app.tsx) to avoid showing two toasts for one action.
     meta: { showToast: false },
     onSuccess: () => {
-      toast.success("Organization deleted.");
+      toast.success("Organisation deleted.");
       clearOrganizations();
       router.push("/organisations");
     },
     onError: (error: AxiosError<{ message?: string }>) => {
       toast.error(
         error.response?.data?.message ||
-          "Organization could not be deleted. Cancel active subscriptions first."
+          "Organisation could not be deleted. Cancel active subscriptions first."
       );
     }
   });
@@ -119,10 +119,10 @@ export default function SettingsPage() {
             <div>
               <p className="text-sm font-medium text-primary">Settings</p>
               <h1 className="font-heading text-3xl font-semibold">
-                Workspace settings
+                Organisation settings
               </h1>
               <p className="mt-1 text-sm text-muted-foreground">
-                Manage team access and commercial settings from one place.
+                Your team, billing, AI knowledge and support.
               </p>
             </div>
           </div>
@@ -167,7 +167,7 @@ export default function SettingsPage() {
                 </div>
                 <div>
                   <p className="font-medium text-destructive">
-                    Delete organization
+                    Delete organisation
                   </p>
                   <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
                     This permanently deletes subscribers, conversations,
@@ -181,13 +181,13 @@ export default function SettingsPage() {
                 type="button"
                 variant="destructive"
                 className="shrink-0 cursor-pointer"
-                tooltip="Permanently delete this organization and its data"
+                tooltip="Permanently delete this organisation and its data"
                 onClick={() => {
                   setConfirmation("");
                   setDeleteOpen(true);
                 }}
               >
-                Delete organization
+                Delete organisation
               </Button>
             </div>
           </section>
@@ -197,9 +197,9 @@ export default function SettingsPage() {
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete this organization?</AlertDialogTitle>
+            <AlertDialogTitle>Delete this organisation?</AlertDialogTitle>
             <AlertDialogDescription>
-              This cannot be undone. Type the organization name or slug to
+              This cannot be undone. Type the organisation name or slug to
               confirm. If a subscription is active, cancel it from Billing
               first.
             </AlertDialogDescription>

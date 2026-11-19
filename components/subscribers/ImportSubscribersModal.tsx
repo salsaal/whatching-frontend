@@ -71,7 +71,7 @@ export default function ImportSubscribersModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Import subscribers</DialogTitle>
+          <DialogTitle>Import contacts</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">

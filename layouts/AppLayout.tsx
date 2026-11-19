@@ -71,11 +71,11 @@ const navigation = [
   { label: "Analytics", href: "/analytics", icon: BarChart3 },
   { label: "Templates", href: "/templates", icon: FileText },
   { label: "Broadcasts", href: "/broadcasts", icon: Megaphone },
-  { label: "Bot", href: "/bot", icon: Bot },
+  { label: "WhatsApp bot", href: "/bot", icon: Bot },
   { label: "Instagram", href: "/instagram", icon: Instagram },
   { label: "Conversations", href: "/conversations", icon: MessageCircle },
   { label: "Contacts", href: "/contacts", icon: Contact },
-  { label: "Campaigns", href: "/campaigns", icon: Target },
+  { label: "Ad campaigns", href: "/campaigns", icon: Target },
   { label: "Media", href: "/media", icon: Images },
   { label: "Settings", href: "/settings", icon: Settings }
 ];

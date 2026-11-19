@@ -3,6 +3,7 @@ import type {
   ChangePlanOutcome
 } from "@/client-api/types/organizations.type";
 import type { Organization } from "@/stores/organizationStore";
+import { formatDate as formatAppDate } from "@/lib/displayFormat";
 
 export type PaidPlanTier = "basic" | "pro";
 export type PlanTier = PaidPlanTier | "enterprise";
@@ -57,7 +58,7 @@ export const plans: PlanDefinition[] = [
   {
     id: "basic",
     name: "Basic",
-    priceLabel: "Rs. 2,499",
+    priceLabel: "₹2,499",
     monthlyPrice: 2499,
     description: "Ideal for small businesses",
     features: [
@@ -83,14 +84,14 @@ export const plans: PlanDefinition[] = [
   {
     id: "pro",
     name: "Pro",
-    priceLabel: "Rs. 3,999",
+    priceLabel: "₹3,999",
     monthlyPrice: 3999,
     description: "Advanced features for growing businesses",
     highlighted: true,
     features: [
       "Includes all Basic features",
       "25k WhatsApp Contacts",
-      "Upto 2 Phone Numbers per Organization",
+      "Up to 2 Phone Numbers per Organisation",
       "Owner + 5 Team Members",
       "3M AI Message Tokens"
     ],
@@ -114,7 +115,7 @@ export const plans: PlanDefinition[] = [
     description: "For high-scale businesses",
     features: [
       "Includes all Pro features",
-      "High Volume Subscribers",
+      "High Volume Contacts",
       "Any Custom Business Logic",
       "Unlimited Team Members",
       "More WhatsApp Numbers",
@@ -223,16 +224,8 @@ export const formatCurrency = (amount: number) =>
     maximumFractionDigits: Number.isInteger(amount) ? 0 : 2
   }).format(amount);
 
-export const formatDate = (date?: string | null) => {
-  if (!date) return "-";
-  const parsed = new Date(date);
-  if (!Number.isFinite(parsed.getTime())) return "-";
-  return new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric"
-  }).format(parsed);
-};
+// Billing dates use the app's one date style ("9 Nov 2026").
+export const formatDate = (date?: string | null) => formatAppDate(date);
 
 export const getDaysUntil = (date?: string | null) => {
   if (!date) return null;

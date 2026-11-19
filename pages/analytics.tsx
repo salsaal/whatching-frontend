@@ -27,6 +27,7 @@ import {
   TrendingDown,
   TrendingUp
 } from "lucide-react";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -70,6 +71,9 @@ import {
   sequentialGreen,
   status
 } from "@/lib/analyticsColors";
+import { describeTrend } from "@/lib/analyticsFormat";
+import { formatDayKey } from "@/lib/displayFormat";
+import { broadcastStatusPresentation } from "@/lib/statusPresentation";
 import { cn } from "@/lib/utils";
 import { useOrganizationStore } from "@/stores/organizationStore";
 import { PermissionGate } from "@/components/common/NoAccess";
@@ -235,7 +239,6 @@ function AnalyticsPageContent() {
         {
           label: "Billable conversations",
           value: numberFormat.format(costs?.billable?.conversationCount || 0),
-          trend: dashboard.trends?.conversations,
           sparkline: costs?.daily?.map((row) => row.conversationCount)
         },
         {
@@ -250,6 +253,7 @@ function AnalyticsPageContent() {
           label: "Delivery rate",
           value: `${dashboard.cards.deliveryRate ?? 0}%`,
           trend: dashboard.trends?.deliveryRate,
+          trendKind: "rate" as const,
           sparkline: (dashboard.deliveryRateSeries || []).map(
             (row) => row.rate ?? 0
           )
@@ -268,12 +272,14 @@ function AnalyticsPageContent() {
           <div>
             <p className="text-sm font-medium text-primary">Analytics</p>
             <h1 className="mt-1 font-heading text-3xl font-semibold">
-              {isOwnerOrAdmin ? "Spend & performance" : "Performance dashboard"}
+              {isOwnerOrAdmin && costs?.costDataAvailable
+                ? "Spend & performance"
+                : "Performance"}
             </h1>
             <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
               {isOwnerOrAdmin
-                ? "What messaging costs and what it buys in reach. Secondary breakdowns are folded away below."
-                : "Messages, contacts, broadcasts, and integration health in one view."}
+                ? "Conversations Meta counted, how many were billable, and how your messages did. More breakdowns are further down."
+                : "Messages, contacts, broadcasts, and connection health in one view."}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -368,11 +374,9 @@ function AnalyticsPageContent() {
                   <div className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
                     <AlertCircle className="mt-0.5 size-4 shrink-0" />
                     <p>
-                      Spend hasn&apos;t synced from Meta yet, so the figures
-                      below aren&apos;t confirmed zero -- they just have no
-                      data. Conversation cost snapshots are populated by a daily
-                      background sync; check back after it runs, or confirm the
-                      sync worker is deployed and running.
+                      Meta&apos;s conversation figures haven&apos;t arrived yet,
+                      so the numbers below show no data rather than a real zero.
+                      They come in once a day; check back tomorrow.
                     </p>
                   </div>
                 )}
@@ -497,6 +501,7 @@ function MessageActivityChart({
           <CartesianGrid stroke={chartInk.grid} vertical={false} />
           <XAxis
             dataKey="date"
+            tickFormatter={(value: string) => formatDayKey(value)}
             tick={{ fontSize: 12, fill: chartInk.axis }}
             axisLine={{ stroke: chartInk.grid }}
             tickLine={false}
@@ -505,6 +510,7 @@ function MessageActivityChart({
             tick={{ fontSize: 12, fill: chartInk.axis }}
             axisLine={false}
             tickLine={false}
+            allowDecimals={false}
           />
           <Tooltip content={<ChartTooltip />} />
           <Legend
@@ -515,7 +521,7 @@ function MessageActivityChart({
             wrapperStyle={{ fontSize: 13 }}
           />
           <Line
-            type="monotone"
+            type="linear"
             dataKey="outbound"
             name="Outgoing"
             stroke={categorical.brand}
@@ -524,7 +530,7 @@ function MessageActivityChart({
             activeDot={{ r: 4, strokeWidth: 2, stroke: "#fff" }}
           />
           <Line
-            type="monotone"
+            type="linear"
             dataKey="inbound"
             name="Incoming"
             stroke={categorical.blue}
@@ -561,25 +567,28 @@ function SecondaryBreakdowns({
 }) {
   const [isOpen, setIsOpen] = useState(true);
   const panelNames =
-    "Conversation status · Bot vs agent · Channels · New contacts · Broadcasts · Integration health";
+    "Conversation status · Who sent messages · Channels · New contacts · Broadcasts · Connection health";
 
   const content = (
     <div className="space-y-4">
       <section className="grid gap-4 lg:grid-cols-3">
         <PartToWholeCard
           title="Conversation status"
+          description="All your conversations, by where they stand now."
           data={conversationStatus}
-          emptyMessage="No conversations in this range."
+          emptyMessage="No conversations yet."
         />
         <PartToWholeCard
-          title="Bot vs agent"
+          title="Who sent messages"
+          description="Messages sent in this period."
           data={messageSources}
-          emptyMessage="No outbound messages in this range."
+          emptyMessage="No messages sent in this period."
         />
         <PartToWholeCard
-          title="Channel distribution"
+          title="Channels"
+          description="All your conversations, by channel."
           data={channels}
-          emptyMessage="No contacts in this range."
+          emptyMessage="No conversations yet."
         />
       </section>
 
@@ -595,6 +604,7 @@ function SecondaryBreakdowns({
                 <CartesianGrid stroke={chartInk.grid} vertical={false} />
                 <XAxis
                   dataKey="date"
+                  tickFormatter={(value: string) => formatDayKey(value)}
                   tick={{ fontSize: 12, fill: chartInk.axis }}
                   axisLine={{ stroke: chartInk.grid }}
                   tickLine={false}
@@ -610,7 +620,7 @@ function SecondaryBreakdowns({
                   cursor={{ stroke: chartInk.grid }}
                 />
                 <Area
-                  type="monotone"
+                  type="linear"
                   dataKey="newContacts"
                   name="New contacts"
                   stroke={categorical.brand}
@@ -692,8 +702,8 @@ function SecondaryBreakdowns({
                 {dashboard.recentBroadcasts.map((broadcast) => (
                   <tr key={broadcast.id} className="border-t">
                     <td className="py-3 font-medium">{broadcast.name}</td>
-                    <td className="py-3 capitalize">
-                      {broadcast.status.replace(/_/g, " ")}
+                    <td className="py-3">
+                      {broadcastStatusPresentation(broadcast.status).label}
                     </td>
                     <td className="py-3 tabular-nums">
                       {numberFormat.format(broadcast.stats.delivered)}
@@ -701,7 +711,14 @@ function SecondaryBreakdowns({
                     <td className="py-3 tabular-nums">
                       {numberFormat.format(broadcast.stats.read)}
                     </td>
-                    <td className="py-3 text-right tabular-nums text-destructive">
+                    <td
+                      className={cn(
+                        "py-3 text-right tabular-nums",
+                        broadcast.stats.failed > 0
+                          ? "text-destructive"
+                          : "text-muted-foreground"
+                      )}
+                    >
                       {numberFormat.format(broadcast.stats.failed)}
                     </td>
                   </tr>
@@ -714,7 +731,7 @@ function SecondaryBreakdowns({
         <div className="rounded-lg bg-white p-5 shadow-xs">
           <div className="mb-4 flex items-center gap-2">
             <h2 className="font-heading text-lg font-semibold">
-              Integration health
+              Connection health
             </h2>
           </div>
           <div className="space-y-3 text-sm">
@@ -732,11 +749,8 @@ function SecondaryBreakdowns({
               value={dashboard.integrationHealth.instagram.status}
               isStatus
             />
-            <HealthRow
-              label="Alerts"
-              value={dashboard.integrationHealth.alerts.length}
-            />
           </div>
+          <HealthAlerts alerts={dashboard.integrationHealth.alerts} />
         </div>
       </section>
     </div>
@@ -753,7 +767,7 @@ function SecondaryBreakdowns({
       >
         <div className="flex items-center gap-2">
           <span className="font-heading text-base font-semibold">
-            Secondary breakdowns — 7 panels
+            More breakdowns
           </span>
         </div>
         <div className="flex items-center gap-3">
@@ -783,47 +797,109 @@ function HealthRow({
   isStatus?: boolean;
 }) {
   const isGood = isStatus && typeof value === "string" && value === "ready";
+  const shown = typeof value === "string" ? healthStatusLabel(value) : value;
   return (
     <div className="flex items-center justify-between rounded-sm bg-muted/60 px-3 py-2">
       <span className="text-muted-foreground">{label}</span>
-      <span className="inline-flex items-center gap-1.5 font-medium capitalize">
+      <span className="inline-flex items-center gap-1.5 font-medium">
         {isStatus && (
           <span
             className="size-1.5 rounded-full"
             style={{ backgroundColor: isGood ? status.good : status.warning }}
           />
         )}
-        {value}
+        {shown}
       </span>
     </div>
   );
 }
 
+const HEALTH_STATUS_LABELS: Record<string, string> = {
+  ready: "Ready",
+  connected: "Connected",
+  not_connected: "Not connected",
+  disconnected: "Disconnected",
+  needs_attention: "Needs attention",
+  degraded: "Needs attention",
+  error: "Needs attention"
+};
+
+const healthStatusLabel = (value: string) => {
+  const key = value.trim().toLowerCase();
+  if (HEALTH_STATUS_LABELS[key]) return HEALTH_STATUS_LABELS[key];
+  const words = key.replace(/_/g, " ");
+  return words.charAt(0).toUpperCase() + words.slice(1);
+};
+
+type HealthAlert = {
+  code?: string;
+  severity?: string;
+  message?: string;
+  displayPhoneNumber?: string | null;
+};
+
+function HealthAlerts({ alerts }: { alerts: HealthAlert[] }) {
+  const shown = alerts.filter((alert) => alert.message);
+  if (!shown.length) {
+    return (
+      <p className="mt-3 text-xs text-muted-foreground">
+        Nothing needs your attention.
+      </p>
+    );
+  }
+  return (
+    <div className="mt-3 space-y-2">
+      <p className="text-xs font-medium text-muted-foreground">
+        Needs your attention
+      </p>
+      {shown.slice(0, 4).map((alert, index) => (
+        <div
+          key={`${alert.code || "alert"}-${index}`}
+          className="flex gap-2 rounded-sm border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950"
+        >
+          <AlertCircle className="mt-0.5 size-3.5 shrink-0 text-amber-600" />
+          <span>
+            {alert.displayPhoneNumber ? (
+              <span className="font-medium">{alert.displayPhoneNumber}: </span>
+            ) : null}
+            {alert.message}
+          </span>
+        </div>
+      ))}
+      <Link
+        href="/overview"
+        className="inline-block text-xs font-medium text-primary hover:underline"
+      >
+        Check your numbers on Overview
+      </Link>
+    </div>
+  );
+}
+
 function TrendBadge({ trend }: { trend: AnalyticsTrend }) {
-  const isNew = trend.previous === 0 && trend.current > 0;
-  const isFlat = trend.previous === 0 && trend.current === 0;
-  const isUp = trend.changePercent > 0;
-  const isDown = trend.changePercent < 0;
-
-  if (isFlat) return null;
-
-  const Icon = isNew || isUp ? TrendingUp : isDown ? TrendingDown : Minus;
-  const label = isNew ? "New" : `${isUp ? "+" : ""}${trend.changePercent}%`;
+  const described = describeTrend(trend);
+  if (!described) return null;
+  const Icon =
+    described.direction === "up"
+      ? TrendingUp
+      : described.direction === "down"
+        ? TrendingDown
+        : Minus;
 
   return (
     <span
       className={cn(
         "mb-1 inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
-        isUp || isNew
+        described.direction === "up"
           ? "bg-emerald-50 text-emerald-700"
-          : isDown
+          : described.direction === "down"
             ? "bg-red-50 text-red-700"
             : "bg-muted text-muted-foreground"
       )}
-      title="vs. the previous equivalent period"
+      title={described.title}
     >
       <Icon className="size-3" />
-      {label}
+      {described.label}
     </span>
   );
 }

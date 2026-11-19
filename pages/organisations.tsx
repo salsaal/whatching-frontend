@@ -35,14 +35,8 @@ import { CardGridLoadingSkeleton } from "@/components/ui/loading-skeletons";
 import assets from "@/json/assets";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
+import { formatDate } from "@/lib/displayFormat";
 import { Organization, useOrganizationStore } from "@/stores/organizationStore";
-
-const formatDate = (date: string) =>
-  new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric"
-  }).format(new Date(date));
 
 const roleLabel: Record<NonNullable<Organization["myRole"]>, string> = {
   owner: "Owner",

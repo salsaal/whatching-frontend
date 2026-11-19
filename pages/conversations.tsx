@@ -25,6 +25,7 @@ import {
   Send,
   SlidersHorizontal,
   Trash2,
+  UserRound,
   Video,
   X
 } from "lucide-react";
@@ -157,8 +158,10 @@ import {
   CarouselCard,
   FormattedText,
   STATUS_DESCRIPTIONS,
+  UNSUPPORTED_MESSAGE_EXPLANATION,
   dayKey,
   describeHandoffReason,
+  describeLastMessage,
   formatClockTime,
   formatDayDivider,
   formatListTime,
@@ -166,11 +169,12 @@ import {
   formatUntil,
   getCarouselCards,
   insertMessageInOrder,
+  isUnsupportedMessageText,
   messageTimestamp,
   parseWhatsAppFormatting,
-  rewriteSystemNote,
-  stripWhatsAppFormatting
+  rewriteSystemNote
 } from "@/lib/inbox";
+import { formatWhen, getInitials } from "@/lib/displayFormat";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
 import { useOrganizationStore } from "@/stores/organizationStore";
@@ -205,23 +209,7 @@ const channelOptions: Array<{
 
 const CONTACT_SEARCH_PAGE_SIZE = 50;
 
-const formatDateTime = (value?: string | null) =>
-  value
-    ? new Intl.DateTimeFormat("en-IN", {
-        day: "2-digit",
-        month: "short",
-        hour: "2-digit",
-        minute: "2-digit"
-      }).format(new Date(value))
-    : "-";
-
-const initials = (name?: string) =>
-  (name || "C")
-    .split(" ")
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
+const formatDateTime = (value?: string | null) => formatWhen(value);
 
 const subscriberName = (conversation?: Conversation | null) => {
   const subscriber = conversation?.subscriberId;
@@ -261,6 +249,13 @@ function subscriberHandle(conversation?: Conversation | null) {
     getString(conversation?.channel)
   );
 }
+
+// The line under the contact's name: the phone number or handle, unless the
+// name already is that.
+const subscriberSubtitle = (conversation?: Conversation | null) => {
+  const handle = subscriberHandle(conversation);
+  return handle === subscriberName(conversation) ? "" : handle;
+};
 
 // Who is answering the customer right now, in plain words.
 const replyingLabel = (conversation: Conversation) => {
@@ -818,7 +813,9 @@ function ContactAvatar({
         <AvatarFallback
           className={cn("bg-primary/10 text-primary", fallbackClassName)}
         >
-          {initials(subscriberName(conversation))}
+          {getInitials(subscriberName(conversation)) || (
+            <UserRound className="size-[55%]" aria-hidden />
+          )}
         </AvatarFallback>
       </Avatar>
       {withChannel && (
@@ -885,9 +882,7 @@ function ConversationListItem({
           </span>
         </div>
         <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
-          {conversation.lastMessage
-            ? stripWhatsAppFormatting(conversation.lastMessage)
-            : "No messages yet"}
+          {describeLastMessage(conversation.lastMessage)}
         </p>
         <div className="mt-1.5 flex flex-wrap items-center gap-1">
           <Badge
@@ -930,7 +925,7 @@ function ConversationListItem({
               className="px-1.5 py-0 text-[10px] text-amber-700"
               title={
                 conversation.subscriberId?.spamMutedReason ||
-                "Automated replies muted for this subscriber"
+                "Automated replies muted for this contact"
               }
             >
               Muted until {formatDateTime(spamMutedUntil)}
@@ -976,6 +971,10 @@ function MessageBubble({
     MEDIA_MESSAGE_TYPES.has(message.type) && mediaPreviews.length
       ? getString(message.payload?.caption)
       : messageText(message);
+  const isUnsupported =
+    !isOutbound &&
+    message.type === "unknown" &&
+    isUnsupportedMessageText(bodyText);
   if (isSystem) {
     return (
       <div className="flex justify-center">
@@ -1151,10 +1150,18 @@ function MessageBubble({
             ))}
           </div>
         )}
-        {contacts.length === 0 && !location && bodyText && (
-          <p className="whitespace-pre-wrap break-words">
-            <WhatsAppText text={bodyText} />
+        {isUnsupported ? (
+          <p className="text-muted-foreground italic">
+            {UNSUPPORTED_MESSAGE_EXPLANATION}
           </p>
+        ) : (
+          contacts.length === 0 &&
+          !location &&
+          bodyText && (
+            <p className="whitespace-pre-wrap break-words">
+              <WhatsAppText text={bodyText} />
+            </p>
+          )
         )}
         {carouselCards.length > 0 && (
           <CarouselCards
@@ -2488,9 +2495,11 @@ function ConversationsPageContent() {
           <h2 className="mt-3 font-heading text-xl font-semibold">
             {subscriberName(contextConversation)}
           </h2>
-          <p className="text-sm text-muted-foreground">
-            {subscriberHandle(contextConversation)}
-          </p>
+          {subscriberSubtitle(contextConversation) && (
+            <p className="text-sm text-muted-foreground">
+              {subscriberSubtitle(contextConversation)}
+            </p>
+          )}
         </div>
 
         <Separator className="my-4" />
@@ -3041,9 +3050,11 @@ function ConversationsPageContent() {
                       <p className="truncate font-semibold">
                         {subscriberName(contextConversation)}
                       </p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {subscriberHandle(contextConversation)}
-                      </p>
+                      {subscriberSubtitle(contextConversation) && (
+                        <p className="truncate text-xs text-muted-foreground">
+                          {subscriberSubtitle(contextConversation)}
+                        </p>
+                      )}
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -3142,7 +3153,7 @@ function ConversationsPageContent() {
                           className="text-amber-700"
                           title={
                             contextConversation.subscriberId.spamMutedReason ||
-                            "Automated replies muted for this subscriber"
+                            "Automated replies muted for this contact"
                           }
                         >
                           Muted until{" "}
@@ -3589,7 +3600,7 @@ function ConversationsPageContent() {
             </DialogTitle>
             <DialogDescription>
               Queue a WhatsApp template to{" "}
-              {templateRecipientPhone || "this subscriber"} without creating a
+              {templateRecipientPhone || "this contact"} without creating a
               broadcast.
             </DialogDescription>
           </DialogHeader>
@@ -3652,7 +3663,7 @@ function ConversationsPageContent() {
                   )}
                   {!hasMoreContacts && whatsappContacts.length > 0 && (
                     <p className="py-2 text-center text-xs text-muted-foreground">
-                      All matching contacts are loaded.
+                      That&apos;s everyone who matches.
                     </p>
                   )}
                 </div>

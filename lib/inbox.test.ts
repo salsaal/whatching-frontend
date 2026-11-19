@@ -1,13 +1,16 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  UNSUPPORTED_MESSAGE_PREVIEW,
   compareMessages,
   describeHandoffReason,
+  describeLastMessage,
   formatDayDivider,
   formatListTime,
   formatPhoneNumber,
   getCarouselCards,
   insertMessageInOrder,
+  isUnsupportedMessageText,
   parseWhatsAppFormatting,
   rewriteSystemNote,
   stripWhatsAppFormatting
@@ -242,5 +245,24 @@ describe("getCarouselCards", () => {
 
   it("returns nothing for other messages", () => {
     expect(getCarouselCards({ text: "hi" })).toEqual([]);
+  });
+});
+
+describe("unsupported messages", () => {
+  it("recognises the stored label only", () => {
+    expect(isUnsupportedMessageText("Unsupported message")).toBe(true);
+    expect(isUnsupportedMessageText(" Unsupported message ")).toBe(true);
+    expect(isUnsupportedMessageText("This is an unsupported message?")).toBe(
+      false
+    );
+    expect(isUnsupportedMessageText(undefined)).toBe(false);
+  });
+
+  it("rewords the chat list preview", () => {
+    expect(describeLastMessage("Unsupported message")).toBe(
+      UNSUPPORTED_MESSAGE_PREVIEW
+    );
+    expect(describeLastMessage("*Hi* there")).toBe("Hi there");
+    expect(describeLastMessage("")).toBe("No messages yet");
   });
 });

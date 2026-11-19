@@ -19,6 +19,7 @@ import {
   syncWhatsAppPhoneNumbers
 } from "@/client-api/functions/organizations";
 import { WhatsAppPhoneNumber } from "@/client-api/types/organizations.type";
+import { formatDate } from "@/lib/displayFormat";
 import {
   isPaymentBlocked,
   PaymentBlockedCallout
@@ -127,7 +128,7 @@ export default function WhatsAppNumbersPanel({
     mutationFn: syncWhatsAppPhoneNumbers,
     meta: { showToast: false },
     onSuccess: async () => {
-      toast.success("WhatsApp numbers synced.");
+      toast.success("WhatsApp numbers are up to date.");
       await refresh();
     },
     onError: mutationOptions.onError
@@ -194,15 +195,15 @@ export default function WhatsAppNumbersPanel({
             </h2>
           </div>
           <p className="mt-2 text-sm text-muted-foreground">
-            Each active number keeps its own inbox sender identity and can use
-            its own published flow.
+            Each number has its own chats and can answer with its own flow.
           </p>
           {summary && (
             <p className="mt-2 text-xs text-muted-foreground">
-              {summary.activeCount} active
               {summary.planLimit === null
-                ? " · unlimited by plan"
-                : ` of ${summary.planLimit} allowed`}
+                ? `${summary.activeCount} in use · no limit on your plan`
+                : `${summary.activeCount} of ${summary.planLimit} numbers in use`}
+              {summary.remainingActiveSlots === 0 &&
+                ". To add another, upgrade or replace one below."}
             </p>
           )}
         </div>
@@ -217,19 +218,12 @@ export default function WhatsAppNumbersPanel({
             ) : (
               <RefreshCw className="size-4" />
             )}
-            Sync numbers
+            Refresh numbers
           </Button>
           {summary?.remainingActiveSlots === 0 ? (
-            <p className="self-center text-sm text-muted-foreground">
-              {summary.activeCount} of{" "}
-              {summary.planLimit ?? summary.activeCount} numbers used ·{" "}
-              <Link
-                href="/plans"
-                className="font-medium text-primary hover:underline"
-              >
-                Upgrade
-              </Link>
-            </p>
+            <Button variant="outline" asChild>
+              <Link href="/plans">Upgrade for more numbers</Link>
+            </Button>
           ) : (
             <Button onClick={onAddNumber} disabled={addingNumber}>
               {addingNumber && <Loader2 className="size-4 animate-spin" />}
@@ -238,11 +232,6 @@ export default function WhatsAppNumbersPanel({
           )}
         </div>
       </div>
-      {summary?.remainingActiveSlots === 0 && (
-        <p className="mt-2 text-xs text-muted-foreground sm:text-right">
-          Upgrade your plan or replace an existing number to add another.
-        </p>
-      )}
 
       {isLoading ? (
         <ListLoadingSkeleton className="mt-5" rows={2} />
@@ -253,6 +242,10 @@ export default function WhatsAppNumbersPanel({
             // default. Only for active numbers members can manage flows for.
             const showFlow = canSeeFlows && isUsableWhatsAppNumber(number);
             const flow = showFlow ? effectiveCanvasFor(number) : null;
+            // Connected and active, but Meta won't send from it until a
+            // payment method is added: say so instead of "Active".
+            const cantSend =
+              number.status === "active" && isPaymentBlocked(number);
             return (
               <article
                 key={number.id}
@@ -285,22 +278,36 @@ export default function WhatsAppNumbersPanel({
                         </TooltipContent>
                       </Tooltip>
                     )}
-                    <Badge
-                      variant={
-                        number.status === "active" ? "default" : "secondary"
-                      }
-                      className="capitalize"
-                    >
-                      {number.status.replace("_", " ")}
-                    </Badge>
+                    {cantSend ? (
+                      <Badge className="bg-amber-100 text-amber-900">
+                        Can&apos;t send yet
+                      </Badge>
+                    ) : (
+                      <Badge
+                        variant={
+                          number.status === "active" ? "default" : "secondary"
+                        }
+                        className="capitalize"
+                      >
+                        {number.status.replace("_", " ")}
+                      </Badge>
+                    )}
                   </div>
                 </div>
 
                 <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md bg-muted/50 px-2.5 py-2 text-xs">
                   <StatusDot
                     label="Connection"
-                    value={titleCase(number.connectionStatus)}
-                    tone={connectionTone(number.connectionStatus)}
+                    value={
+                      cantSend
+                        ? "Receiving only"
+                        : titleCase(number.connectionStatus)
+                    }
+                    tone={
+                      cantSend
+                        ? "warn"
+                        : connectionTone(number.connectionStatus)
+                    }
                   />
                   <StatusDot
                     label="Quality"
@@ -379,9 +386,7 @@ export default function WhatsAppNumbersPanel({
                   ) : summary.nextReplacementAllowedAt ? (
                     <span className="self-center text-xs text-muted-foreground">
                       Number replacement available{" "}
-                      {new Date(
-                        summary.nextReplacementAllowedAt
-                      ).toLocaleDateString()}
+                      {formatDate(summary.nextReplacementAllowedAt)}
                     </span>
                   ) : (
                     <Button

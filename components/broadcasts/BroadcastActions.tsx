@@ -281,7 +281,7 @@ export function CancelBroadcastDialog({
       toast.success(
         broadcast?.status === "draft"
           ? "Draft discarded."
-          : "Broadcast canceled."
+          : "Broadcast cancelled."
       );
       await queryClient.invalidateQueries({ queryKey: ["broadcasts"] });
       await queryClient.invalidateQueries({ queryKey: ["broadcast-detail"] });

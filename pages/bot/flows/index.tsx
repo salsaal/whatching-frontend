@@ -8,6 +8,7 @@ import {
   Bot,
   Edit3,
   Loader2,
+  Pencil,
   Plus,
   RefreshCcw,
   Trash2,
@@ -52,17 +53,10 @@ import { useBotSettings } from "@/hooks/useBotSettings";
 import { isPublishedCanvas, useLiveFlows } from "@/hooks/useLiveFlows";
 import { FLOW_STATE_LABELS, getFlowState } from "@/lib/flowBuilder";
 import { useOrganizationStore } from "@/stores/organizationStore";
+import { formatWhen } from "@/lib/displayFormat";
 import BotLayout from "@/components/bot/BotLayout";
 
-const formatDate = (value?: string) =>
-  value
-    ? new Intl.DateTimeFormat("en-IN", {
-        day: "2-digit",
-        month: "short",
-        hour: "2-digit",
-        minute: "2-digit"
-      }).format(new Date(value))
-    : "-";
+const formatDate = (value?: string) => formatWhen(value);
 
 function FlowsPageContent() {
   const router = useRouter();
@@ -108,6 +102,27 @@ function FlowsPageContent() {
   const invalidate = async () => {
     await queryClient.invalidateQueries({ queryKey });
   };
+
+  // A flow that's answering on a number, or that new numbers start with, can't
+  // be deleted: the number would quietly switch to another flow.
+  const deleteAnsweringOn = deleteCanvas
+    ? numbers
+        .filter(
+          (number) => effectiveCanvasFor(number)?._id === deleteCanvas._id
+        )
+        .map((number) => number.displayPhoneNumber || number.phoneNumberId)
+    : [];
+  const deleteIsNewNumbersFlow =
+    Boolean(deleteCanvas) &&
+    defaultCanvas?._id === deleteCanvas?._id &&
+    numbers.length >= 2;
+  const deleteBlockedReason = deleteAnsweringOn.length
+    ? `${deleteCanvas?.name} is answering on ${deleteAnsweringOn.join(", ")}. Choose another flow for ${
+        deleteAnsweringOn.length === 1 ? "that number" : "those numbers"
+      } first, under "Flow on each number".`
+    : deleteIsNewNumbersFlow
+      ? `New numbers start with ${deleteCanvas?.name}. Choose another flow under "New numbers start with" first.`
+      : "";
 
   const handleError = (error: AxiosError<{ message?: string }>) => {
     toast.error(error.response?.data?.message || "Flow action failed.");
@@ -230,22 +245,25 @@ function FlowsPageContent() {
                   className="rounded-lg transition hover:border-primary/40 hover:shadow-md py-0"
                 >
                   <CardContent className="space-y-4 p-5">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <Bot className="size-4 text-primary" />
-                          <h2 className="truncate font-heading text-xl font-semibold">
-                            {canvas.name}
-                          </h2>
-                        </div>
-                        <p className="mt-1 text-sm text-muted-foreground">
+                    <div className="min-w-0">
+                      <div className="flex items-start gap-2">
+                        <Bot className="mt-1.5 size-4 shrink-0 text-primary" />
+                        <h2
+                          className="line-clamp-2 break-words font-heading text-xl font-semibold"
+                          title={canvas.name}
+                        >
+                          {canvas.name}
+                        </h2>
+                      </div>
+                      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm text-muted-foreground">
                           Updated {formatDate(canvas.updatedAt)}
                         </p>
+                        <FlowStatusPill
+                          tone={flowState}
+                          label={FLOW_STATE_LABELS[flowState]}
+                        />
                       </div>
-                      <FlowStatusPill
-                        tone={flowState}
-                        label={FLOW_STATE_LABELS[flowState]}
-                      />
                     </div>
 
                     <div className="space-y-1 text-sm">
@@ -278,7 +296,7 @@ function FlowsPageContent() {
                       </p>
                     </div>
 
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <Button
                         type="button"
                         className="cursor-pointer"
@@ -287,26 +305,33 @@ function FlowsPageContent() {
                         <Edit3 className="size-4" />
                         Edit
                       </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="cursor-pointer"
-                        onClick={() => {
-                          setEditingCanvas(canvas);
-                          setName(canvas.name);
-                        }}
-                      >
-                        Rename
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="cursor-pointer text-destructive hover:text-destructive"
-                        onClick={() => setDeleteCanvas(canvas)}
-                      >
-                        <Trash2 className="size-4" />
-                        Delete
-                      </Button>
+                      <div className="ml-auto flex items-center gap-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="cursor-pointer text-muted-foreground"
+                          aria-label={`Rename ${canvas.name}`}
+                          title="Rename"
+                          onClick={() => {
+                            setEditingCanvas(canvas);
+                            setName(canvas.name);
+                          }}
+                        >
+                          <Pencil className="size-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="cursor-pointer text-muted-foreground hover:text-destructive"
+                          aria-label={`Delete ${canvas.name}`}
+                          title="Delete"
+                          onClick={() => setDeleteCanvas(canvas)}
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -385,16 +410,15 @@ function FlowsPageContent() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete flow?</AlertDialogTitle>
             <AlertDialogDescription>
-              This deletes {deleteCanvas?.name} -- permanently removed in 30
-              days. If it&apos;s active, switch your numbers to another flow
-              before deleting.
+              {deleteBlockedReason ||
+                `This deletes ${deleteCanvas?.name}. It's removed for good after 30 days.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-white hover:bg-destructive/90"
-              disabled={isDeleting || !deleteCanvas}
+              disabled={isDeleting || !deleteCanvas || !!deleteBlockedReason}
               onClick={(event) => {
                 event.preventDefault();
                 if (deleteCanvas) archiveCanvasMutate(deleteCanvas._id);

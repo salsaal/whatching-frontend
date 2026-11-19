@@ -23,6 +23,7 @@ import {
   SupportRequestPriority
 } from "@/client-api/types/organizations.type";
 import { Badge } from "@/components/ui/badge";
+import { formatDateTime } from "@/lib/displayFormat";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -36,6 +37,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { SettingsBackLink } from "@/components/settings/SettingsBackLink";
+import { ImageWithFallback } from "@/components/shared/ImageWithFallback";
 import AppLayout from "@/layouts/AppLayout";
 import { useOrganizationStore } from "@/stores/organizationStore";
 
@@ -47,6 +49,14 @@ const categories: Array<{ value: SupportRequestCategory; label: string }> = [
   { value: "plan_limit", label: "Plan limit" },
   { value: "data_recovery", label: "Data recovery" },
   { value: "other", label: "Other" }
+];
+// Customers describe the impact; the team reads it as a priority. Asking
+// "how urgent?" gets "Urgent" from almost everyone.
+const impactOptions: Array<{ value: SupportRequestPriority; label: string }> = [
+  { value: "low", label: "It's a question or a small issue" },
+  { value: "normal", label: "Something's wrong, but I can work around it" },
+  { value: "high", label: "My customers are affected" },
+  { value: "urgent", label: "Nothing is sending or receiving" }
 ];
 const allowedSupportImageTypes = new Set([
   "image/jpeg",
@@ -206,7 +216,9 @@ export default function HelpPage() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="support-priority">Priority</Label>
+                <Label htmlFor="support-priority">
+                  How is this affecting you?
+                </Label>
                 <Select
                   value={priority}
                   onValueChange={(value) =>
@@ -217,10 +229,11 @@ export default function HelpPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="low">Low</SelectItem>
-                    <SelectItem value="normal">Normal</SelectItem>
-                    <SelectItem value="high">High</SelectItem>
-                    <SelectItem value="urgent">Urgent</SelectItem>
+                    {impactOptions.map((item) => (
+                      <SelectItem key={item.value} value={item.value}>
+                        {item.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -325,7 +338,7 @@ export default function HelpPage() {
                       </Badge>
                     </div>
                     <p className="mt-2 text-xs text-muted-foreground">
-                      {new Date(request.createdAt).toLocaleString()}
+                      {formatDateTime(request.createdAt)}
                     </p>
                     {!!request.images?.length && (
                       <div className="mt-3 flex gap-2 overflow-x-auto">
@@ -338,9 +351,9 @@ export default function HelpPage() {
                             className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-sm border bg-muted"
                             title={image.name}
                           >
-                            <img
+                            <ImageWithFallback
                               src={image.url}
-                              alt={image.name}
+                              alt={image.name || "Attachment"}
                               className="h-full w-full object-cover"
                             />
                           </a>
@@ -358,7 +371,7 @@ export default function HelpPage() {
               {isFetchingNextPage && <Skeleton className="h-20" />}
               {!hasNextPage && requests.length > 0 && (
                 <p className="text-center text-xs text-muted-foreground">
-                  All tickets are loaded.
+                  That&apos;s all your requests.
                 </p>
               )}
             </div>

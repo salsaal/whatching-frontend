@@ -23,6 +23,7 @@ import {
   buildPlanAction,
   formatDate,
   getPaymentState,
+  getPlanByTier,
   getPrepaidUpgrade,
   humanizeBillingMessage,
   isAdminGrantedPlan,
@@ -101,17 +102,19 @@ export default function PlansPage() {
             <div>
               <p className="text-sm font-medium text-primary">Plans</p>
               <h1 className="mt-1 font-heading text-3xl font-semibold">
-                Choose Whatching plan
+                Choose a Whatching plan
               </h1>
               <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-                Review subscriber limits, team access, automation features, GST,
+                Review contact limits, team access, automation features, GST,
                 and checkout requirements before starting or changing a plan.
               </p>
             </div>
             <div className="rounded-md border bg-muted/40 px-4 py-3 text-sm">
               <p className="text-xs text-muted-foreground">Current plan</p>
-              <p className="mt-1 font-heading font-semibold uppercase">
-                {currentPlan === "none" ? "No plan" : currentPlan}
+              <p className="mt-1 font-heading font-semibold">
+                {currentPlan === "none"
+                  ? "No plan"
+                  : getPlanByTier(currentPlan)?.name || currentPlan}
                 {isTrialing ? " trial" : ""}
                 {paymentState === "grace" ? " · Payment failed" : ""}
               </p>

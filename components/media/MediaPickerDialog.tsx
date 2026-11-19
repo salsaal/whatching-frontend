@@ -212,7 +212,7 @@ export default function MediaPickerDialog({
         {!can("media:view") ? (
           <p className="rounded-sm border border-dashed p-6 text-center text-sm text-muted-foreground">
             You need Media → View access to pick from the media library. Ask
-            your organization owner.
+            your organisation owner.
           </p>
         ) : isLoading ? (
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">

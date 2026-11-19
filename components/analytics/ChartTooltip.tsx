@@ -1,3 +1,5 @@
+import { formatDayKey } from "@/lib/displayFormat";
+
 const numberFormat = new Intl.NumberFormat("en-IN");
 
 interface ChartTooltipProps {
@@ -23,7 +25,7 @@ export function ChartTooltip({
     <div className="min-w-36 rounded-md border bg-white p-3 shadow-md">
       {label !== undefined && (
         <p className="mb-2 text-xs font-medium text-muted-foreground">
-          {label}
+          {typeof label === "string" ? formatDayKey(label, true) : label}
         </p>
       )}
       <div className="space-y-1.5">

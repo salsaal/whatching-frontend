@@ -77,15 +77,8 @@ import AppLayout from "@/layouts/AppLayout";
 import { describePermission } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { LockedButton, PermissionGate } from "@/components/common/NoAccess";
-
-const formatDate = (date?: string) =>
-  date
-    ? new Intl.DateTimeFormat("en-IN", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric"
-      }).format(new Date(date))
-    : "-";
+import { formatCount, formatDate } from "@/lib/displayFormat";
+import { formatPhoneNumber } from "@/lib/inbox";
 
 type ContactChannel = "all" | "whatsapp" | "instagram";
 const CONTACTS_PAGE_SIZE = 50;
@@ -298,6 +291,22 @@ function ContactsPageContent() {
     data?.pages.reduce((total, page) => total + page.results, 0) || 0;
   const totalSubscriberCount =
     data?.pages[data.pages.length - 1]?.pagination.total || 0;
+  const isFilteringContacts = Boolean(
+    query.trim() || selectedTagFilters.length
+  );
+  const describeContacts = (count: number) =>
+    `${formatCount(count)} ${isFilteringContacts ? "matching " : ""}contact${
+      count === 1 ? "" : "s"
+    }`;
+  // Search and the first tag are filtered by the server, so its total is
+  // exact; further tags are only applied to the contacts loaded so far.
+  const contactsSummary = remainingTagFilters.length
+    ? hasNextPage
+      ? `${describeContacts(filteredSubscribers.length)} so far. Scroll down to load more.`
+      : `${describeContacts(filteredSubscribers.length)}.`
+    : hasNextPage
+      ? `Showing ${formatCount(filteredSubscribers.length)} of ${describeContacts(totalSubscriberCount)}. Scroll down to load more.`
+      : `${describeContacts(totalSubscriberCount || filteredSubscribers.length)}.`;
 
   useEffect(() => {
     const sentinel = loadMoreRef.current;
@@ -574,7 +583,7 @@ function ContactsPageContent() {
           <div>
             <p className="text-sm font-medium text-primary">Contacts</p>
             <h1 className="mt-1 font-heading text-3xl font-semibold">
-              Subscribers
+              Your contacts
             </h1>
             <p className="mt-2 text-sm text-muted-foreground">
               Manage WhatsApp subscribers, tags, and opt-in records.
@@ -673,12 +682,12 @@ function ContactsPageContent() {
                 }}
               >
                 <Plus className="size-4" />
-                Add subscriber
+                Add contact
               </Button>
             ) : (
               <LockedButton reason={lockedReason("contacts:manage")}>
                 <Plus className="size-4" />
-                Add subscriber
+                Add contact
               </LockedButton>
             )}
           </div>
@@ -818,9 +827,7 @@ function ContactsPageContent() {
             )}
           </div>
           <p className="mt-3 text-xs text-muted-foreground">
-            Showing {filteredSubscribers.length} matching loaded contact
-            {filteredSubscribers.length === 1 ? "" : "s"}
-            {totalSubscriberCount ? ` from ${totalSubscriberCount} total` : ""}.
+            {contactsSummary}
           </p>
         </section>
 
@@ -846,7 +853,7 @@ function ContactsPageContent() {
             <EmptyState
               icon={ContactIcon}
               title="No contacts found"
-              description="Import subscribers or add one manually to start building your audience."
+              description="Import contacts or add one manually to start building your audience."
             />
           ) : (
             <div className="overflow-x-auto">
@@ -876,12 +883,18 @@ function ContactsPageContent() {
                       <td className="p-4 font-medium">
                         {[subscriber.firstName, subscriber.lastName]
                           .filter(Boolean)
-                          .join(" ") || "-"}
+                          .join(" ") || (
+                          <span className="font-normal text-muted-foreground">
+                            No name
+                          </span>
+                        )}
                       </td>
                       <td className="p-4">
                         <div className="space-y-1">
                           {subscriber.phoneNumber && (
-                            <p>{subscriber.phoneNumber}</p>
+                            <p className="whitespace-nowrap">
+                              {formatPhoneNumber(subscriber.phoneNumber)}
+                            </p>
                           )}
                           {(subscriber.instagramUsername ||
                             subscriber.instagramUserId) && (
@@ -931,6 +944,8 @@ function ContactsPageContent() {
                             <Button
                               variant="ghost"
                               size="icon"
+                              aria-label="Edit contact"
+                              title="Edit contact"
                               onClick={() => {
                                 setSelectedSubscriber(subscriber);
                                 setIsSubscriberModalOpen(true);
@@ -941,7 +956,9 @@ function ContactsPageContent() {
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                              aria-label="Delete contact"
+                              title="Delete contact"
+                              className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                               onClick={() =>
                                 setDeleteSubscriberTarget(subscriber)
                               }
@@ -972,7 +989,7 @@ function ContactsPageContent() {
               )}
               {!hasNextPage && loadedSubscriberCount > 0 && (
                 <p className="border-t p-4 text-center text-xs text-muted-foreground">
-                  All matching contacts are loaded.
+                  That&apos;s everyone.
                 </p>
               )}
             </div>
@@ -1055,7 +1072,7 @@ function ContactsPageContent() {
                 .filter(Boolean)
                 .join(" ") ||
                 deleteSubscriberTarget?.phoneNumber ||
-                "this subscriber"}
+                "this contact"}
               .
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -1081,9 +1098,9 @@ function ContactsPageContent() {
       <AlertDialog open={isBulkDeleteOpen} onOpenChange={setIsBulkDeleteOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete selected subscribers?</AlertDialogTitle>
+            <AlertDialogTitle>Delete selected contacts?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will delete {selectedIds.length} selected subscriber
+              This will delete {selectedIds.length} selected contact
               {selectedIds.length === 1 ? "" : "s"}.
             </AlertDialogDescription>
           </AlertDialogHeader>

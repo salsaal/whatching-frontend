@@ -110,7 +110,7 @@ export const describeRecipientOutcome = ({
         tone: "grey"
       };
     case "canceled":
-      return { label: "Canceled", explanation: "", tone: "grey" };
+      return { label: "Cancelled", explanation: "", tone: "grey" };
     default:
       return {
         label: status

@@ -1,4 +1,5 @@
 import { DashboardAnalytics } from "@/client-api/types/analytics.type";
+import { formatTimezone } from "@/lib/displayFormat";
 import { formatCompactNumber } from "@/lib/utils";
 
 const qualityLabel: Record<string, string> = {
@@ -63,8 +64,9 @@ export function HealthStrip({ dashboard }: { dashboard: DashboardAnalytics }) {
         )}
       </div>
       <div className="text-xs text-muted-foreground">
-        {dashboard.range.timezone} · Last {dashboard.range.days} days
-        {lastSynced && ` · synced ${lastSynced}`}
+        Last {dashboard.range.days} days ·{" "}
+        {formatTimezone(dashboard.range.timezone)}
+        {lastSynced && ` · checked ${lastSynced}`}
       </div>
     </div>
   );

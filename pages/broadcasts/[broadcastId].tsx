@@ -349,7 +349,7 @@ function BroadcastDetailsPageContent() {
         {
           label:
             broadcast.status === "canceled"
-              ? "Canceled"
+              ? "Cancelled"
               : broadcast.status === "failed"
                 ? "Failed"
                 : "Completed",
@@ -607,7 +607,7 @@ function BroadcastDetailsPageContent() {
                     ["Skipped", funnel.skipped, "bg-slate-100 text-slate-600"],
                     ["Waiting", funnel.waiting, "bg-amber-50 text-amber-800"],
                     [
-                      "Canceled",
+                      "Cancelled",
                       funnel.canceled,
                       "bg-slate-100 text-slate-600"
                     ],

@@ -86,10 +86,13 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { ImageWithFallback } from "@/components/shared/ImageWithFallback";
 import AppLayout from "@/layouts/AppLayout";
 import { cn } from "@/lib/utils";
 import { useOrganizationStore } from "@/stores/organizationStore";
 import { PermissionGate } from "@/components/common/NoAccess";
+import { describeCommentRule, repliesToEveryComment } from "@/lib/commentRules";
+import { formatWhen } from "@/lib/displayFormat";
 
 type PageTab = "profile" | "settings" | "canvas" | "rules" | "media" | "setup";
 // Tabs that can be linked to with ?tab= (setup is an internal-only view).
@@ -127,15 +130,8 @@ const getInstagramLoginUrl = (redirectUri: string, state: string) => {
   return `https://www.instagram.com/oauth/authorize?${params.toString()}`;
 };
 
-const formatDate = (date?: string | null) => {
-  if (!date) return "Never";
-  return new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit"
-  }).format(new Date(date));
-};
+const formatDate = (date?: string | null) =>
+  date ? formatWhen(date) : "Never";
 
 const getErrorMessage = (error: unknown, fallback = "Something went wrong") => {
   const axiosError = error as {
@@ -761,15 +757,12 @@ export function InstagramPage() {
               <div className="flex flex-col gap-4 px-5 pb-5 sm:flex-row sm:items-end sm:justify-between">
                 <div className="-mt-10 flex items-end gap-4">
                   <div className="flex size-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-4 border-white bg-pink-50 text-pink-600 shadow-sm">
-                    {instagram?.profilePictureUrl ? (
-                      <img
-                        src={instagram.profilePictureUrl}
-                        alt={instagram.username || "Instagram profile"}
-                        className="size-full object-cover"
-                      />
-                    ) : (
-                      <Instagram className="size-10" />
-                    )}
+                    <ImageWithFallback
+                      src={instagram?.profilePictureUrl}
+                      alt={instagram?.username || "Instagram profile"}
+                      className="size-full object-cover"
+                      fallback={<Instagram className="size-10" />}
+                    />
                   </div>
                   <div className="pb-1">
                     <h2 className="font-heading text-2xl font-semibold">
@@ -849,14 +842,16 @@ export function InstagramPage() {
                 <h3 className="font-semibold">Connection</h3>
                 <div className="mt-4 space-y-3 text-sm">
                   {[
-                    // "me" marks an Instagram Login account, not a real page.
-                    ...(instagram?.pageId && instagram.pageId !== "me"
-                      ? [["Page ID", instagram.pageId]]
-                      : []),
-                    ["IG business account", instagram?.igBusinessAccountId],
+                    [
+                      "Account",
+                      instagram?.username ? `@${instagram.username}` : ""
+                    ],
                     ["Connected", formatDate(instagram?.connectedAt)],
-                    ["Profile sync", formatDate(instagram?.lastProfileSyncAt)],
-                    ["Health check", formatDate(instagram?.lastHealthCheckAt)]
+                    [
+                      "Profile updated",
+                      formatDate(instagram?.lastProfileSyncAt)
+                    ],
+                    ["Last checked", formatDate(instagram?.lastHealthCheckAt)]
                   ].map(([label, value]) => (
                     <div
                       key={String(label)}
@@ -880,8 +875,8 @@ export function InstagramPage() {
   );
 
   return (
-    <AppLayout hideHeader fullBleed>
-      <div className="relative flex h-[calc(100vh-1px)] min-h-0 flex-col overflow-hidden bg-slate-50">
+    <AppLayout fullBleed>
+      <div className="relative flex min-h-[calc(100dvh-4.5rem)] flex-col bg-slate-50">
         <div className="flex shrink-0 items-center justify-between border-b bg-white px-5 py-3">
           <div className="flex items-center gap-3">
             <div className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-pink-500 to-orange-400 text-white">
@@ -955,12 +950,12 @@ export function InstagramPage() {
                 Comment Automation
               </TabsTrigger>
               <TabsTrigger value="media" disabled={!isReady}>
-                Media
+                Posts
               </TabsTrigger>
             </TabsList>
           </Tabs>
           <div className="text-xs text-muted-foreground">
-            Last sync: {formatDate(instagram?.lastHealthCheckAt)}
+            Last checked: {formatDate(instagram?.lastHealthCheckAt)}
           </div>
         </div>
 
@@ -1040,10 +1035,8 @@ export function InstagramPage() {
                           <h3 className="truncate font-heading text-lg font-semibold">
                             {rule.name}
                           </h3>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {rule.scope === "all_media"
-                              ? "Runs on all eligible Instagram posts"
-                              : `${rule.mediaIds.length} selected post${rule.mediaIds.length === 1 ? "" : "s"}`}
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            {describeCommentRule(rule)}
                           </p>
                         </div>
                         <div className="flex flex-col items-end gap-1">
@@ -1074,17 +1067,23 @@ export function InstagramPage() {
                             {keyword}
                           </Badge>
                         ))}
-                        {!(rule.keywords || []).length && (
-                          <span className="text-xs text-muted-foreground">
-                            No keywords configured
+                        {repliesToEveryComment(rule) && (
+                          <span className="rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-900">
+                            No keywords, so every comment gets a reply.
                           </span>
                         )}
                       </div>
                       <div className="mt-5 grid grid-cols-2 gap-2 text-xs">
                         <div className="rounded-lg bg-muted/40 p-2.5">
                           <p className="text-muted-foreground">Match</p>
-                          <p className="mt-0.5 font-medium capitalize">
-                            {rule.keywordMode} keyword
+                          <p className="mt-0.5 font-medium">
+                            {repliesToEveryComment(rule)
+                              ? "Every comment"
+                              : (rule.keywords || []).length === 1
+                                ? "The keyword"
+                                : rule.keywordMode === "all"
+                                  ? "All keywords"
+                                  : "Any keyword"}
                           </p>
                         </div>
                         <div className="rounded-lg bg-muted/40 p-2.5">
@@ -1147,7 +1146,7 @@ export function InstagramPage() {
               )}
               {!hasMoreRules && rules.length > 0 && (
                 <p className="text-center text-xs text-muted-foreground">
-                  All comment automations are loaded.
+                  That&apos;s all your comment automations.
                 </p>
               )}
             </div>
@@ -1223,7 +1222,7 @@ export function InstagramPage() {
                 )}
                 {!hasMoreMedia && media.length > 0 && (
                   <p className="mt-4 text-center text-xs text-muted-foreground">
-                    All Instagram media is loaded.
+                    That&apos;s all your Instagram posts.
                   </p>
                 )}
               </>
@@ -1290,7 +1289,7 @@ export function InstagramPage() {
                 )}
                 {!hasMoreFlows && flows.length > 0 && (
                   <p className="mt-3 text-center text-xs text-muted-foreground">
-                    All Instagram flows are loaded.
+                    That&apos;s all your Instagram flows.
                   </p>
                 )}
               </div>
@@ -1743,10 +1742,15 @@ export function InstagramPage() {
                               muted
                             />
                           ) : (
-                            <img
+                            <ImageWithFallback
                               src={imageUrl}
-                              alt={item.caption || item.mediaId}
+                              alt={item.caption || "Instagram post"}
                               className="h-full w-full object-cover"
+                              fallback={
+                                <div className="flex h-full items-center justify-center">
+                                  <ImageIcon className="size-8 text-muted-foreground" />
+                                </div>
+                              }
                             />
                           )
                         ) : (
@@ -1783,7 +1787,7 @@ export function InstagramPage() {
             )}
             {!hasMoreMedia && media.length > 0 && (
               <p className="py-3 text-center text-xs text-muted-foreground">
-                All Instagram media is loaded.
+                That&apos;s all your Instagram posts.
               </p>
             )}
           </div>
@@ -1909,10 +1913,15 @@ function InstagramMediaCard({ item }: { item: InstagramMedia }) {
               muted
             />
           ) : (
-            <img
+            <ImageWithFallback
               src={imageUrl}
-              alt={item.caption || item.mediaId}
+              alt={item.caption || "Instagram post"}
               className="h-full w-full object-cover"
+              fallback={
+                <div className="flex h-full items-center justify-center">
+                  <ImageIcon className="size-10 text-muted-foreground" />
+                </div>
+              }
             />
           )
         ) : (

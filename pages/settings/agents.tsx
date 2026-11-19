@@ -9,6 +9,7 @@ import {
   ShieldCheck,
   Trash2,
   UserPlus,
+  UserRound,
   UsersRound
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
@@ -68,16 +69,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { SettingsBackLink } from "@/components/settings/SettingsBackLink";
 import { useCurrentMembership } from "@/hooks/useCurrentMembership";
 import AppLayout from "@/layouts/AppLayout";
+import { getInitials } from "@/lib/displayFormat";
+import { formatMemberLabel, summarizeAgentAccess } from "@/lib/permissions";
 import { useOrganizationStore } from "@/stores/organizationStore";
 import { PermissionGate } from "@/components/common/NoAccess";
-
-const initials = (name?: string) =>
-  (name || "A")
-    .split(" ")
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
 
 // "member" = already an active member: nothing to submit, so it's blocked.
 type AgentFormStep = "email" | "new" | "existing" | "member";
@@ -396,6 +391,44 @@ function AgentForm({
   );
 }
 
+const ACCESS_CHIPS_SHOWN = 4;
+
+function AgentAccessSummary({
+  member,
+  permissionSchema
+}: {
+  member: TeamMember;
+  permissionSchema: PermissionGroup[];
+}) {
+  const items = summarizeAgentAccess(
+    member.effectivePermissionAccess || member.permissionAccess,
+    permissionSchema,
+    member.effectivePermissionGrants
+  );
+  if (!items.length) {
+    return <p className="mt-2 text-xs text-muted-foreground">No access yet.</p>;
+  }
+  const hidden = items.slice(ACCESS_CHIPS_SHOWN);
+  return (
+    <div className="mt-2 flex flex-wrap gap-1.5">
+      {items.slice(0, ACCESS_CHIPS_SHOWN).map((item) => (
+        <Badge key={item} variant="outline" className="text-[11px] font-normal">
+          {item}
+        </Badge>
+      ))}
+      {hidden.length > 0 && (
+        <Badge
+          variant="outline"
+          className="text-[11px] font-normal"
+          title={hidden.join("\n")}
+        >
+          {hidden.length} more
+        </Badge>
+      )}
+    </div>
+  );
+}
+
 function TeamSkeleton() {
   return (
     <div className="grid gap-3">
@@ -616,14 +649,14 @@ function AgentsSettingsPageContent() {
               <p className="mt-1 text-sm text-muted-foreground">
                 {isOwner || isMembershipLoading
                   ? "Add staff accounts so conversations can be assigned and handled by your team."
-                  : "Only the organization owner can add, edit or remove members."}
+                  : "Only the organisation owner can add, edit or remove members."}
               </p>
             </div>
           </div>
           {isOwner && (
             <Button
               onClick={() => setIsAddOpen(true)}
-              tooltip="Add a staff account to this organization"
+              tooltip="Add a staff account to this organisation"
             >
               <UserPlus className="size-4" />
               Add agent
@@ -677,7 +710,9 @@ function AgentsSettingsPageContent() {
                 <div className="flex min-w-0 items-center gap-3">
                   <Avatar className="size-11">
                     <AvatarFallback className="bg-primary/10 text-primary">
-                      {initials(member.userId?.name)}
+                      {getInitials(member.userId?.name) || (
+                        <UserRound className="size-5" aria-hidden />
+                      )}
                     </AvatarFallback>
                   </Avatar>
                   <div className="min-w-0">
@@ -690,9 +725,11 @@ function AgentsSettingsPageContent() {
                           member.role === "owner" ? "default" : "secondary"
                         }
                       >
-                        {member.role}
+                        {formatMemberLabel(member.role)}
                       </Badge>
-                      <Badge variant="outline">{member.status}</Badge>
+                      <Badge variant="outline">
+                        {formatMemberLabel(member.status)}
+                      </Badge>
                     </div>
                     <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
                       <span className="inline-flex items-center gap-1">
@@ -706,26 +743,11 @@ function AgentsSettingsPageContent() {
                         </span>
                       )}
                     </div>
-                    {member.role === "agent" &&
-                    member.effectivePermissionGrants?.length ? (
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        {member.effectivePermissionGrants
-                          .slice(0, 5)
-                          .map((permission) => (
-                            <Badge
-                              key={permission}
-                              variant="outline"
-                              className="text-[10px]"
-                            >
-                              {permission}
-                            </Badge>
-                          ))}
-                        {member.effectivePermissionGrants.length > 5 && (
-                          <Badge variant="outline" className="text-[10px]">
-                            +{member.effectivePermissionGrants.length - 5}
-                          </Badge>
-                        )}
-                      </div>
+                    {member.role === "agent" ? (
+                      <AgentAccessSummary
+                        member={member}
+                        permissionSchema={permissionSchema}
+                      />
                     ) : null}
                   </div>
                 </div>
@@ -747,8 +769,8 @@ function AgentsSettingsPageContent() {
                       disabled={member.role === "owner"}
                       tooltip={
                         member.role === "owner"
-                          ? "The organization owner cannot be removed"
-                          : "Remove this member's organization access"
+                          ? "The organisation owner cannot be removed"
+                          : "Remove this member's organisation access"
                       }
                       onClick={() => setRemoveTarget(member)}
                     >

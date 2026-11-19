@@ -81,7 +81,7 @@ import {
   warningText
 } from "@/lib/broadcastAudience";
 import { setBroadcastRetryPreference } from "@/lib/broadcastRetryPreference";
-import { formatCount } from "@/lib/displayFormat";
+import { formatCount, humanizeTemplateName } from "@/lib/displayFormat";
 import {
   buildBroadcastTemplateComponents,
   defaultMappingForSlot,
@@ -343,7 +343,8 @@ export function CreateBroadcastWizard({
   }, [duplicateFrom, slots, template]);
 
   useEffect(() => {
-    if (template && !isNameEdited) setName(`${template.name} · ${shortDate()}`);
+    if (template && !isNameEdited)
+      setName(`${humanizeTemplateName(template.name)} · ${shortDate()}`);
   }, [isNameEdited, template]);
 
   const previewValues = resolvePreviewValues(slots, mappings, previewContact);

@@ -232,6 +232,8 @@ function TemplatesPageContent() {
   const { mutate: syncTemplatesMutate, mutateAsync: syncTemplatesAsync } =
     useMutation({
       mutationFn: syncTemplates,
+      // The page syncs quietly once per visit; only the Sync button says so.
+      meta: { showToast: false },
       onSuccess: (response) =>
         setLastSyncedAt(response.data?.lastSyncedAt || new Date().toISOString())
     });
@@ -433,6 +435,7 @@ function TemplatesPageContent() {
       await syncTemplatesAsync();
       sessionStorage.setItem(templateSyncSessionKey, "true");
       await Promise.all([refetchTemplates(), refetchDrafts()]);
+      toast.success("Templates are up to date with Meta.");
     } catch (error) {
       toast.error(
         (error as AxiosError<{ message?: string }>)?.response?.data?.message ||

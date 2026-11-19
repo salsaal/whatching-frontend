@@ -981,8 +981,7 @@ export default function CheckoutPage() {
                       ? `on ${nextRenewal}`
                       : "at the end of your current billing cycle"}
                     . You&apos;ll keep Pro features until then, but move to
-                    Basic&apos;s lower subscriber and team-member limits
-                    afterward.
+                    Basic&apos;s lower contact and team-member limits afterward.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <div className="flex gap-3 rounded-sm bg-amber-50 p-3 text-sm text-amber-800">

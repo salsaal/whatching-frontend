@@ -3,6 +3,7 @@ import {
   Edit3,
   Instagram,
   Loader2,
+  Pencil,
   Plus,
   Power,
   PowerOff,
@@ -50,16 +51,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CardGridLoadingSkeleton } from "@/components/ui/loading-skeletons";
 import { useOrganizationStore } from "@/stores/organizationStore";
+import { formatWhen } from "@/lib/displayFormat";
 
-const formatDate = (value?: string) =>
-  value
-    ? new Intl.DateTimeFormat("en-IN", {
-        day: "2-digit",
-        month: "short",
-        hour: "2-digit",
-        minute: "2-digit"
-      }).format(new Date(value))
-    : "-";
+const formatDate = (value?: string) => formatWhen(value);
 
 const isApplied = (canvas: InstagramCanvasRecord) =>
   canvas.hasLiveVersion ?? Boolean(canvas.latestPublishedVersionId);
@@ -226,28 +220,34 @@ export function InstagramFlowsList({ username }: { username?: string | null }) {
                   key={canvas._id}
                   className="space-y-4 rounded-lg border bg-white p-5 shadow-xs transition hover:border-primary/40 hover:shadow-md"
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <Instagram className="size-4 shrink-0 text-pink-600" />
-                        <h3 className="truncate font-heading text-xl font-semibold">
-                          {canvas.name}
-                        </h3>
-                      </div>
-                      <p className="mt-1 text-sm text-muted-foreground">
+                  <div className="min-w-0">
+                    <div className="flex items-start gap-2">
+                      <Instagram className="mt-1.5 size-4 shrink-0 text-pink-600" />
+                      <h3
+                        className="line-clamp-2 break-words font-heading text-xl font-semibold"
+                        title={canvas.name}
+                      >
+                        {canvas.name}
+                      </h3>
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm text-muted-foreground">
                         Updated {formatDate(canvas.updatedAt)}
                       </p>
-                    </div>
-                    {status.href ? (
-                      <Link href={status.href} className="hover:opacity-80">
+                      {status.href ? (
+                        <Link href={status.href} className="hover:opacity-80">
+                          <FlowStatusPill
+                            tone={status.tone}
+                            label={status.label}
+                          />
+                        </Link>
+                      ) : (
                         <FlowStatusPill
                           tone={status.tone}
                           label={status.label}
                         />
-                      </Link>
-                    ) : (
-                      <FlowStatusPill tone={status.tone} label={status.label} />
-                    )}
+                      )}
+                    </div>
                   </div>
                   <p className="text-sm text-muted-foreground">
                     {blockCount} block{blockCount === 1 ? "" : "s"}
@@ -258,7 +258,7 @@ export function InstagramFlowsList({ username }: { username?: string | null }) {
                       </span>
                     )}
                   </p>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <Button
                       type="button"
                       className="cursor-pointer"
@@ -306,34 +306,42 @@ export function InstagramFlowsList({ username }: { username?: string | null }) {
                         Switch on
                       </Button>
                     )}
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="cursor-pointer"
-                      onClick={() => {
-                        setRenameValue(canvas.name);
-                        setRenaming(canvas);
-                      }}
-                    >
-                      Rename
-                    </Button>
-                    {/* A disabled button gets no hover, so the tooltip sits on
-                        a wrapper. */}
-                    <span
-                      title={isOn ? "Switch it off first" : undefined}
-                      className="inline-flex"
-                    >
+                    <div className="ml-auto flex items-center gap-1">
                       <Button
                         type="button"
-                        variant="outline"
-                        className="cursor-pointer text-destructive hover:text-destructive"
-                        disabled={isOn || isDeleting}
-                        onClick={() => setDeleting(canvas)}
+                        variant="ghost"
+                        size="icon"
+                        className="cursor-pointer text-muted-foreground"
+                        aria-label={`Rename ${canvas.name}`}
+                        title="Rename"
+                        onClick={() => {
+                          setRenameValue(canvas.name);
+                          setRenaming(canvas);
+                        }}
                       >
-                        <Trash2 className="size-4" />
-                        Delete
+                        <Pencil className="size-4" />
                       </Button>
-                    </span>
+                      {/* A disabled button gets no hover, so the tooltip sits
+                          on a wrapper. */}
+                      <span
+                        title={
+                          isOn ? "Switch it off before deleting" : "Delete"
+                        }
+                        className="inline-flex"
+                      >
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="cursor-pointer text-muted-foreground hover:text-destructive"
+                          aria-label={`Delete ${canvas.name}`}
+                          disabled={isOn || isDeleting}
+                          onClick={() => setDeleting(canvas)}
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </span>
+                    </div>
                   </div>
                 </div>
               );

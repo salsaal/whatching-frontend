@@ -23,15 +23,8 @@ import {
   DialogHeader,
   DialogTitle
 } from "@/components/ui/dialog";
+import { formatWhen } from "@/lib/displayFormat";
 import { Skeleton } from "@/components/ui/skeleton";
-
-const formatWhen = (value: string) =>
-  new Intl.DateTimeFormat("en-IN", {
-    day: "numeric",
-    month: "short",
-    hour: "numeric",
-    minute: "2-digit"
-  }).format(new Date(value));
 
 export const describeVersion = (version: BotCanvasVersion) =>
   [

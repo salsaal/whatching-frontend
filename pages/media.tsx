@@ -39,6 +39,7 @@ import AppLayout from "@/layouts/AppLayout";
 import { describePermission } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { LockedButton, PermissionGate } from "@/components/common/NoAccess";
+import { formatDate } from "@/lib/displayFormat";
 
 const mediaTabs: Array<{
   value: MediaFileType;
@@ -56,13 +57,6 @@ const formatFileSize = (bytes: number) => {
   const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), 3);
   return `${(bytes / 1024 ** index).toFixed(index ? 1 : 0)} ${units[index]}`;
 };
-
-const formatDate = (date: string) =>
-  new Intl.DateTimeFormat("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric"
-  }).format(new Date(date));
 
 const maxMediaSize: Record<MediaFileType, number> = {
   image: 1 * 1024 * 1024,

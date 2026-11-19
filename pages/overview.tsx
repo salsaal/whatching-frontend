@@ -43,6 +43,8 @@ import { useCurrentMembership } from "@/hooks/useCurrentMembership";
 import AppLayout from "@/layouts/AppLayout";
 import WhatsAppNumbersPanel from "@/components/whatsapp/WhatsAppNumbersPanel";
 import { cn, formatCompactNumber, formatTokenCount } from "@/lib/utils";
+import { formatWhen } from "@/lib/displayFormat";
+import { TodayActivity } from "@/components/analytics/TodayActivity";
 import { useOrganizationStore } from "@/stores/organizationStore";
 
 interface EmbeddedSignupSession {
@@ -329,7 +331,7 @@ export default function OverviewPage() {
         pendingAuthResponseRef.current = null;
         toast.success("Meta integration connected");
         toast.info(
-          "We initiated broadcast verification. Whatching will create a one-time template and send it to the configured test number to verify payment setup. The test costs approximately Rs. 0.115."
+          "We initiated broadcast verification. Whatching will create a one-time template and send it to the configured test number to verify payment setup. The test costs approximately ₹0.115."
         );
         setPaymentMethodUrl(connectedPaymentUrl);
         setIsPaymentPromptOpen(Boolean(connectedPaymentUrl));
@@ -472,7 +474,7 @@ export default function OverviewPage() {
   const aiTokenIncludedLimit = aiTokenUsageData?.data.includedLimit;
   const stats = [
     {
-      label: "Subscribers",
+      label: "Contacts",
       value: formatCompactNumber(
         activeOrganization?.usage?.subscribersCount || 0
       ),
@@ -663,8 +665,7 @@ export default function OverviewPage() {
                 {activeOrganization?.name || "Organisation overview"}
               </h1>
               <p className="mt-2 text-sm text-muted-foreground">
-                Track your WhatsApp workspace activity, usage, limits, and setup
-                progress.
+                What needs you today, your usage and your WhatsApp numbers.
               </p>
             </div>
             <div className="flex flex-col gap-2 sm:items-end">
@@ -679,17 +680,17 @@ export default function OverviewPage() {
               {integration?.lastHealthCheckAt && (
                 <p className="text-xs text-muted-foreground">
                   Last checked{" "}
-                  {new Intl.DateTimeFormat("en-IN", {
-                    day: "2-digit",
-                    month: "short",
-                    hour: "2-digit",
-                    minute: "2-digit"
-                  }).format(new Date(integration.lastHealthCheckAt))}
+                  {formatWhen(integration.lastHealthCheckAt).replace(
+                    /^(Today|Just)/,
+                    (word) => word.toLowerCase()
+                  )}
                 </p>
               )}
             </div>
           </div>
         </section>
+
+        {isMetaReady && can("conversations:view") && <TodayActivity />}
 
         <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
           {stats.map((stat) => {
@@ -754,36 +755,21 @@ export default function OverviewPage() {
                 </p>
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {canViewNumbers && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() =>
-                    document
-                      .getElementById("whatsapp-numbers")
-                      ?.scrollIntoView({ behavior: "smooth" })
-                  }
-                >
-                  Manage numbers
-                </Button>
-              )}
-              {canSyncIntegration && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={isSyncingIntegration}
-                  onClick={() => syncIntegrationMutate()}
-                >
-                  {isSyncingIntegration ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <RefreshCw className="size-4" />
-                  )}
-                  Sync status
-                </Button>
-              )}
-            </div>
+            {canSyncIntegration && (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isSyncingIntegration}
+                onClick={() => syncIntegrationMutate()}
+              >
+                {isSyncingIntegration ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="size-4" />
+                )}
+                Check connection
+              </Button>
+            )}
           </section>
         ) : (
           <section className="grid gap-5 lg:grid-cols-[1.25fr_0.75fr]">
@@ -904,7 +890,7 @@ export default function OverviewPage() {
                     ) : (
                       <RefreshCw className="size-4" />
                     )}
-                    Sync status
+                    Check connection
                   </Button>
                 )}
                 {isOwner && (
@@ -933,7 +919,7 @@ export default function OverviewPage() {
                 <p className="mt-2 text-sm text-muted-foreground">
                   {readinessData?.data.blocker?.message ||
                     readiness?.failureMessage ||
-                    "Verify one paid business message before broadcasts are enabled. The test costs approximately Rs. 0.115."}
+                    "Verify one paid business message before broadcasts are enabled. The test costs approximately ₹0.115."}
                 </p>
                 <p className="mt-2 text-xs text-muted-foreground">
                   Status:{" "}
@@ -994,7 +980,7 @@ export default function OverviewPage() {
             <p>
               Your number is connected. Whatching creates a one-time system
               template and sends it to the configured test recipient. It costs
-              approximately Rs. 0.115.
+              approximately ₹0.115.
             </p>
             <div className="rounded-sm bg-muted/60 p-3">
               <p className="font-medium capitalize text-foreground">

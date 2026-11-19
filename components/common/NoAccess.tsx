@@ -25,7 +25,7 @@ export function NoAccess({
         You don&apos;t have access to {feature}
       </h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        Ask your organization owner to give you {accessLabel} access.
+        Ask your organisation owner to give you {accessLabel} access.
       </p>
       <Button asChild variant="outline" className="mt-6">
         <Link href="/overview" className="flex items-center gap-2">

@@ -290,9 +290,9 @@ export default function TagFormDialog({
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">
                   After the bot adds or removes this tag, it won&apos;t
-                  re-evaluate the same subscriber for this trigger again until
-                  this much time has passed. Use 0 for no cooldown; the maximum
-                  is 30 days.
+                  re-evaluate the same contact for this trigger again until this
+                  much time has passed. Use 0 for no cooldown; the maximum is 30
+                  days.
                 </p>
               </div>
 
