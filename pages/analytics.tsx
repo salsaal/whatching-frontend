@@ -71,7 +71,7 @@ import {
   sequentialGreen,
   status
 } from "@/lib/analyticsColors";
-import { describeTrend } from "@/lib/analyticsFormat";
+import { describeHealthAlert, describeTrend } from "@/lib/analyticsFormat";
 import { formatDayKey } from "@/lib/displayFormat";
 import { broadcastStatusPresentation } from "@/lib/statusPresentation";
 import { cn } from "@/lib/utils";
@@ -852,20 +852,33 @@ function HealthAlerts({ alerts }: { alerts: HealthAlert[] }) {
       <p className="text-xs font-medium text-muted-foreground">
         Needs your attention
       </p>
-      {shown.slice(0, 4).map((alert, index) => (
-        <div
-          key={`${alert.code || "alert"}-${index}`}
-          className="flex gap-2 rounded-sm border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950"
-        >
-          <AlertCircle className="mt-0.5 size-3.5 shrink-0 text-amber-600" />
-          <span>
-            {alert.displayPhoneNumber ? (
-              <span className="font-medium">{alert.displayPhoneNumber}: </span>
-            ) : null}
-            {alert.message}
-          </span>
-        </div>
-      ))}
+      {shown.slice(0, 4).map((alert, index) => {
+        const described = describeHealthAlert(alert);
+        return (
+          <div
+            key={`${alert.code || "alert"}-${index}`}
+            className="flex gap-2 rounded-sm border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950"
+          >
+            <AlertCircle className="mt-0.5 size-3.5 shrink-0 text-amber-600" />
+            <div className="min-w-0 space-y-1 overflow-wrap-anywhere">
+              {alert.displayPhoneNumber ? (
+                <p className="font-medium">{alert.displayPhoneNumber}</p>
+              ) : null}
+              <p>{described.text}</p>
+              {described.actionUrl && (
+                <a
+                  href={described.actionUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-block font-medium text-amber-900 underline underline-offset-2"
+                >
+                  {described.actionLabel}
+                </a>
+              )}
+            </div>
+          </div>
+        );
+      })}
       <Link
         href="/overview"
         className="inline-block text-xs font-medium text-primary hover:underline"

@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { describeTrend, fillDailyGaps } from "./analyticsFormat";
+import {
+  describeHealthAlert,
+  describeTrend,
+  fillDailyGaps
+} from "./analyticsFormat";
 
 const trend = (current: number, previous: number) => ({
   current,
@@ -84,5 +88,42 @@ describe("describeTrend", () => {
       title: "12.2% in the previous period"
     });
     expect(describeTrend(trend(90, 95), "rate")?.label).toBe("-5 pts");
+  });
+});
+
+describe("describeHealthAlert", () => {
+  const link =
+    "https://business.facebook.com/billing_hub/accounts/details/?business_id=1&asset_id=2";
+
+  it("rewords the payment block and turns its link into a button", () => {
+    expect(
+      describeHealthAlert({
+        code: "META_PAYMENT_BLOCKED",
+        message: `Meta blocked outbound messaging because billing is not set up. Visit ${link} to resolve this issue.`
+      })
+    ).toEqual({
+      text: "Meta won't send messages from this number until a payment method is added to your WhatsApp Business account.",
+      actionUrl: link,
+      actionLabel: "Add payment method"
+    });
+  });
+
+  it("takes links out of other alerts", () => {
+    expect(
+      describeHealthAlert({
+        code: "SOMETHING_ELSE",
+        message: `Your number's quality dropped. Read more at ${link}.`
+      })
+    ).toEqual({
+      text: "Your number's quality dropped.",
+      actionUrl: link,
+      actionLabel: "Open in Meta"
+    });
+  });
+
+  it("leaves plain alerts alone", () => {
+    expect(
+      describeHealthAlert({ message: "Instagram needs reconnecting." })
+    ).toEqual({ text: "Instagram needs reconnecting." });
   });
 });

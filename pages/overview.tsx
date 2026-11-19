@@ -1,7 +1,6 @@
 import {
   AlertCircle,
   Bot,
-  CheckCircle2,
   CreditCard,
   Loader2,
   RefreshCw,
@@ -17,8 +16,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
 import { toast } from "sonner";
-
-import Link from "next/link";
 
 import { listCampaigns } from "@/client-api/functions/campaigns";
 import {
@@ -45,6 +42,7 @@ import WhatsAppNumbersPanel from "@/components/whatsapp/WhatsAppNumbersPanel";
 import { cn, formatCompactNumber, formatTokenCount } from "@/lib/utils";
 import { formatWhen } from "@/lib/displayFormat";
 import { TodayActivity } from "@/components/analytics/TodayActivity";
+import { StatCard, StatSection } from "@/components/shared/StatCard";
 import { useOrganizationStore } from "@/stores/organizationStore";
 
 interface EmbeddedSignupSession {
@@ -478,6 +476,7 @@ export default function OverviewPage() {
       value: formatCompactNumber(
         activeOrganization?.usage?.subscribersCount || 0
       ),
+      detail: "On WhatsApp and Instagram",
       icon: Users,
       href: can("contacts:view") ? "/contacts" : undefined
     },
@@ -487,6 +486,7 @@ export default function OverviewPage() {
         isOwner && aiTokenUsage && typeof aiTokenIncludedLimit === "number"
           ? `${formatTokenCount(aiTokenUsage.used)} of ${formatTokenCount(aiTokenIncludedLimit)}`
           : formatTokenCount(activeOrganization?.usage?.aiTokensUsed || 0),
+      detail: "This billing cycle",
       icon: Bot,
       // The usage card on the AI tab is owner-only; others land on the tab.
       href: isOwner
@@ -504,6 +504,7 @@ export default function OverviewPage() {
         activeOrganization?.metaConfig?.messagingLimitCount?.toLocaleString(
           "en-IN"
         ) || "Not available",
+      detail: "New conversations you can start per day",
       icon: Gauge,
       href: can("conversations:view") ? "/analytics" : undefined,
       tooltip: "Business-initiated conversations in a rolling 24-hour period."
@@ -511,10 +512,11 @@ export default function OverviewPage() {
     ...(canViewCampaigns
       ? [
           {
-            label: "Campaigns",
+            label: "Ad campaigns",
             value: formatCompactNumber(
               campaignsData?.data.pagination.total || 0
             ),
+            detail: "Ads that brought in chats",
             icon: Target,
             href: "/campaigns",
             tooltip:
@@ -657,121 +659,60 @@ export default function OverviewPage() {
         />
       )}
       <div className="mx-auto max-w-7xl space-y-6">
-        <section className="rounded-lg border bg-white p-6 shadow-xs">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm font-medium text-primary">Overview</p>
-              <h1 className="mt-2 font-heading text-3xl font-semibold">
-                {activeOrganization?.name || "Organisation overview"}
-              </h1>
-              <p className="mt-2 text-sm text-muted-foreground">
-                What needs you today, your usage and your WhatsApp numbers.
-              </p>
-            </div>
-            <div className="flex flex-col gap-2 sm:items-end">
-              <div className="flex items-center gap-2 rounded-sm bg-primary/10 px-3 py-2 text-sm font-medium text-primary">
-                {isMetaReady ? (
-                  <CheckCircle2 className="size-4" />
-                ) : (
-                  <Smartphone className="size-4" />
-                )}
-                {isMetaReady ? "Meta connected" : "Meta pending"}
-              </div>
-              {integration?.lastHealthCheckAt && (
-                <p className="text-xs text-muted-foreground">
-                  Last checked{" "}
+        <section className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div className="min-w-0">
+            <h1 className="font-heading text-3xl font-semibold">Overview</h1>
+            <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+              <span className="inline-flex items-center gap-1.5">
+                <span
+                  className={cn(
+                    "size-2 rounded-full",
+                    isMetaReady ? "bg-emerald-500" : "bg-amber-500"
+                  )}
+                />
+                {isMetaReady
+                  ? "WhatsApp is connected"
+                  : "WhatsApp isn't connected yet"}
+              </span>
+              {isMetaReady && integration?.lastHealthCheckAt && (
+                <span>
+                  · checked{" "}
                   {formatWhen(integration.lastHealthCheckAt).replace(
                     /^(Today|Just)/,
                     (word) => word.toLowerCase()
                   )}
-                </p>
+                </span>
               )}
-            </div>
+            </p>
           </div>
+          {isMetaReady && canSyncIntegration && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="self-start sm:self-auto"
+              disabled={isSyncingIntegration}
+              onClick={() => syncIntegrationMutate()}
+            >
+              {isSyncingIntegration ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <RefreshCw className="size-4" />
+              )}
+              Check connection
+            </Button>
+          )}
         </section>
 
         {isMetaReady && can("conversations:view") && <TodayActivity />}
 
-        <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-          {stats.map((stat) => {
-            const Icon = stat.icon;
-            const cardClassName = cn(
-              "h-full rounded-lg border bg-white p-5 shadow-xs",
-              stat.href &&
-                "block transition hover:border-primary/40 hover:shadow-md"
-            );
-            const content = (
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p
-                    className={
-                      stat.tooltip
-                        ? cn(
-                            "text-sm text-muted-foreground underline decoration-dotted",
-                            stat.href ? "cursor-pointer" : "cursor-help"
-                          )
-                        : "text-sm text-muted-foreground"
-                    }
-                    title={stat.tooltip}
-                  >
-                    {stat.label}
-                  </p>
-                  <p className="mt-2 font-heading text-2xl font-semibold">
-                    {stat.value}
-                  </p>
-                </div>
-                <div className="flex size-11 items-center justify-center rounded-sm bg-primary/10">
-                  <Icon className="size-5 text-primary" />
-                </div>
-              </div>
-            );
+        <StatSection title="Usage">
+          {stats.map((stat) => (
+            <StatCard key={stat.label} {...stat} />
+          ))}
+        </StatSection>
 
-            return stat.href ? (
-              <Link key={stat.label} href={stat.href} className={cardClassName}>
-                {content}
-              </Link>
-            ) : (
-              <div key={stat.label} className={cardClassName}>
-                {content}
-              </div>
-            );
-          })}
-        </section>
-
-        {isSetupComplete ? (
-          <section className="flex flex-col gap-4 rounded-lg border bg-white p-5 shadow-xs sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex size-11 shrink-0 items-center justify-center rounded-sm bg-primary/10 text-primary">
-                <CheckCircle2 className="size-5" />
-              </div>
-              <div className="min-w-0">
-                <p className="font-medium">WhatsApp Business API connected</p>
-                <p className="truncate text-sm text-muted-foreground">
-                  {integration?.displayPhoneNumber ||
-                    activeOrganization?.metaConfig?.displayPhoneNumber}{" "}
-                  ·{" "}
-                  {integration?.businessAccountName ||
-                    activeOrganization?.metaConfig?.businessAccountName}
-                </p>
-              </div>
-            </div>
-            {canSyncIntegration && (
-              <Button
-                type="button"
-                variant="outline"
-                disabled={isSyncingIntegration}
-                onClick={() => syncIntegrationMutate()}
-              >
-                {isSyncingIntegration ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="size-4" />
-                )}
-                Check connection
-              </Button>
-            )}
-          </section>
-        ) : (
+        {!isSetupComplete && (
           <section className="grid gap-5 lg:grid-cols-[1.25fr_0.75fr]">
             <div className="rounded-lg border bg-white p-6 shadow-xs">
               <h2 className="font-heading text-xl font-semibold">

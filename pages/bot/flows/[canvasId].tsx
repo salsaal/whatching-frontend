@@ -197,6 +197,7 @@ import {
 } from "@/lib/flowHistory";
 import { useOrganizationStore } from "@/stores/organizationStore";
 import { PermissionGate } from "@/components/common/NoAccess";
+import { MobileMenuButton } from "@/layouts/AppMenuContext";
 
 type MediaPickerTarget =
   | { kind: "node"; nodeId?: string }
@@ -2876,6 +2877,7 @@ function FlowsBuilder() {
     <AppLayout hideHeader fullBleed>
       <div className="flex h-dvh flex-col overflow-hidden border bg-white shadow-xs">
         <header className="flex shrink-0 flex-wrap items-center gap-2 border-b bg-white px-4 py-2">
+          <MobileMenuButton className="-ml-2" />
           <Button asChild variant="ghost" size="sm" className="cursor-pointer">
             <Link href="/bot/flows" className="flex items-center gap-1.5">
               <ArrowLeft className="size-4" />

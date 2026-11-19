@@ -37,6 +37,7 @@ import { useLiveFlows } from "@/hooks/useLiveFlows";
 import { cn } from "@/lib/utils";
 import { useOrganizationStore } from "@/stores/organizationStore";
 import { useCurrentMembership } from "@/hooks/useCurrentMembership";
+import { describeHealthAlert } from "@/lib/analyticsFormat";
 
 // The backend's name for a flow nobody has named yet.
 const DEFAULT_FLOW_NAME = "Untitled Bot Canvas";
@@ -68,6 +69,17 @@ const qualityTone = (rating?: string): Tone => {
 
 const titleCase = (value: string) =>
   value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
+
+// Meta rates quality with colours; people read High, Medium and Low.
+const QUALITY_LABELS: Record<string, string> = {
+  GREEN: "High",
+  YELLOW: "Medium",
+  RED: "Low"
+};
+const qualityLabel = (rating?: string) =>
+  rating
+    ? QUALITY_LABELS[rating.toUpperCase()] || titleCase(rating)
+    : "Not rated yet";
 
 function StatusDot({
   label,
@@ -202,14 +214,25 @@ export default function WhatsAppNumbersPanel({
               {summary.planLimit === null
                 ? `${summary.activeCount} in use · no limit on your plan`
                 : `${summary.activeCount} of ${summary.planLimit} numbers in use`}
-              {summary.remainingActiveSlots === 0 &&
-                ". To add another, upgrade or replace one below."}
+              {summary.remainingActiveSlots === 0 && (
+                <>
+                  .{" "}
+                  <Link
+                    href="/plans"
+                    className="font-medium text-primary hover:underline"
+                  >
+                    Upgrade for more
+                  </Link>
+                  , or replace one below.
+                </>
+              )}
             </p>
           )}
         </div>
         <div className="flex flex-wrap gap-2">
           <Button
             variant="outline"
+            size="sm"
             onClick={() => syncMutation.mutate()}
             disabled={syncMutation.isPending}
           >
@@ -220,12 +243,8 @@ export default function WhatsAppNumbersPanel({
             )}
             Refresh numbers
           </Button>
-          {summary?.remainingActiveSlots === 0 ? (
-            <Button variant="outline" asChild>
-              <Link href="/plans">Upgrade for more numbers</Link>
-            </Button>
-          ) : (
-            <Button onClick={onAddNumber} disabled={addingNumber}>
+          {summary?.remainingActiveSlots === 0 ? null : (
+            <Button size="sm" onClick={onAddNumber} disabled={addingNumber}>
               {addingNumber && <Loader2 className="size-4 animate-spin" />}
               Add WhatsApp number
             </Button>
@@ -236,7 +255,7 @@ export default function WhatsAppNumbersPanel({
       {isLoading ? (
         <ListLoadingSkeleton className="mt-5" rows={2} />
       ) : summary?.phoneNumbers.length ? (
-        <div className="mt-5 grid gap-3 lg:grid-cols-2">
+        <div className="mt-5 grid items-start gap-3 lg:grid-cols-2">
           {summary.phoneNumbers.map((number) => {
             // Same rule as the Flows tab: the number's own flow, else the
             // default. Only for active numbers members can manage flows for.
@@ -311,11 +330,7 @@ export default function WhatsAppNumbersPanel({
                   />
                   <StatusDot
                     label="Quality"
-                    value={
-                      number.qualityRating
-                        ? titleCase(number.qualityRating)
-                        : "Not reported"
-                    }
+                    value={qualityLabel(number.qualityRating)}
                     tone={qualityTone(number.qualityRating)}
                   />
                 </div>
@@ -342,12 +357,13 @@ export default function WhatsAppNumbersPanel({
                 ) : number.activeAlerts?.length ? (
                   <div className="mt-3 flex gap-2 rounded-md bg-amber-50 p-2.5 text-xs text-amber-800 overflow-wrap-anywhere">
                     <ShieldAlert className="size-4 shrink-0" />
-                    <span>{number.activeAlerts[0].message}</span>
+                    <span>
+                      {describeHealthAlert(number.activeAlerts[0]).text}
+                    </span>
                   </div>
                 ) : null}
 
-                {/* mt-auto pins the actions to the bottom so cards line up. */}
-                <div className="mt-auto flex flex-wrap gap-2 pt-4">
+                <div className="flex flex-wrap gap-2 pt-4">
                   {!number.isDefault && number.status === "active" && (
                     <Button
                       size="sm"

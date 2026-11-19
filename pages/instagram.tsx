@@ -93,6 +93,7 @@ import { useOrganizationStore } from "@/stores/organizationStore";
 import { PermissionGate } from "@/components/common/NoAccess";
 import { describeCommentRule, repliesToEveryComment } from "@/lib/commentRules";
 import { formatWhen } from "@/lib/displayFormat";
+import { MobileMenuButton } from "@/layouts/AppMenuContext";
 
 type PageTab = "profile" | "settings" | "canvas" | "rules" | "media" | "setup";
 // Tabs that can be linked to with ?tab= (setup is an internal-only view).
@@ -875,10 +876,11 @@ export function InstagramPage() {
   );
 
   return (
-    <AppLayout fullBleed>
-      <div className="relative flex min-h-[calc(100dvh-4.5rem)] flex-col bg-slate-50">
+    <AppLayout hideHeader fullBleed>
+      <div className="relative flex h-[calc(100vh-1px)] min-h-0 flex-col overflow-hidden bg-slate-50">
         <div className="flex shrink-0 items-center justify-between border-b bg-white px-5 py-3">
           <div className="flex items-center gap-3">
+            <MobileMenuButton className="-ml-2" />
             <div className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-pink-500 to-orange-400 text-white">
               <Instagram className="size-5" />
             </div>

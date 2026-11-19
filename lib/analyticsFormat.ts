@@ -99,3 +99,54 @@ export const describeTrend = (
     title
   };
 };
+
+export interface HealthAlertInput {
+  code?: string;
+  message?: string;
+}
+
+export interface HealthAlertDescription {
+  text: string;
+  actionUrl?: string;
+  actionLabel?: string;
+}
+
+const URL_PATTERN = /https?:\/\/[^\s)]+/g;
+const HAS_URL = /https?:\/\//;
+
+const PAYMENT_BLOCKED_CODES = new Set([
+  "META_PAYMENT_BLOCKED",
+  "META_PAYMENT_METHOD_REQUIRED"
+]);
+
+/**
+ * An alert from Meta, readable: links come out of the sentence and become a
+ * button, and the payment block, which Meta words at length, gets one short
+ * sentence.
+ */
+export const describeHealthAlert = (
+  alert: HealthAlertInput
+): HealthAlertDescription => {
+  const message = (alert.message || "").trim();
+  const url = message.match(URL_PATTERN)?.[0]?.replace(/[.,]+$/, "");
+  if (alert.code && PAYMENT_BLOCKED_CODES.has(alert.code)) {
+    return {
+      text: "Meta won't send messages from this number until a payment method is added to your WhatsApp Business account.",
+      actionUrl: url,
+      actionLabel: url ? "Add payment method" : undefined
+    };
+  }
+  // Drop the sentences that only carry a link ("Visit https://… to resolve
+  // this issue.").
+  const text = message
+    .replace(/([.!?])\s+/g, "$1\n")
+    .split("\n")
+    .filter((sentence) => !HAS_URL.test(sentence))
+    .join(" ")
+    .trim();
+  return {
+    text: text || message.replace(URL_PATTERN, "").trim(),
+    actionUrl: url,
+    actionLabel: url ? "Open in Meta" : undefined
+  };
+};

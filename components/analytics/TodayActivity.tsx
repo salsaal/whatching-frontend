@@ -1,12 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Hand, Inbox, MessagesSquare } from "lucide-react";
-import Link from "next/link";
 import { useMemo } from "react";
 
 import { getDashboardAnalytics } from "@/client-api/functions/analytics";
+import { StatCard, StatSection } from "@/components/shared/StatCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatCount } from "@/lib/displayFormat";
-import { cn } from "@/lib/utils";
 import { useOrganizationStore } from "@/stores/organizationStore";
 
 // Today's date as the analytics API keys its days ("2026-11-19"), in the
@@ -42,11 +41,11 @@ export function TodayActivity() {
   if (isError) return null;
   if (isLoading || !dashboard) {
     return (
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <StatSection title="Today">
         {Array.from({ length: 4 }).map((_, index) => (
-          <Skeleton key={index} className="h-[88px] rounded-lg" />
+          <Skeleton key={index} className="h-[98px] rounded-lg" />
         ))}
-      </div>
+      </StatSection>
     );
   }
 
@@ -96,40 +95,10 @@ export function TodayActivity() {
   ];
 
   return (
-    <section aria-label="Today" className="space-y-2">
-      <h2 className="font-heading text-lg font-semibold">Today</h2>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {items.map((item) => {
-          const Icon = item.icon;
-          return (
-            <Link
-              key={item.label}
-              href={item.href}
-              className="flex items-start justify-between gap-3 rounded-lg border bg-white p-4 shadow-xs transition hover:border-primary/40 hover:shadow-md"
-            >
-              <div className="min-w-0">
-                <p className="text-sm text-muted-foreground">{item.label}</p>
-                <p className="mt-1 font-heading text-2xl font-semibold">
-                  {item.value}
-                </p>
-                <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                  {item.detail}
-                </p>
-              </div>
-              <div
-                className={cn(
-                  "flex size-9 shrink-0 items-center justify-center rounded-sm",
-                  item.attention
-                    ? "bg-amber-50 text-amber-600"
-                    : "bg-primary/10 text-primary"
-                )}
-              >
-                <Icon className="size-4" />
-              </div>
-            </Link>
-          );
-        })}
-      </div>
-    </section>
+    <StatSection title="Today">
+      {items.map((item) => (
+        <StatCard key={item.label} {...item} />
+      ))}
+    </StatSection>
   );
 }

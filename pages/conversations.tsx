@@ -178,6 +178,7 @@ import { formatWhen, getInitials } from "@/lib/displayFormat";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
 import { useOrganizationStore } from "@/stores/organizationStore";
+import { MobileMenuButton } from "@/layouts/AppMenuContext";
 import { PermissionGate } from "@/components/common/NoAccess";
 
 const statusOptions: Array<{
@@ -2874,11 +2875,16 @@ function ConversationsPageContent() {
             selectedId && "max-md:hidden"
           )}
         >
-          <div className="min-w-0">
-            <p className="font-heading text-lg font-semibold">Conversations</p>
-            <p className="text-xs text-muted-foreground">
-              All your WhatsApp and Instagram conversations in one place.
-            </p>
+          <div className="flex min-w-0 items-center gap-2">
+            <MobileMenuButton className="-ml-1" />
+            <div className="min-w-0">
+              <p className="font-heading text-lg font-semibold">
+                Conversations
+              </p>
+              <p className="text-xs text-muted-foreground">
+                All your WhatsApp and Instagram conversations in one place.
+              </p>
+            </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button
