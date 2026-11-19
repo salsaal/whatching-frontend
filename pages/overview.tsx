@@ -504,7 +504,7 @@ export default function OverviewPage() {
         activeOrganization?.metaConfig?.messagingLimitCount?.toLocaleString(
           "en-IN"
         ) || "Not available",
-      detail: "New conversations you can start per day",
+      detail: "Chats you can start each day",
       icon: Gauge,
       href: can("conversations:view") ? "/analytics" : undefined,
       tooltip: "Business-initiated conversations in a rolling 24-hour period."
