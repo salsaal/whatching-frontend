@@ -128,6 +128,20 @@ export const QUICK_REPLY_ENDPOINTS = {
     `${ORGANIZATIONS_BASE}/quick-replies/${quickReplyId}`
 };
 
+const STORES_BASE = `${ORGANIZATIONS_BASE}/stores`;
+
+export const STORE_ENDPOINTS = {
+  GET: STORES_BASE,
+  CONNECT_WOOCOMMERCE: `${STORES_BASE}/woocommerce/connect`,
+  SETTINGS: (connectionId: string) => `${STORES_BASE}/${connectionId}/settings`,
+  TEMPLATES: (connectionId: string) =>
+    `${STORES_BASE}/${connectionId}/templates`,
+  STATUSES: (connectionId: string) => `${STORES_BASE}/${connectionId}/statuses`,
+  ORDERS: (connectionId: string) => `${STORES_BASE}/${connectionId}/orders`,
+  CHECK: (connectionId: string) => `${STORES_BASE}/${connectionId}/check`,
+  BY_ID: (connectionId: string) => `${STORES_BASE}/${connectionId}`
+};
+
 export const MEDIA_ENDPOINTS = {
   GET_ALL: `${ORGANIZATIONS_BASE}/media`,
   UPLOAD: `${ORGANIZATIONS_BASE}/media/upload`,

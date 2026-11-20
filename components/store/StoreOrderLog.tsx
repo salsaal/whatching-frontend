@@ -1,0 +1,248 @@
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { useRouter } from "next/router";
+import { useState } from "react";
+import { toast } from "sonner";
+
+import { getStoreOrders } from "@/client-api/functions/stores";
+import { getSubscriberById } from "@/client-api/functions/subscribers";
+import type {
+  StoreCustomStatusRule,
+  StoreOrder,
+  StoreOrderStatus
+} from "@/client-api/types/stores.type";
+import { QueryErrorState } from "@/components/shared/QueryErrorState";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { formatCount, formatWhen } from "@/lib/displayFormat";
+import { badgeToneClass } from "@/lib/statusPresentation";
+import {
+  COD_STATE_LABELS,
+  formatOrderTotal,
+  humanizeStatus,
+  storeErrorMessage,
+  storeMessageStatusPresentation,
+  storeMessageTitle
+} from "@/lib/store";
+import { cn } from "@/lib/utils";
+
+const PAGE_SIZE = 25;
+
+/**
+ * The customer's name, opening their chat. The order only carries the
+ * contact's id, so the contact is looked up on click.
+ */
+function CustomerLink({ order }: { order: StoreOrder }) {
+  const router = useRouter();
+  const [isOpening, setIsOpening] = useState(false);
+  const name = order.customerName || "Customer";
+  if (!order.subscriberId) return <span>{name}</span>;
+  const subscriberId = order.subscriberId;
+
+  const open = async () => {
+    setIsOpening(true);
+    try {
+      const response = await getSubscriberById(subscriberId);
+      const contact = response.data.subscriber;
+      const search =
+        contact.phoneNumber ||
+        [contact.firstName, contact.lastName].filter(Boolean).join(" ") ||
+        name;
+      await router.push(`/conversations?search=${encodeURIComponent(search)}`);
+    } catch {
+      toast.error("This customer's chat couldn't be opened.");
+      setIsOpening(false);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={open}
+      disabled={isOpening}
+      className="inline-flex cursor-pointer items-center gap-1 text-left font-medium text-primary hover:underline disabled:cursor-wait"
+      title="Open this customer's chat"
+    >
+      {name}
+      {isOpening && <Loader2 className="size-3 animate-spin" />}
+    </button>
+  );
+}
+
+function OrderMessages({
+  order,
+  customRules
+}: {
+  order: StoreOrder;
+  customRules: StoreCustomStatusRule[];
+}) {
+  if (!order.messages.length) {
+    return <span className="text-muted-foreground">-</span>;
+  }
+  return (
+    <ul className="space-y-1.5">
+      {order.messages.map((message, index) => {
+        const status = storeMessageStatusPresentation(message.status);
+        const note = message.reason || message.error;
+        return (
+          <li key={`${message.kind}-${index}`} className="text-xs">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="font-medium">
+                {storeMessageTitle(message.kind, customRules)}
+              </span>
+              <span
+                className={cn(
+                  "rounded-full px-2 py-px text-[11px] font-medium",
+                  badgeToneClass[status.tone]
+                )}
+              >
+                {status.label}
+              </span>
+            </div>
+            {note && (
+              <p className="mt-0.5 max-w-xs text-muted-foreground">{note}</p>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** Section G: recent orders and what was sent for each, 25 a page. */
+export function StoreOrderLog({
+  connectionId,
+  customRules,
+  statuses
+}: {
+  connectionId: string;
+  customRules: StoreCustomStatusRule[];
+  statuses: StoreOrderStatus[];
+}) {
+  const [page, setPage] = useState(1);
+  const { data, isLoading, isError, error, isFetching } = useQuery({
+    queryKey: ["store-orders", connectionId, page],
+    queryFn: () => getStoreOrders({ connectionId, page, limit: PAGE_SIZE }),
+    placeholderData: keepPreviousData,
+    refetchInterval: 60_000
+  });
+  const orders = data?.data.orders || [];
+  const total = data?.data.total || 0;
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const statusName = (slug: string) =>
+    statuses.find((status) => status.slug === slug)?.name ||
+    humanizeStatus(slug);
+
+  return (
+    <section className="rounded-lg border bg-white shadow-xs">
+      <div className="flex items-center justify-between gap-3 border-b p-4 sm:p-5">
+        <div>
+          <h2 className="font-heading text-xl font-semibold">Orders</h2>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            Orders from your store and the messages sent for each.
+          </p>
+        </div>
+        {isFetching && !isLoading && (
+          <Loader2 className="size-4 animate-spin text-muted-foreground" />
+        )}
+      </div>
+
+      {isError ? (
+        <div className="p-4 sm:p-5">
+          <QueryErrorState
+            message={storeErrorMessage(
+              error,
+              "Your orders couldn't be loaded. Please try again."
+            )}
+          />
+        </div>
+      ) : isLoading ? (
+        <div className="space-y-3 p-4 sm:p-5">
+          {Array.from({ length: 4 }, (_, index) => (
+            <Skeleton key={index} className="h-10" />
+          ))}
+        </div>
+      ) : !orders.length ? (
+        <p className="p-8 text-center text-sm text-muted-foreground">
+          No orders yet. New orders from your store show up here.
+        </p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[760px] text-sm">
+            <thead>
+              <tr className="border-b text-left text-xs text-muted-foreground">
+                <th className="px-4 py-2 font-medium">Order</th>
+                <th className="px-4 py-2 font-medium">Customer</th>
+                <th className="px-4 py-2 font-medium">Total</th>
+                <th className="px-4 py-2 font-medium">Placed</th>
+                <th className="px-4 py-2 font-medium">Cash on delivery</th>
+                <th className="px-4 py-2 font-medium">Messages</th>
+              </tr>
+            </thead>
+            <tbody>
+              {orders.map((order) => (
+                <tr key={order.id} className="border-b align-top last:border-0">
+                  <td className="px-4 py-3">
+                    <p className="font-medium">#{order.orderNumber}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {statusName(order.status)}
+                    </p>
+                  </td>
+                  <td className="px-4 py-3">
+                    <CustomerLink order={order} />
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap tabular-nums">
+                    {formatOrderTotal(order.total, order.currency)}
+                  </td>
+                  <td className="px-4 py-3 text-xs whitespace-nowrap text-muted-foreground">
+                    {formatWhen(order.placedAt)}
+                  </td>
+                  <td className="px-4 py-3 text-xs">
+                    {order.cod?.state ? (
+                      <span>{COD_STATE_LABELS[order.cod.state]}</span>
+                    ) : (
+                      <span className="text-muted-foreground">-</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <OrderMessages order={order} customRules={customRules} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {total > PAGE_SIZE && (
+        <div className="flex items-center justify-between gap-3 border-t px-4 py-3 text-sm text-muted-foreground sm:px-5">
+          <span>
+            Page {page} of {pageCount} · {formatCount(total)} orders
+          </span>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page <= 1}
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+            >
+              <ChevronLeft className="size-4" />
+              Previous
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page >= pageCount}
+              onClick={() =>
+                setPage((current) => Math.min(pageCount, current + 1))
+              }
+            >
+              Next
+              <ChevronRight className="size-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}

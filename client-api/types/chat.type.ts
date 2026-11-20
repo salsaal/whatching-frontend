@@ -159,6 +159,8 @@ export interface ChatMessage {
     sticker?: { animated?: boolean };
     reaction?: MessageReaction;
     unsupported?: UnsupportedMessageDetails;
+    /** Set on order messages sent for a connected store. */
+    storeOrder?: { orderNumber?: string; kind?: string };
     [key: string]: unknown;
   };
   attachment?: {

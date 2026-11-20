@@ -228,6 +228,15 @@ const pageMeta: Record<string, PageMeta> = {
     description:
       "Save answers your team can drop into any WhatsApp or Instagram chat by typing /."
   },
+  "/store": {
+    title: "Store | Whatching",
+    description:
+      "Connect your WooCommerce store and send order updates on WhatsApp."
+  },
+  "/store/woocommerce/return": {
+    title: "Store | Whatching",
+    description: "Finishing your store connection."
+  },
   "/settings/help": {
     title: "Help and Support | Whatching",
     description:

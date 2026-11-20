@@ -974,7 +974,7 @@ function MessageBubble({
     );
   }
 
-  return (
+  const row = (
     <div
       className={cn(
         "group flex items-center gap-2",
@@ -1227,6 +1227,22 @@ function MessageBubble({
           <MessageSquareReply className="size-4" />
         </button>
       )}
+    </div>
+  );
+  // Order messages from a connected store say which order they're about.
+  const storeOrderNumber = message.payload?.storeOrder?.orderNumber;
+  if (!storeOrderNumber) return row;
+  return (
+    <div className="flex flex-col gap-1">
+      <p
+        className={cn(
+          "px-1 text-[11px] font-medium text-muted-foreground",
+          isOutbound ? "self-end" : "self-start"
+        )}
+      >
+        Store · Order #{storeOrderNumber}
+      </p>
+      {row}
     </div>
   );
 }

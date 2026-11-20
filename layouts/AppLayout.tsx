@@ -14,6 +14,7 @@ import {
   Menu,
   MessageCircle,
   Settings,
+  Store,
   Target,
   X,
   Zap
@@ -53,6 +54,7 @@ import {
 } from "@/lib/billing";
 import { cn } from "@/lib/utils";
 import { useCurrentMembership } from "@/hooks/useCurrentMembership";
+import { useStore } from "@/hooks/useStore";
 import { useAuthStore } from "@/stores/authStore";
 import { Organization, useOrganizationStore } from "@/stores/organizationStore";
 import { AppMenuProvider } from "@/layouts/AppMenuContext";
@@ -77,6 +79,8 @@ const navigation = [
   { label: "Conversations", href: "/conversations", icon: MessageCircle },
   { label: "Contacts", href: "/contacts", icon: Contact },
   { label: "Ad campaigns", href: "/campaigns", icon: Target },
+  // Shown only once the store backend answers (see useStore).
+  { label: "Store", href: "/store", icon: Store, needsStore: true },
   { label: "Media", href: "/media", icon: Images },
   { label: "Settings", href: "/settings", icon: Settings }
 ];
@@ -279,9 +283,14 @@ export default function AppLayout({
     setOrganizations
   ]);
 
+  const { isAvailable: isStoreAvailable } = useStore();
+  const visibleNavigation = navigation.filter(
+    (item) => !item.needsStore || isStoreAvailable
+  );
+
   const renderNavLinks = (mobile = false) => (
     <nav className={cn("space-y-1", mobile ? "px-0" : "px-3 pt-8 pb-4")}>
-      {navigation.map((item) => {
+      {visibleNavigation.map((item) => {
         const Icon = item.icon;
         // Active on its own path and anything beneath it, so Bot covers
         // every /bot/* tab and Settings covers its sub-pages.

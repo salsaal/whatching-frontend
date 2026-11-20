@@ -154,6 +154,14 @@ Preview is intentionally not shown for control blocks such as the follower check
 - Backend worker normalizes media IDs and supports comment webhook matching.
 - Paginated Instagram flows, media, and comment rules deduplicate IDs across pages.
 
+## Store (WooCommerce order messages)
+
+- `/store` and `/store/woocommerce/return`, backed by `/organizations/stores` (`client-api/functions/stores.ts`). Spec: the backend's `docs/STORE_FRONTEND_SPEC.md`.
+- Hidden until the backend answers: `useStore` (`hooks/useStore.ts`) calls `GET /organizations/stores` once; the Store menu item shows only on a 200, and the routes (`StoreGate`) go to Overview on a 404 or without `integrations:view`, with no error message. Editing needs `integrations:manage`.
+- Screens (`components/store/`): plan notice, connect form (opt-in checkbox, access explanation, same-tab redirect to WooCommerce), the return page (polls every 2 s for up to 60 s; only `success` is read, `user_id` is dropped from the address bar), and the connected store: status, Check connection, Reconnect, cost note, set-up checklist (ready-made templates, sending number when there are several), a card per order message with its template, the shipped status, extra status messages (up to 10), cash on delivery, the order log (25 a page) and Disconnect.
+- Settings save per change, sending only that field (`useStoreSettings`); the API's reason a template can't be used shows under its picker, and `warnings` show as toasts.
+- Inbox: order messages (`payload.storeOrder`) carry a "Store · Order #1201" label above the bubble.
+
 ## Settings
 
 - Main settings page exists.
