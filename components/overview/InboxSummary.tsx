@@ -196,31 +196,53 @@ function NeedsYouCard({
   const unread = summary?.unread || 0;
   const waiting = summary?.pending || 0;
   const caughtUp = Boolean(summary) && unread === 0 && waiting === 0;
-  const otherParams: ConversationListParams | null = !summary
-    ? null
-    : waiting > 0 && unreadShown < LIST_SIZE
-      ? { status: "pending", limit: LIST_SIZE }
-      : caughtUp && summary.total > 0
-        ? { limit: LIST_SIZE }
-        : null;
-  const otherQuery = useQuery({
-    queryKey: ["conversations", organizationId, otherParams],
-    queryFn: () => getConversations(otherParams || {}),
-    enabled: Boolean(organizationId && otherParams),
+  const waitingParams: ConversationListParams = {
+    status: "pending",
+    limit: LIST_SIZE
+  };
+  const waitingQuery = useQuery({
+    queryKey: ["conversations", organizationId, waitingParams],
+    queryFn: () => getConversations(waitingParams),
+    enabled: Boolean(organizationId && waiting > 0 && unreadShown < LIST_SIZE),
     staleTime: 30_000
   });
 
-  const chats = useMemo(() => {
+  const needsYou = useMemo(() => {
     const merged = new Map<string, Conversation>();
     [
       ...(unreadQuery.data?.data.conversations || []),
-      ...(otherQuery.data?.data.conversations || [])
+      ...(waiting > 0 ? waitingQuery.data?.data.conversations || [] : [])
     ].forEach((conversation) => merged.set(conversation._id, conversation));
     return Array.from(merged.values()).sort(byLatest).slice(0, LIST_SIZE);
-  }, [unreadQuery.data, otherQuery.data]);
+  }, [unreadQuery.data, waitingQuery.data, waiting]);
+
+  // Rows left over are filled with the latest chats, so the card always
+  // shows what's going on. Fetches enough to skip the ones listed above.
+  const latestParams: ConversationListParams = { limit: LIST_SIZE * 2 };
+  const attentionSettled =
+    Boolean(summary) &&
+    (unreadShown >= LIST_SIZE || waiting === 0 || waitingQuery.isSuccess);
+  const latestQuery = useQuery({
+    queryKey: ["conversations", organizationId, latestParams],
+    queryFn: () => getConversations(latestParams),
+    enabled: Boolean(
+      organizationId &&
+        attentionSettled &&
+        needsYou.length < LIST_SIZE &&
+        summary &&
+        summary.total > needsYou.length
+    ),
+    staleTime: 30_000
+  });
+  const latest = useMemo(() => {
+    const listed = new Set(needsYou.map((conversation) => conversation._id));
+    return (latestQuery.data?.data.conversations || [])
+      .filter((conversation) => !listed.has(conversation._id))
+      .slice(0, LIST_SIZE - needsYou.length);
+  }, [latestQuery.data, needsYou]);
 
   const isLoading =
-    unreadQuery.isLoading || (Boolean(otherParams) && otherQuery.isLoading);
+    unreadQuery.isLoading || waitingQuery.isLoading || latestQuery.isLoading;
   const isEmpty = Boolean(summary) && summary?.total === 0;
 
   let body: ReactNode;
@@ -247,16 +269,30 @@ function NeedsYouCard({
   } else {
     body = (
       <>
-        {caughtUp && (
-          <p className="mb-1 text-xs font-medium text-muted-foreground">
-            Latest chats
-          </p>
+        {needsYou.length > 0 && (
+          <ul>
+            {needsYou.map((conversation) => (
+              <ChatRow key={conversation._id} conversation={conversation} />
+            ))}
+          </ul>
         )}
-        <ul>
-          {chats.map((conversation) => (
-            <ChatRow key={conversation._id} conversation={conversation} />
-          ))}
-        </ul>
+        {latest.length > 0 && (
+          <>
+            <p
+              className={cn(
+                "mb-1 text-xs font-medium text-muted-foreground",
+                needsYou.length > 0 && "mt-2 border-t pt-3"
+              )}
+            >
+              Latest chats
+            </p>
+            <ul>
+              {latest.map((conversation) => (
+                <ChatRow key={conversation._id} conversation={conversation} />
+              ))}
+            </ul>
+          </>
+        )}
       </>
     );
   }
