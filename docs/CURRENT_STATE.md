@@ -2,6 +2,12 @@
 
 This document reflects the frontend and verified sibling-backend contracts on 2026-08-27.
 
+## 2026-11-20 — Store page and WhatsApp usernames
+
+- The Store page (WooCommerce order messages) is built and stays hidden until `GET /organizations/stores` answers 200. The store backend isn't on production yet (it answers 404), so the page hasn't been tried against a real store. Do that once the backend says it's live.
+- Backend gap, known and accepted: broadcast audiences leave out contacts without a phone number (WhatsApp username only). The "Not sent: this customer hasn't shared their phone number." reason is built and will appear once broadcasts include them.
+- Coming later, not to build yet: `connection.platform` can become `"shopify"`. Shopify stores are linked from inside Shopify, not from the Store page. For them, hide the extra-status messages (`GET /stores/:connectionId/statuses` returns an empty list) and word Disconnect as "This stops Whatching messages for this store. To remove the Whatching app from Shopify, uninstall it in your Shopify admin." Wait for the backend's spec for the screens inside Shopify admin.
+
 ## 2026-08-27 — Backend feature-parity pass
 
 A full audit compared this frontend against `../Whatching_backend`'s current routes/models and closed the gaps found:

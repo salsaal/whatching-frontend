@@ -1,7 +1,13 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, renderHook, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  render,
+  renderHook,
+  screen,
+  waitFor
+} from "@testing-library/react";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
   StoreConnection,
@@ -145,6 +151,8 @@ const storeData = (
   ]
 });
 
+afterEach(cleanup);
+
 beforeEach(() => {
   useOrganizationStore.setState({
     activeOrganization: { _id: "org-1", name: "Asha's Shop" }
@@ -252,6 +260,21 @@ describe("Store screens", () => {
     expect(screen.getByRole("button", { name: "Reconnect" })).toBeTruthy();
   });
 
+  it("hides Check connection while the store is still setting up", () => {
+    render(
+      <ConnectedStore
+        data={storeData(connection("connecting"))}
+        enabledForPlan
+      />,
+      { wrapper }
+    );
+    expect(screen.getByText("Setting up")).toBeTruthy();
+    expect(screen.getByText(/finishing setting up your store/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Check connection" })).toBe(
+      null
+    );
+  });
+
   it("shows why the last setup failed on the connect screen", () => {
     render(
       <StoreConnectForm
@@ -289,6 +312,38 @@ describe("useStore", () => {
     await waitFor(() => expect(result.current.isHidden).toBe(true));
     expect(result.current.isAvailable).toBe(false);
     expect(getStore).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks again every 5 seconds while the store is setting up", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      getStore
+        .mockReset()
+        .mockResolvedValueOnce({
+          status: "success",
+          data: storeData(connection("connecting"))
+        })
+        .mockResolvedValue({
+          status: "success",
+          data: storeData(connection("connected"))
+        });
+      const { result } = renderHook(
+        () => useStore({ fresh: true, pollWhileSettingUp: true }),
+        { wrapper }
+      );
+      await waitFor(() =>
+        expect(result.current.data?.data.connection?.status).toBe("connecting")
+      );
+      await vi.advanceTimersByTimeAsync(5_000);
+      await waitFor(() =>
+        expect(result.current.data?.data.connection?.status).toBe("connected")
+      );
+      // Connected: no more asking.
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(getStore).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("shows once the backend answers", async () => {

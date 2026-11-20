@@ -10,6 +10,8 @@ export const storeQueryKey = (organizationId?: string) => [
   organizationId
 ];
 
+const SETTING_UP_POLL_MS = 5_000;
+
 /**
  * GET /organizations/stores. Until the store backend is live in production
  * the route answers 404, and the Store page and its menu item stay hidden;
@@ -17,8 +19,13 @@ export const storeQueryKey = (organizationId?: string) => [
  *
  * `fresh` refetches when the caller mounts (the Store page); the layout
  * leaves it off so the menu asks only once per session.
+ * `pollWhileSettingUp` asks again every 5 s while the store is "connecting",
+ * until its status changes (setup takes under a minute).
  */
-export function useStore({ fresh = false }: { fresh?: boolean } = {}) {
+export function useStore({
+  fresh = false,
+  pollWhileSettingUp = false
+}: { fresh?: boolean; pollWhileSettingUp?: boolean } = {}) {
   const organizationId = useOrganizationStore(
     (state) => state.activeOrganization?._id
   );
@@ -31,6 +38,11 @@ export function useStore({ fresh = false }: { fresh?: boolean } = {}) {
     staleTime: fresh ? 0 : Infinity,
     refetchOnMount: fresh ? "always" : false,
     refetchOnWindowFocus: false,
+    refetchInterval: (current) =>
+      pollWhileSettingUp &&
+      current.state.data?.data.connection?.status === "connecting"
+        ? SETTING_UP_POLL_MS
+        : false,
     retry: (failureCount, error) => !isNotFoundError(error) && failureCount < 2
   });
   const isAvailable = canView && query.isSuccess;

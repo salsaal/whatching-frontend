@@ -10,7 +10,7 @@ import { storeScreen } from "@/lib/store";
 
 export default function StorePage() {
   return (
-    <StoreGate>
+    <StoreGate pollWhileSettingUp>
       {(data) => {
         const screen = storeScreen(data);
         return (

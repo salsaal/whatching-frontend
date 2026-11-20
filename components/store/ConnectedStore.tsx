@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Circle,
+  Clock,
   ExternalLink,
   Loader2,
   RefreshCw,
@@ -170,6 +171,7 @@ export function ConnectedStore({
   const [isTemplatesOpen, setIsTemplatesOpen] = useState(false);
   const [checkResult, setCheckResult] = useState<{
     reachable: boolean;
+    settingUp?: boolean;
     message?: string;
   } | null>(null);
   const [senderError, setSenderError] = useState<string | null>(null);
@@ -300,7 +302,8 @@ export function ConnectedStore({
               )}
             </div>
           </div>
-          {canManage && (
+          {/* Nothing to check until setup finishes. */}
+          {canManage && connection.status !== "connecting" && (
             <div className="flex shrink-0 flex-wrap gap-2">
               <Button
                 variant="outline"
@@ -348,18 +351,27 @@ export function ConnectedStore({
           <p
             className={cn(
               "flex items-center gap-2 border-t px-5 py-3 text-sm sm:px-6",
-              checkResult.reachable ? "text-primary" : "text-destructive"
+              checkResult.reachable
+                ? "text-primary"
+                : checkResult.settingUp
+                  ? "text-muted-foreground"
+                  : "text-destructive"
             )}
             role="status"
           >
             {checkResult.reachable ? (
               <CheckCircle2 className="size-4 shrink-0" />
+            ) : checkResult.settingUp ? (
+              <Clock className="size-4 shrink-0" />
             ) : (
               <AlertTriangle className="size-4 shrink-0" />
             )}
             {checkResult.reachable
               ? "Store reached, everything's working."
-              : checkResult.message || "We couldn't reach your store just now."}
+              : checkResult.message ||
+                (checkResult.settingUp
+                  ? "We're still setting up your store."
+                  : "We couldn't reach your store just now.")}
           </p>
         )}
 

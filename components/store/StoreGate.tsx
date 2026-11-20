@@ -15,12 +15,15 @@ import { storeErrorMessage } from "@/lib/store";
  * to Overview, so nobody sees a broken or half-hidden feature.
  */
 export function StoreGate({
-  children
+  children,
+  pollWhileSettingUp = false
 }: {
   children: (data: StoreResponse["data"]) => ReactNode;
+  /** The Store page; the return page polls on its own. */
+  pollWhileSettingUp?: boolean;
 }) {
   const router = useRouter();
-  const store = useStore({ fresh: true });
+  const store = useStore({ fresh: true, pollWhileSettingUp });
 
   useEffect(() => {
     if (store.isHidden) router.replace("/overview");

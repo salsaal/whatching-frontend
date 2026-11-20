@@ -74,7 +74,7 @@ import {
 } from "@/lib/displayFormat";
 import {
   contactFullName,
-  formatPhoneNumber,
+  whatsappContactLine,
   whatsappContactName
 } from "@/lib/inbox";
 import {
@@ -106,16 +106,20 @@ const recipientFilters = [
   { value: "skipped", label: "Skipped" }
 ] as const;
 
-const recipientName = (recipient: BroadcastRecipient) =>
-  whatsappContactName({
-    ...recipient.subscriberId,
-    phoneNumber: recipient.phoneNumber || recipient.subscriberId?.phoneNumber
-  });
+// The recipient as a contact: the number it was sent to, else the contact's.
+const recipientContact = (recipient: BroadcastRecipient) => ({
+  ...recipient.subscriberId,
+  phoneNumber: recipient.phoneNumber || recipient.subscriberId?.phoneNumber
+});
 
-// The phone line under the name; empty when there's none or the name is it.
-const recipientPhoneLine = (recipient: BroadcastRecipient) => {
-  const phone = formatPhoneNumber(recipient.phoneNumber);
-  return phone === recipientName(recipient) ? "" : phone;
+const recipientName = (recipient: BroadcastRecipient) =>
+  whatsappContactName(recipientContact(recipient));
+
+// The line under the name: the phone, else @username; empty when there's
+// neither or the name already says it.
+const recipientContactLine = (recipient: BroadcastRecipient) => {
+  const line = whatsappContactLine(recipientContact(recipient));
+  return line === recipientName(recipient) ? "" : line;
 };
 
 // What "Open conversation" searches the inbox for.
@@ -311,6 +315,7 @@ function BroadcastDetailsPageContent() {
       (recipient) =>
         !query ||
         recipientName(recipient).toLowerCase().includes(query) ||
+        recipientContactLine(recipient).toLowerCase().includes(query) ||
         (recipient.phoneNumber || "").includes(query)
     );
   }, [data?.pages, search]);
@@ -769,9 +774,9 @@ function BroadcastDetailsPageContent() {
                                 <p className="font-medium">
                                   {recipientName(recipient)}
                                 </p>
-                                {recipientPhoneLine(recipient) && (
+                                {recipientContactLine(recipient) && (
                                   <p className="text-xs text-muted-foreground">
-                                    {recipientPhoneLine(recipient)}
+                                    {recipientContactLine(recipient)}
                                   </p>
                                 )}
                               </td>
@@ -851,9 +856,9 @@ function BroadcastDetailsPageContent() {
                             <p className="font-medium">
                               {recipientName(recipient)}
                             </p>
-                            {recipientPhoneLine(recipient) && (
+                            {recipientContactLine(recipient) && (
                               <p className="text-xs text-muted-foreground">
-                                {recipientPhoneLine(recipient)}
+                                {recipientContactLine(recipient)}
                               </p>
                             )}
                             <span

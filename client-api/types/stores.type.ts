@@ -174,7 +174,8 @@ export interface StoreOrdersResponse {
 
 export interface StoreCheckResponse {
   status: string;
-  data: { reachable: boolean; message?: string };
+  /** settingUp: asked while the store is still connecting. */
+  data: { reachable: boolean; settingUp?: boolean; message?: string };
 }
 
 export interface StoreDisconnectResponse {

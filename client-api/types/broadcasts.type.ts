@@ -127,7 +127,8 @@ export interface BroadcastResponse {
       failedAt?: string;
       subscriberId?: {
         _id: string;
-        phoneNumber: string;
+        phoneNumber?: string;
+        whatsappUsername?: string;
         firstName?: string;
         lastName?: string;
         tags?: string[];
