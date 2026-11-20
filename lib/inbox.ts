@@ -2,6 +2,7 @@ import { formatPhoneNumberIntl } from "react-phone-number-input/input";
 
 import type {
   ChatMessage,
+  Conversation,
   ConversationChannel,
   ConversationStatus,
   UnsupportedMessageDetails
@@ -467,3 +468,52 @@ export const getCarouselCards = (payload: Record<string, unknown> = {}) => {
 
   return cards;
 };
+
+/** The first non-empty string, trimmed. */
+export const getString = (...values: unknown[]) => {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+};
+
+/** The contact's name, else their Instagram handle or phone number. */
+export const subscriberName = (conversation?: Conversation | null) => {
+  const subscriber = conversation?.subscriberId;
+  const name = [subscriber?.firstName, subscriber?.lastName]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+  if (name) return name;
+  if (conversation?.channel === "instagram") {
+    const handle = subscriberHandle(conversation);
+    if (handle.startsWith("@")) return handle;
+  }
+  return (
+    formatPhoneNumber(subscriber?.phoneNumber || subscriber?.waId) || "Customer"
+  );
+};
+
+/** The phone number, or the @handle for Instagram. */
+export function subscriberHandle(conversation?: Conversation | null) {
+  const subscriber = conversation?.subscriberId;
+  if (!subscriber) return "";
+  if (conversation?.channel === "instagram") {
+    const username = getString(
+      subscriber.instagramUsername,
+      subscriber.metadata?.instagramUsername,
+      subscriber.metadata?.username,
+      subscriber.metadata?.igUsername
+    );
+    if (username) return username.startsWith("@") ? username : `@${username}`;
+    return getString(
+      subscriber.instagramUserId,
+      subscriber.metadata?.instagramUserId,
+      "Instagram user"
+    );
+  }
+  return (
+    formatPhoneNumber(getString(subscriber.phoneNumber, subscriber.waId)) ||
+    getString(conversation?.channel)
+  );
+}

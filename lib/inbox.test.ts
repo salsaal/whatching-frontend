@@ -17,7 +17,8 @@ import {
   isUnsupportedMessageText,
   parseWhatsAppFormatting,
   rewriteSystemNote,
-  stripWhatsAppFormatting
+  stripWhatsAppFormatting,
+  subscriberName
 } from "./inbox";
 
 describe("parseWhatsAppFormatting", () => {
@@ -357,5 +358,41 @@ describe("reactions", () => {
   it("describes a reaction whose message isn't loaded", () => {
     expect(describeReaction(reaction("👍"))).toBe("Reacted 👍 to a message");
     expect(describeReaction(reaction(null))).toBe("Removed a reaction");
+  });
+});
+
+describe("subscriberName", () => {
+  const conversation = (
+    channel: "whatsapp" | "instagram",
+    subscriber: Record<string, unknown>
+  ) =>
+    ({
+      channel,
+      subscriberId: { _id: "s1", ...subscriber }
+    }) as unknown as Parameters<typeof subscriberName>[0];
+
+  it("uses the contact's name first", () => {
+    expect(
+      subscriberName(
+        conversation("whatsapp", {
+          firstName: "Asha",
+          lastName: "Rao",
+          phoneNumber: "919876543210"
+        })
+      )
+    ).toBe("Asha Rao");
+  });
+
+  it("falls back to the Instagram handle", () => {
+    expect(
+      subscriberName(conversation("instagram", { instagramUsername: "asha" }))
+    ).toBe("@asha");
+  });
+
+  it("falls back to the phone number, then to Customer", () => {
+    expect(
+      subscriberName(conversation("whatsapp", { phoneNumber: "919876543210" }))
+    ).not.toBe("Customer");
+    expect(subscriberName(conversation("whatsapp", {}))).toBe("Customer");
   });
 });

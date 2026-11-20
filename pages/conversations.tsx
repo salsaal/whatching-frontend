@@ -25,7 +25,6 @@ import {
   Send,
   SlidersHorizontal,
   Trash2,
-  UserRound,
   Video,
   X
 } from "lucide-react";
@@ -76,7 +75,6 @@ import {
 } from "@/client-api/functions/bot";
 import {
   getAllSubscribers,
-  refreshInstagramPicture,
   updateSubscriber
 } from "@/client-api/functions/subscribers";
 import { getAllTemplates } from "@/client-api/functions/templates";
@@ -126,7 +124,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from "@/components/ui/alert-dialog";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -153,6 +150,7 @@ import {
   SelectValue
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { ContactAvatar } from "@/components/inbox/ContactAvatar";
 import { QueryErrorState } from "@/components/shared/QueryErrorState";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
@@ -171,17 +169,19 @@ import {
   formatClockTime,
   formatDayDivider,
   formatListTime,
-  formatPhoneNumber,
   formatUntil,
   getCarouselCards,
+  getString,
   insertMessageInOrder,
   isReactionMessage,
   isUnsupportedMessageText,
   messageTimestamp,
   parseWhatsAppFormatting,
-  rewriteSystemNote
+  rewriteSystemNote,
+  subscriberHandle,
+  subscriberName
 } from "@/lib/inbox";
-import { formatWhen, getInitials } from "@/lib/displayFormat";
+import { formatWhen } from "@/lib/displayFormat";
 import {
   findSlashQuery,
   firstLine,
@@ -224,45 +224,6 @@ const channelOptions: Array<{
 const CONTACT_SEARCH_PAGE_SIZE = 50;
 
 const formatDateTime = (value?: string | null) => formatWhen(value);
-
-const subscriberName = (conversation?: Conversation | null) => {
-  const subscriber = conversation?.subscriberId;
-  const name = [subscriber?.firstName, subscriber?.lastName]
-    .filter(Boolean)
-    .join(" ")
-    .trim();
-  if (name) return name;
-  if (conversation?.channel === "instagram") {
-    const handle = subscriberHandle(conversation);
-    if (handle.startsWith("@")) return handle;
-  }
-  return (
-    formatPhoneNumber(subscriber?.phoneNumber || subscriber?.waId) || "Customer"
-  );
-};
-
-function subscriberHandle(conversation?: Conversation | null) {
-  const subscriber = conversation?.subscriberId;
-  if (!subscriber) return "";
-  if (conversation?.channel === "instagram") {
-    const username = getString(
-      subscriber.instagramUsername,
-      subscriber.metadata?.instagramUsername,
-      subscriber.metadata?.username,
-      subscriber.metadata?.igUsername
-    );
-    if (username) return username.startsWith("@") ? username : `@${username}`;
-    return getString(
-      subscriber.instagramUserId,
-      subscriber.metadata?.instagramUserId,
-      "Instagram user"
-    );
-  }
-  return (
-    formatPhoneNumber(getString(subscriber.phoneNumber, subscriber.waId)) ||
-    getString(conversation?.channel)
-  );
-}
 
 // The line under the contact's name: the phone number or handle, unless the
 // name already is that.
@@ -452,13 +413,6 @@ const asRecord = (value: unknown): Record<string, unknown> =>
   value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
-
-const getString = (...values: unknown[]) => {
-  for (const value of values) {
-    if (typeof value === "string" && value.trim()) return value.trim();
-  }
-  return "";
-};
 
 const toExternalUrl = (value: string) =>
   /^https?:\/\//i.test(value) ? value : `https://${value}`;
@@ -804,95 +758,6 @@ const renderOutboundStatusIcon = (status: ChatMessage["status"]) => {
 
   return <CheckCheck className="size-3" aria-label="Sent" />;
 };
-
-// Instagram picture links expire after a few days. When one fails, the
-// server is asked for a fresh link once per contact per page load; every
-// avatar of that contact shares the answer.
-const instagramPictureRefreshes = new Map<string, Promise<string | null>>();
-const refreshInstagramPictureOnce = (subscriberId: string) => {
-  let pending = instagramPictureRefreshes.get(subscriberId);
-  if (!pending) {
-    pending = refreshInstagramPicture(subscriberId)
-      .then((result) => result.profilePictureUrl)
-      .catch(() => null);
-    instagramPictureRefreshes.set(subscriberId, pending);
-  }
-  return pending;
-};
-
-function ContactAvatar({
-  conversation,
-  className,
-  fallbackClassName,
-  withChannel = false
-}: {
-  conversation: Conversation;
-  className?: string;
-  fallbackClassName?: string;
-  withChannel?: boolean;
-}) {
-  const subscriberId = conversation.subscriberId?._id;
-  const storedPictureUrl =
-    conversation.subscriberId?.instagramProfilePictureUrl;
-  // Tied to the contact: the header avatar stays mounted across chats.
-  const [freshPicture, setFreshPicture] = useState<{
-    subscriberId: string;
-    url: string;
-  } | null>(null);
-  const freshPictureUrl =
-    freshPicture && freshPicture.subscriberId === subscriberId
-      ? freshPicture.url
-      : null;
-  const pictureUrl = freshPictureUrl || storedPictureUrl;
-  const isInstagram = conversation.channel === "instagram";
-  const handlePictureStatus = (status: string) => {
-    if (status !== "error" || !subscriberId || freshPictureUrl) return;
-    void refreshInstagramPictureOnce(subscriberId).then((url) => {
-      // The same link would fail again; keep the initials instead.
-      if (url && url !== storedPictureUrl) {
-        setFreshPicture({ subscriberId, url });
-      }
-    });
-  };
-  return (
-    <div className="relative shrink-0">
-      <Avatar className={className}>
-        {pictureUrl && (
-          <AvatarImage
-            src={pictureUrl}
-            alt={subscriberName(conversation)}
-            onLoadingStatusChange={handlePictureStatus}
-          />
-        )}
-        <AvatarFallback
-          className={cn("bg-primary/10 text-primary", fallbackClassName)}
-        >
-          {getInitials(subscriberName(conversation)) || (
-            <UserRound className="size-[55%]" aria-hidden />
-          )}
-        </AvatarFallback>
-      </Avatar>
-      {withChannel && (
-        <span
-          className={cn(
-            "absolute -bottom-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full text-white ring-2 ring-white",
-            isInstagram
-              ? "bg-gradient-to-tr from-amber-400 via-pink-500 to-purple-600"
-              : "bg-emerald-500"
-          )}
-          title={isInstagram ? "Instagram" : "WhatsApp"}
-          aria-label={isInstagram ? "Instagram" : "WhatsApp"}
-        >
-          {isInstagram ? (
-            <Instagram className="size-2.5" />
-          ) : (
-            <FaWhatsapp className="size-2.5" />
-          )}
-        </span>
-      )}
-    </div>
-  );
-}
 
 function ConversationListItem({
   conversation,
