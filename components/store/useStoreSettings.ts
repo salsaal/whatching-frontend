@@ -1,14 +1,12 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-import { updateStoreSettings } from "@/client-api/functions/stores";
 import type {
   StoreResponse,
   UpdateStoreSettingsPayload
 } from "@/client-api/types/stores.type";
-import { storeQueryKey } from "@/hooks/useStore";
+import { useStoreApi } from "@/components/store/StoreApiContext";
 import { storeErrorMessage } from "@/lib/store";
-import { useOrganizationStore } from "@/stores/organizationStore";
 
 /**
  * Saves one change to the store's settings (only the fields that changed).
@@ -17,23 +15,21 @@ import { useOrganizationStore } from "@/stores/organizationStore";
  */
 export function useStoreSettings(connectionId: string) {
   const queryClient = useQueryClient();
-  const organizationId = useOrganizationStore(
-    (state) => state.activeOrganization?._id
-  );
+  const api = useStoreApi();
   const { mutateAsync, isPending } = useMutation({
     mutationFn: (payload: UpdateStoreSettingsPayload) =>
-      updateStoreSettings({ connectionId, payload }),
+      api.updateSettings({ connectionId, payload }),
     meta: { showToast: false },
     onSuccess: (response) => {
-      queryClient.setQueryData<StoreResponse>(
-        storeQueryKey(organizationId),
-        (current) =>
-          current
-            ? {
-                ...current,
-                data: { ...current.data, connection: response.data.connection }
-              }
-            : current
+      // The Shopify screens' store data has more fields; only the
+      // connection changes, so the rest is kept as it is.
+      queryClient.setQueryData<StoreResponse>(api.storeKey, (current) =>
+        current
+          ? {
+              ...current,
+              data: { ...current.data, connection: response.data.connection }
+            }
+          : current
       );
     }
   });

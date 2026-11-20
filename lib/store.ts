@@ -4,13 +4,15 @@
 
 import type { AxiosError } from "axios";
 
-import type { MessageTemplate } from "@/client-api/types/templates.type";
 import type {
   StoreCodState,
   StoreConnection,
   StoreCustomStatusRule,
   StoreFixedMessageKind,
-  StoreResponse
+  StorePlatform,
+  StoreResponse,
+  StoreSettings,
+  StoreTemplateChoice
 } from "@/client-api/types/stores.type";
 import type { BadgeTone } from "@/lib/statusPresentation";
 
@@ -39,6 +41,24 @@ export const STORE_MESSAGE_COPY: Record<
   },
   order_cancelled: { title: "Order cancelled", help: "" }
 };
+
+// Shopify has no order statuses to pick: fulfilling the order sends it.
+const SHOPIFY_MESSAGE_COPY: Partial<
+  Record<StoreFixedMessageKind, { title: string; help: string }>
+> = {
+  order_shipped: {
+    title: "Order shipped",
+    help: "Sent when you mark the order fulfilled in Shopify."
+  }
+};
+
+/** A message card's title and help text, worded for the store's platform. */
+export const storeMessageCopy = (
+  kind: StoreFixedMessageKind,
+  platform?: StorePlatform
+) =>
+  (platform === "shopify" && SHOPIFY_MESSAGE_COPY[kind]) ||
+  STORE_MESSAGE_COPY[kind];
 
 export const COD_STATE_LABELS: Record<StoreCodState, string> = {
   awaiting: "Waiting for customer",
@@ -132,10 +152,11 @@ export const storeMessageStatusPresentation = (
 /** The card title for a message kind, including extra status messages. */
 export const storeMessageTitle = (
   kind: string,
-  customRules: StoreCustomStatusRule[] = []
+  customRules: StoreCustomStatusRule[] = [],
+  platform?: StorePlatform
 ) => {
   if (kind in STORE_MESSAGE_COPY) {
-    return STORE_MESSAGE_COPY[kind as StoreFixedMessageKind].title;
+    return storeMessageCopy(kind as StoreFixedMessageKind, platform).title;
   }
   if (kind.startsWith("status_")) {
     const slug = kind.slice("status_".length);
@@ -150,6 +171,10 @@ export const humanizeStatus = (slug: string) => {
   const words = slug.replace(/^wc-/, "").replace(/[-_]+/g, " ").trim();
   return words ? words.charAt(0).toUpperCase() + words.slice(1) : slug;
 };
+
+/** "1201" as "#1201"; Shopify's numbers come without the "#". */
+export const formatOrderNumber = (orderNumber?: string | number | null) =>
+  `#${String(orderNumber ?? "").replace(/^#+/, "")}`;
 
 export const formatOrderTotal = (total?: string | null, currency?: string) => {
   const amount = Number(total);
@@ -185,8 +210,8 @@ export const parseTemplateChoiceKey = (key: string) => {
  * WhatsApp account of the sending number when that's known. Approved
  * first.
  */
-export const storeTemplateOptions = (
-  templates: MessageTemplate[],
+export const storeTemplateOptions = <T extends StoreTemplateChoice>(
+  templates: T[],
   wabaId?: string | null
 ) =>
   templates
@@ -200,6 +225,32 @@ export const storeTemplateOptions = (
       const approvedB = String(b.status).toUpperCase() === "APPROVED" ? 0 : 1;
       return approvedA - approvedB || a.name.localeCompare(b.name);
     });
+
+/**
+ * Whether every message that's on has a template (`chosen`), and whether
+ * all of those are approved by WhatsApp (`ready`).
+ */
+export const storeTemplatesState = (
+  messages: StoreSettings["messages"] = {},
+  templates: StoreTemplateChoice[]
+) => {
+  const isOn = (kind: StoreFixedMessageKind) =>
+    messages[kind]?.enabled !== false;
+  const chosen = STORE_MESSAGE_KINDS.every(
+    (kind) => !isOn(kind) || Boolean(messages[kind]?.templateName)
+  );
+  const ready = STORE_MESSAGE_KINDS.every((kind) => {
+    if (!isOn(kind)) return true;
+    const setting = messages[kind];
+    const template = templates.find(
+      (entry) =>
+        entry.name === setting?.templateName &&
+        entry.language === setting?.templateLanguage
+    );
+    return String(template?.status || "").toUpperCase() === "APPROVED";
+  });
+  return { chosen, ready };
+};
 
 /** "mystore.com/" and "https://mystore.com" read the same in a sentence. */
 export const displayStoreUrl = (url?: string | null) =>

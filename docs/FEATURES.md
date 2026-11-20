@@ -164,6 +164,17 @@ Preview is intentionally not shown for control blocks such as the follower check
 - Settings save per change, sending only that field (`useStoreSettings`); the API's reason a template can't be used shows under its picker, and `warnings` show as toasts.
 - Inbox: order messages (`payload.storeOrder`) carry a "Store · Order #1201" label above the bubble.
 
+## Shopify (screens inside Shopify admin)
+
+- `/shopify`, opened by Shopify admin in an iframe when a merchant clicks the Whatching app; backed by `/api/v1/shopify` (`client-api/functions/shopify.ts`). Spec: the backend's `docs/SHOPIFY_EMBEDDED_FRONTEND_SPEC.md`. Not live yet: production answers 503 until the App Store submission.
+- No Whatching login: every request carries a fresh Shopify ID token (see `docs/ARCHITECTURE.md`, Shopify section). No pop-ups for essential steps: unlink confirmation and ready-made templates are inline.
+- Each open calls `POST /shopify/session`. With no link: the Link screen (email, password, the checkout opt-in checkbox, Connect; a workspace picker when the account has several; "Create an account" opens Whatching sign-up in a new tab). Linked: `GET /shopify/store`, polled every 5 s while `connecting`, and four tabs:
+  - Home: status and Check connection (hidden while connecting), plan notice, cost note, and the setup checklist (account linked with Unlink, WhatsApp connected or "Connect WhatsApp on Whatching", templates ready or "Create ready-made templates", and the checkout contact note with a Shopify Help Center link).
+  - Messages: the Store page's four cards; "Order shipped" is sent on fulfilment, so there's no status picker and no extra status messages.
+  - Cash on delivery: one toggle ("Cancel the order in Shopify when the customer taps Cancel"), its help text and the order tags line; no payment methods.
+  - Orders: the Store page's order log, without chat links.
+- A 409 `not_linked` on any store call goes back to the Link screen.
+
 ## Settings
 
 - Main settings page exists.

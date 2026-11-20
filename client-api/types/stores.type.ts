@@ -1,6 +1,9 @@
 // Store connections (WooCommerce order messages). Shapes follow the
 // backend's /organizations/stores routes; see docs/STORE_FRONTEND_SPEC.md
-// in the backend repo.
+// in the backend repo. The screens inside Shopify admin get the same shapes
+// from /shopify/store (types/shopify.type.ts).
+
+import type { MessageTemplate } from "./templates.type";
 
 export type StoreConnectionStatus =
   | "pending"
@@ -37,9 +40,12 @@ export interface StoreSettings {
   cod?: { autoCancel?: boolean; paymentMethods?: string[] };
 }
 
+/** WooCommerce from the Store page; Shopify from inside Shopify admin. */
+export type StorePlatform = "woocommerce" | "shopify";
+
 export interface StoreConnection {
   id: string;
-  platform: "woocommerce";
+  platform: StorePlatform;
   status: StoreConnectionStatus;
   storeUrl: string;
   storeName: string;
@@ -47,13 +53,24 @@ export interface StoreConnection {
   lastSyncAt?: string | null;
   lastWebhookAt?: string | null;
   attention?: {
-    reason?: "access_removed" | "unreachable" | string | null;
+    reason?:
+      | "access_removed"
+      | "unreachable"
+      | "reconnect_in_shopify"
+      | string
+      | null;
     message?: string | null;
   } | null;
   setupFailure?: { message: string } | null;
   disconnectedAt?: string | null;
   settings?: StoreSettings;
 }
+
+/** What a store message's template picker needs from a template. */
+export type StoreTemplateChoice = Pick<
+  MessageTemplate,
+  "name" | "language" | "category" | "status"
+> & { wabaId?: string };
 
 export interface StoreTemplateVariable {
   variable: string;

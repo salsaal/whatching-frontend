@@ -1,5 +1,7 @@
-import type { MessageTemplate } from "@/client-api/types/templates.type";
-import type { StoreTemplateVariable } from "@/client-api/types/stores.type";
+import type {
+  StoreTemplateChoice,
+  StoreTemplateVariable
+} from "@/client-api/types/stores.type";
 import {
   Select,
   SelectContent,
@@ -78,8 +80,8 @@ export function StoreTemplatePicker({
   id: string;
   templateName?: string | null;
   templateLanguage?: string | null;
-  options: MessageTemplate[];
-  allTemplates: MessageTemplate[];
+  options: StoreTemplateChoice[];
+  allTemplates: StoreTemplateChoice[];
   disabled?: boolean;
   error?: string | null;
   onChange: (choice: { name: string; language: string } | null) => void;

@@ -4,20 +4,22 @@ import { useRouter } from "next/router";
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { getStoreOrders } from "@/client-api/functions/stores";
 import { getSubscriberById } from "@/client-api/functions/subscribers";
 import type {
   StoreCustomStatusRule,
   StoreOrder,
-  StoreOrderStatus
+  StoreOrderStatus,
+  StorePlatform
 } from "@/client-api/types/stores.type";
 import { QueryErrorState } from "@/components/shared/QueryErrorState";
 import { Button } from "@/components/ui/button";
+import { useStoreApi } from "@/components/store/StoreApiContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatCount, formatWhen } from "@/lib/displayFormat";
 import { badgeToneClass } from "@/lib/statusPresentation";
 import {
   COD_STATE_LABELS,
+  formatOrderNumber,
   formatOrderTotal,
   humanizeStatus,
   storeErrorMessage,
@@ -71,10 +73,12 @@ function CustomerLink({ order }: { order: StoreOrder }) {
 
 function OrderMessages({
   order,
-  customRules
+  customRules,
+  platform
 }: {
   order: StoreOrder;
   customRules: StoreCustomStatusRule[];
+  platform?: StorePlatform;
 }) {
   if (!order.messages.length) {
     return <span className="text-muted-foreground">-</span>;
@@ -88,7 +92,7 @@ function OrderMessages({
           <li key={`${message.kind}-${index}`} className="text-xs">
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="font-medium">
-                {storeMessageTitle(message.kind, customRules)}
+                {storeMessageTitle(message.kind, customRules, platform)}
               </span>
               <span
                 className={cn(
@@ -112,17 +116,20 @@ function OrderMessages({
 /** Section G: recent orders and what was sent for each, 25 a page. */
 export function StoreOrderLog({
   connectionId,
-  customRules,
-  statuses
+  customRules = [],
+  statuses = [],
+  platform
 }: {
   connectionId: string;
-  customRules: StoreCustomStatusRule[];
-  statuses: StoreOrderStatus[];
+  customRules?: StoreCustomStatusRule[];
+  statuses?: StoreOrderStatus[];
+  platform?: StorePlatform;
 }) {
+  const api = useStoreApi();
   const [page, setPage] = useState(1);
   const { data, isLoading, isError, error, isFetching } = useQuery({
-    queryKey: ["store-orders", connectionId, page],
-    queryFn: () => getStoreOrders({ connectionId, page, limit: PAGE_SIZE }),
+    queryKey: api.ordersKey(connectionId, page),
+    queryFn: () => api.getOrders({ connectionId, page, limit: PAGE_SIZE }),
     placeholderData: keepPreviousData,
     refetchInterval: 60_000
   });
@@ -183,13 +190,19 @@ export function StoreOrderLog({
               {orders.map((order) => (
                 <tr key={order.id} className="border-b align-top last:border-0">
                   <td className="px-4 py-3">
-                    <p className="font-medium">#{order.orderNumber}</p>
+                    <p className="font-medium">
+                      {formatOrderNumber(order.orderNumber)}
+                    </p>
                     <p className="text-xs text-muted-foreground">
                       {statusName(order.status)}
                     </p>
                   </td>
                   <td className="px-4 py-3">
-                    <CustomerLink order={order} />
+                    {api.opensChats ? (
+                      <CustomerLink order={order} />
+                    ) : (
+                      <span>{order.customerName || "Customer"}</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap tabular-nums">
                     {formatOrderTotal(order.total, order.currency)}
@@ -205,7 +218,11 @@ export function StoreOrderLog({
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    <OrderMessages order={order} customRules={customRules} />
+                    <OrderMessages
+                      order={order}
+                      customRules={customRules}
+                      platform={platform}
+                    />
                   </td>
                 </tr>
               ))}

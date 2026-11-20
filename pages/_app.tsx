@@ -22,6 +22,7 @@ import { AppErrorBoundary } from "@/components/shared/AppErrorBoundary";
 import { humanizeBillingMessage } from "@/lib/billing";
 import { describePermission } from "@/lib/permissions";
 import { initSentry } from "@/lib/sentry";
+import { isShopifyPath } from "@/lib/shopify";
 import { NuqsAdapter } from "nuqs/adapters/next/pages";
 
 // Module scope so this also runs on the very first client render, not just
@@ -237,6 +238,10 @@ const pageMeta: Record<string, PageMeta> = {
     title: "Store | Whatching",
     description: "Finishing your store connection."
   },
+  "/shopify": {
+    title: "Whatching",
+    description: "Send order updates to your Shopify customers on WhatsApp."
+  },
   "/settings/help": {
     title: "Help and Support | Whatching",
     description:
@@ -336,6 +341,11 @@ export default function CustomApp({ Component, pageProps }: AppProps) {
   fixSSRLayout();
   const router = useRouter();
   const meta = getPageMeta(router.pathname);
+  const page = (
+    <AppErrorBoundary resetKey={router.asPath}>
+      <Component {...pageProps} />
+    </AppErrorBoundary>
+  );
 
   return (
     <main className={`${archivo.variable} ${inter.variable}`}>
@@ -353,11 +363,13 @@ export default function CustomApp({ Component, pageProps }: AppProps) {
       <QueryClientProvider client={queryClient}>
         <NuqsAdapter>
           <Toaster richColors position="top-right" />
-          <RouteGuard>
-            <AppErrorBoundary resetKey={router.asPath}>
-              <Component {...pageProps} />
-            </AppErrorBoundary>
-          </RouteGuard>
+          {/* Inside Shopify admin there's no Whatching login: each request
+              carries a Shopify ID token instead. */}
+          {isShopifyPath(router.pathname) ? (
+            page
+          ) : (
+            <RouteGuard>{page}</RouteGuard>
+          )}
         </NuqsAdapter>
       </QueryClientProvider>
     </main>

@@ -3,7 +3,6 @@ import {
   AlertTriangle,
   CheckCircle2,
   Circle,
-  Clock,
   ExternalLink,
   Loader2,
   RefreshCw,
@@ -19,9 +18,11 @@ import {
 } from "@/client-api/functions/stores";
 import { getAllTemplates } from "@/client-api/functions/templates";
 import type {
+  StoreCheckResponse,
   StoreConnection,
   StoreResponse
 } from "@/client-api/types/stores.type";
+import { StoreCheckNote } from "@/components/store/StoreCheckNote";
 import { StoreCodSection } from "@/components/store/StoreCodSection";
 import { StoreMessagesSection } from "@/components/store/StoreMessagesSection";
 import { StoreOrderLog } from "@/components/store/StoreOrderLog";
@@ -52,11 +53,11 @@ import { formatWhen } from "@/lib/displayFormat";
 import { formatPhoneNumber } from "@/lib/inbox";
 import { badgeToneClass } from "@/lib/statusPresentation";
 import {
-  STORE_MESSAGE_KINDS,
   displayStoreUrl,
   storeErrorMessage,
   storeStatusPresentation,
-  storeTemplateOptions
+  storeTemplateOptions,
+  storeTemplatesState
 } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { useOrganizationStore } from "@/stores/organizationStore";
@@ -169,11 +170,9 @@ export function ConnectedStore({
   const { save } = useStoreSettings(connection.id);
   const [endAction, setEndAction] = useState<EndAction | null>(null);
   const [isTemplatesOpen, setIsTemplatesOpen] = useState(false);
-  const [checkResult, setCheckResult] = useState<{
-    reachable: boolean;
-    settingUp?: boolean;
-    message?: string;
-  } | null>(null);
+  const [checkResult, setCheckResult] = useState<
+    StoreCheckResponse["data"] | null
+  >(null);
   const [senderError, setSenderError] = useState<string | null>(null);
 
   const { data: templatesData } = useQuery({
@@ -233,22 +232,9 @@ export function ConnectedStore({
   });
 
   const status = storeStatusPresentation(connection.status);
-  const messages = connection.settings?.messages || {};
-  const templatesReady = STORE_MESSAGE_KINDS.every((kind) => {
-    const setting = messages[kind];
-    if (setting?.enabled === false) return true;
-    if (!setting?.templateName) return false;
-    const template = allTemplates.find(
-      (entry) =>
-        entry.name === setting.templateName &&
-        entry.language === setting.templateLanguage
-    );
-    return String(template?.status || "").toUpperCase() === "APPROVED";
-  });
-  // Every message that's on has a template, some still in review.
-  const templatesChosen = STORE_MESSAGE_KINDS.every(
-    (kind) => messages[kind]?.enabled === false || messages[kind]?.templateName
-  );
+  // Chosen: every message that's on has a template, some may be in review.
+  const { ready: templatesReady, chosen: templatesChosen } =
+    storeTemplatesState(connection.settings?.messages, allTemplates);
   const needsSender = numbers.length > 1;
   const checklistDone = templatesReady && (!needsSender || Boolean(senderId));
 
@@ -348,31 +334,10 @@ export function ConnectedStore({
         )}
 
         {checkResult && (
-          <p
-            className={cn(
-              "flex items-center gap-2 border-t px-5 py-3 text-sm sm:px-6",
-              checkResult.reachable
-                ? "text-primary"
-                : checkResult.settingUp
-                  ? "text-muted-foreground"
-                  : "text-destructive"
-            )}
-            role="status"
-          >
-            {checkResult.reachable ? (
-              <CheckCircle2 className="size-4 shrink-0" />
-            ) : checkResult.settingUp ? (
-              <Clock className="size-4 shrink-0" />
-            ) : (
-              <AlertTriangle className="size-4 shrink-0" />
-            )}
-            {checkResult.reachable
-              ? "Store reached, everything's working."
-              : checkResult.message ||
-                (checkResult.settingUp
-                  ? "We're still setting up your store."
-                  : "We couldn't reach your store just now.")}
-          </p>
+          <StoreCheckNote
+            result={checkResult}
+            className="border-t px-5 py-3 sm:px-6"
+          />
         )}
 
         <p className="border-t px-5 py-3 text-xs text-muted-foreground sm:px-6">
@@ -509,6 +474,7 @@ export function ConnectedStore({
         open={isTemplatesOpen}
         onOpenChange={setIsTemplatesOpen}
         connectionId={connection.id}
+        platform={connection.platform}
         readyMadeTemplates={data.readyMadeTemplates}
         templateVariables={data.templateVariables}
       />

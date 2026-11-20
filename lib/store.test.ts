@@ -8,14 +8,17 @@ import type {
 
 import {
   displayStoreUrl,
+  formatOrderNumber,
   formatOrderTotal,
   humanizeStatus,
   parseTemplateChoiceKey,
+  storeMessageCopy,
   storeMessageStatusPresentation,
   storeMessageTitle,
   storeReturnOutcome,
   storeScreen,
   storeTemplateOptions,
+  storeTemplatesState,
   templateChoiceKey,
   unavailableCustomStatuses
 } from "./store";
@@ -93,6 +96,22 @@ describe("store messages", () => {
     expect(humanizeStatus("wc-packed")).toBe("Packed");
   });
 
+  it("words the shipped message for Shopify, where fulfilling sends it", () => {
+    expect(storeMessageCopy("order_shipped", "shopify")).toEqual({
+      title: "Order shipped",
+      help: "Sent when you mark the order fulfilled in Shopify."
+    });
+    expect(storeMessageTitle("order_shipped", [], "shopify")).toBe(
+      "Order shipped"
+    );
+    expect(storeMessageCopy("order_shipped", "woocommerce").title).toBe(
+      "Order completed / shipped"
+    );
+    expect(storeMessageCopy("order_confirmed", "shopify").title).toBe(
+      "Order confirmed"
+    );
+  });
+
   it("words every message status plainly", () => {
     expect(storeMessageStatusPresentation("skipped").label).toBe("Not sent");
     expect(storeMessageStatusPresentation("claimed").label).toBe("Sending");
@@ -139,6 +158,46 @@ describe("store templates", () => {
     ]);
   });
 
+  it("knows when every message that's on has an approved template", () => {
+    const templates = [
+      { name: "confirmed", language: "en", status: "APPROVED" },
+      { name: "cod", language: "en", status: "PENDING" }
+    ] as MessageTemplate[];
+    const on = (templateName?: string) => ({
+      enabled: true,
+      templateName,
+      templateLanguage: templateName ? "en" : undefined
+    });
+    const off = { enabled: false };
+    expect(
+      storeTemplatesState(
+        {
+          order_confirmed: on("confirmed"),
+          cod_confirmation: on("cod"),
+          order_shipped: off,
+          order_cancelled: off
+        },
+        templates
+      )
+    ).toEqual({ chosen: true, ready: false });
+    expect(
+      storeTemplatesState(
+        {
+          order_confirmed: on("confirmed"),
+          cod_confirmation: off,
+          order_shipped: off,
+          order_cancelled: off
+        },
+        templates
+      )
+    ).toEqual({ chosen: true, ready: true });
+    // Messages are on unless turned off, so an empty store isn't ready.
+    expect(storeTemplatesState({}, templates)).toEqual({
+      chosen: false,
+      ready: false
+    });
+  });
+
   it("round-trips a template choice", () => {
     expect(templateChoiceKey("order_update", "en_US")).toBe(
       "order_update::en_US"
@@ -157,6 +216,8 @@ describe("store formatting", () => {
     expect(formatOrderTotal("1499.00", "INR")).toBe("₹1,499.00");
     expect(formatOrderTotal("12", undefined)).toBe("12.00");
     expect(formatOrderTotal(undefined)).toBe("-");
+    expect(formatOrderNumber("1201")).toBe("#1201");
+    expect(formatOrderNumber("#1201")).toBe("#1201");
     expect(displayStoreUrl("https://mystore.com/")).toBe("mystore.com");
   });
 });

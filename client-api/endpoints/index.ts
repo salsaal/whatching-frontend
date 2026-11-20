@@ -142,6 +142,21 @@ export const STORE_ENDPOINTS = {
   BY_ID: (connectionId: string) => `${STORES_BASE}/${connectionId}`
 };
 
+// The screens inside Shopify admin (/shopify). Authorized by a Shopify ID
+// token per request (client-api/shopifyInstance), not the Whatching login.
+const SHOPIFY_BASE = "/shopify";
+
+export const SHOPIFY_ENDPOINTS = {
+  SESSION: `${SHOPIFY_BASE}/session`,
+  LINK: `${SHOPIFY_BASE}/link`,
+  UNLINK: `${SHOPIFY_BASE}/unlink`,
+  STORE: `${SHOPIFY_BASE}/store`,
+  STORE_SETTINGS: `${SHOPIFY_BASE}/store/settings`,
+  STORE_TEMPLATES: `${SHOPIFY_BASE}/store/templates`,
+  STORE_ORDERS: `${SHOPIFY_BASE}/store/orders`,
+  STORE_CHECK: `${SHOPIFY_BASE}/store/check`
+};
+
 export const MEDIA_ENDPOINTS = {
   GET_ALL: `${ORGANIZATIONS_BASE}/media`,
   UPLOAD: `${ORGANIZATIONS_BASE}/media/upload`,

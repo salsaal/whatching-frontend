@@ -43,6 +43,16 @@ The access token currently expires after 15 minutes and the refresh token after 
 
 Endpoint constants live in `client-api/endpoints/index.ts`; typed wrappers live in `client-api/functions/`; response/payload types live in `client-api/types/`.
 
+### Shopify section (`/shopify`)
+
+The screens inside Shopify admin are a separate section with no Whatching login:
+
+- `middleware.ts` (matcher `/shopify/*` only) sets `Content-Security-Policy: frame-ancestors https://<shop> https://admin.shopify.com;`, using `shop` only when it matches `name.myshopify.com` (`lib/shopify.ts`).
+- `pages/_document.tsx` puts the `shopify-api-key` meta tag and App Bridge (`cdn.shopify.com/shopifycloud/app-bridge.js`, no async/defer, first script in the head) on `/shopify` pages only.
+- `pages/_app.tsx` skips `RouteGuard` there; nothing reads the Whatching auth store.
+- `client-api/shopifyInstance/index.ts` is its own axios instance: no cookies, a fresh `shopify.idToken()` as the Bearer token on every request, and one retry on a 401 carrying `X-Shopify-Retry-Invalid-Session-Request`; a second refusal reads "Please reload the app.". Wrappers are in `client-api/functions/shopify.ts`.
+- The Store page's shared pieces (message cards, cash on delivery, orders, ready-made templates) send requests through `StoreApiContext` (`components/store/StoreApiContext.tsx`). It defaults to the organisation's store routes; `components/shopify/shopifyStoreApi.ts` provides the `/shopify/store/*` ones and sends the screen back to Link on a 409 `not_linked`. Wording follows `connection.platform`.
+
 Billing uses separate backend calls for profile and checkout. Paid subscribe/change saves the India billing profile through `PATCH /organizations/billing/profile`, then calls `POST /organizations/billing/subscribe` or `POST /organizations/billing/change-plan` with only `{ tier }`. The backend returns Razorpay `subscriptionId` and `key`; the frontend loads Checkout.js and opens it with `subscription_id`. In the current SPA flow, Checkout's `handler` redirects to `/congratulations`, and `/congratulations` polls `/billing/sync`. Webhooks remain the payment source of truth. Do not add `callback_url` to Razorpay subscription creation; Razorpay treats callback handling as a Checkout option, not a Subscriptions API create parameter.
 
 ## State Model

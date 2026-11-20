@@ -6,7 +6,8 @@ This document reflects the frontend and verified sibling-backend contracts on 20
 
 - The Store page (WooCommerce order messages) is built and stays hidden until `GET /organizations/stores` answers 200. The store backend isn't on production yet (it answers 404), so the page hasn't been tried against a real store. Do that once the backend says it's live.
 - Backend gap, known and accepted: broadcast audiences leave out contacts without a phone number (WhatsApp username only). The "Not sent: this customer hasn't shared their phone number." reason is built and will appear once broadcasts include them.
-- Coming later, not to build yet: `connection.platform` can become `"shopify"`. Shopify stores are linked from inside Shopify, not from the Store page. For them, hide the extra-status messages (`GET /stores/:connectionId/statuses` returns an empty list) and word Disconnect as "This stops Whatching messages for this store. To remove the Whatching app from Shopify, uninstall it in your Shopify admin." Wait for the backend's spec for the screens inside Shopify admin.
+- The Shopify screens inside Shopify admin (`/shopify`) are built and tested in jsdom, and a production build checked the header, App Bridge placement and the outside-Shopify message. They haven't run inside Shopify admin yet: that needs `NEXT_PUBLIC_SHOPIFY_API_KEY` locally, a frontend tunnel (its host added to `allowedDevOrigins`, development only) and the backend's dev tunnel as the API address. Production answers 503 until the App Store submission.
+- Still to do on the Whatching Store page for a Shopify store (`connection.platform === "shopify"`): word Disconnect as "This stops Whatching messages for this store. To remove the Whatching app from Shopify, uninstall it in your Shopify admin." The shared message cards and cash on delivery section already follow the platform.
 
 ## 2026-08-27 — Backend feature-parity pass
 

@@ -6,9 +6,9 @@ import type {
   StoreCustomStatusRule,
   StoreFixedMessageKind,
   StoreOrderStatus,
+  StoreTemplateChoice,
   StoreTemplateVariable
 } from "@/client-api/types/stores.type";
-import type { MessageTemplate } from "@/client-api/types/templates.type";
 import {
   StoreTemplatePicker,
   StoreVariableChips
@@ -26,15 +26,15 @@ import {
 import { Switch } from "@/components/ui/switch";
 import {
   MAX_CUSTOM_STATUS_RULES,
-  STORE_MESSAGE_COPY,
   STORE_MESSAGE_KINDS,
   humanizeStatus,
+  storeMessageCopy,
   unavailableCustomStatuses
 } from "@/lib/store";
 
-type TemplateLists = {
-  options: MessageTemplate[];
-  allTemplates: MessageTemplate[];
+export type StoreTemplateLists = {
+  options: StoreTemplateChoice[];
+  allTemplates: StoreTemplateChoice[];
 };
 
 // The API takes exactly these fields per rule (anything else is refused).
@@ -57,7 +57,7 @@ function MessageCard({
   connection: StoreConnection;
   kind: StoreFixedMessageKind;
   variables?: StoreTemplateVariable[];
-  templates: TemplateLists;
+  templates: StoreTemplateLists;
   canManage: boolean;
   statusPicker?: React.ReactNode;
 }) {
@@ -66,7 +66,7 @@ function MessageCard({
   const enabled = setting.enabled !== false;
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const copy = STORE_MESSAGE_COPY[kind];
+  const copy = storeMessageCopy(kind, connection.platform);
 
   const run = async (
     payload: Parameters<typeof save>[0],
@@ -195,7 +195,7 @@ function ExtraStatusMessages({
   statuses: StoreOrderStatus[];
   statusesError?: string | null;
   variables?: StoreTemplateVariable[];
-  templates: TemplateLists;
+  templates: StoreTemplateLists;
   canManage: boolean;
 }) {
   const { save } = useStoreSettings(connection.id);
@@ -353,22 +353,27 @@ function ExtraStatusMessages({
   );
 }
 
-/** Section E: one card per order message, plus extra status messages. */
+/**
+ * Section E: one card per order message, plus extra status messages.
+ * Shopify stores have neither the shipped status picker nor extra status
+ * messages: fulfilling an order sends "Order shipped".
+ */
 export function StoreMessagesSection({
   connection,
   templateVariables,
   templates,
-  statuses,
+  statuses = [],
   statusesError,
   canManage
 }: {
   connection: StoreConnection;
   templateVariables: Record<string, StoreTemplateVariable[]>;
-  templates: TemplateLists;
-  statuses: StoreOrderStatus[];
+  templates: StoreTemplateLists;
+  statuses?: StoreOrderStatus[];
   statusesError?: string | null;
   canManage: boolean;
 }) {
+  const hasOrderStatuses = connection.platform !== "shopify";
   return (
     <section className="space-y-4">
       <div>
@@ -388,7 +393,7 @@ export function StoreMessagesSection({
             templates={templates}
             canManage={canManage}
             statusPicker={
-              kind === "order_shipped" ? (
+              kind === "order_shipped" && hasOrderStatuses ? (
                 <ShippedStatusPicker
                   connection={connection}
                   statuses={statuses}
@@ -400,14 +405,16 @@ export function StoreMessagesSection({
           />
         ))}
       </div>
-      <ExtraStatusMessages
-        connection={connection}
-        statuses={statuses}
-        statusesError={statusesError}
-        variables={templateVariables.custom_status}
-        templates={templates}
-        canManage={canManage}
-      />
+      {hasOrderStatuses && (
+        <ExtraStatusMessages
+          connection={connection}
+          statuses={statuses}
+          statusesError={statusesError}
+          variables={templateVariables.custom_status}
+          templates={templates}
+          canManage={canManage}
+        />
+      )}
     </section>
   );
 }
