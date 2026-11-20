@@ -85,6 +85,7 @@ Frontend variable names currently referenced:
 - `NEXT_PUBLIC_META_EMBEDDED_SIGNUP_VERSION`
 - `NEXT_PUBLIC_DOMAIN`
 - `NEXT_PUBLIC_SHOPIFY_API_KEY`: the Shopify app's Client ID (not secret, but kept out of docs and chat). Read by `_document` for `/shopify` pages only; fixed at build time, so Vercel needs a redeploy after adding it.
+- `DEV_ALLOWED_ORIGINS`: development only. Comma-separated hosts (such as a temporary HTTPS tunnel) allowed to load the dev server; read into `allowedDevOrigins` in `next.config.ts`. Put it, and a temporary `NEXT_PUBLIC_API_BASE_URL`, in a git-ignored `.env.development.local` for tunnel tests, and delete that file afterwards.
 - `NEXT_APP_BASE_URL`
 - `NEXT_APP_ENCRYPTION_KEY`
 - `NEXT_APP_TOKEN_NAME`
@@ -170,7 +171,7 @@ Manual checks recommended after multi-number changes:
 ## Troubleshooting
 
 - Every page answers 500 in `npm run dev`: `npm run build` was run while the dev server was running and overwrote `.next`. Restart the dev server. To check a production build while `npm run dev` runs, build a copy of the repo elsewhere (with `node_modules` linked) instead.
-- `/shopify` says "Open Whatching from your Shopify admin.": App Bridge only works inside Shopify admin's iframe. To test there, the dev server needs an HTTPS tunnel with no browser warning page (a free ngrok page shows one inside the iframe), and the tunnel's host in `allowedDevOrigins` in `next.config.ts` (development only).
+- `/shopify` says "Open Whatching from your Shopify admin.": App Bridge only works inside Shopify admin's iframe. To test there, the dev server needs an HTTPS tunnel with no browser warning page (a free ngrok page shows one inside the iframe), and the tunnel's host in `DEV_ALLOWED_ORIGINS`. Both API clients send ngrok's skip-warning header when the API address is an `ngrok-free.app` or `ngrok-free.dev` tunnel.
 - 401 loops: check access token persistence, refresh token cookies, `NEXT_PUBLIC_API_BASE_URL`, and CORS credentials.
 - Missing `x-org-id`: check active organization hydration and `localStorage.orgId`.
 - Meta embedded signup not showing: check `NEXT_PUBLIC_META_APP_ID` and `NEXT_PUBLIC_META_EMBEDDED_SIGNUP_CONFIG_ID`.

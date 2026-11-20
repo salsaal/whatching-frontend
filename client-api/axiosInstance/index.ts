@@ -3,6 +3,7 @@ import { AuthUser } from "@/client-api/types/auth.type";
 import { useAuthStore } from "@/stores/authStore";
 import { useOrganizationStore } from "@/stores/organizationStore";
 import { AUTH_ENDPOINTS } from "../endpoints";
+import { NGROK_SKIP_HEADER, usesNgrokFreeTunnel } from "../ngrok";
 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_BASE_URL,
@@ -103,8 +104,8 @@ api.interceptors.request.use((config) => {
     config.headers["x-org-id"] = orgId;
   }
 
-  if (process.env.NEXT_PUBLIC_API_BASE_URL?.includes("ngrok-free.app")) {
-    config.headers["ngrok-skip-browser-warning"] = "true";
+  if (usesNgrokFreeTunnel(process.env.NEXT_PUBLIC_API_BASE_URL)) {
+    config.headers[NGROK_SKIP_HEADER] = "true";
   }
 
   return config;

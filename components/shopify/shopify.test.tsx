@@ -281,10 +281,15 @@ describe("Store screens", () => {
     expect(
       screen.getByRole("button", { name: "Create ready-made templates" })
     ).toBeTruthy();
-    expect(screen.getByText("WhatsApp option at checkout")).toBeTruthy();
+    expect(screen.getByText("Phone number at checkout")).toBeTruthy();
     expect(
-      screen.getByRole("link", { name: /Customer contact information/ })
+      screen.getByText(/set Shipping address phone number to Required/)
     ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: /Editing the checkout form options/ })
+        .getAttribute("href")
+    ).toContain("checkout-form-options#customer-contact-method");
     expect(
       screen.queryByText(/plan doesn’t include|plan doesn't include/)
     ).toBe(null);

@@ -5,6 +5,7 @@ import {
 } from "axios";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { usesNgrokFreeTunnel } from "@/client-api/ngrok";
 import shopifyApi, {
   NotInShopifyError,
   SHOPIFY_RELOAD_MESSAGE
@@ -55,6 +56,15 @@ beforeEach(() => {
 });
 afterEach(() => {
   delete window.shopify;
+});
+
+describe("usesNgrokFreeTunnel", () => {
+  it("spots ngrok's free domains, which need the skip-warning header", () => {
+    expect(usesNgrokFreeTunnel("https://abc.ngrok-free.dev/api/v1")).toBe(true);
+    expect(usesNgrokFreeTunnel("https://abc.ngrok-free.app")).toBe(true);
+    expect(usesNgrokFreeTunnel("https://api.whatching.com/api/v1")).toBe(false);
+    expect(usesNgrokFreeTunnel(undefined)).toBe(false);
+  });
 });
 
 describe("the Shopify request client", () => {

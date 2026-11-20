@@ -25,6 +25,13 @@ const nextConfig: NextConfig = {
     // removeConsole: process.env.NODE_ENV === "production"
   },
   typescript: { ignoreBuildErrors: false },
+  // Development only: other hosts allowed to load the dev server's pages
+  // and assets, such as a temporary HTTPS tunnel for testing inside
+  // Shopify admin. Comma-separated, e.g. in .env.development.local.
+  allowedDevOrigins: (process.env.DEV_ALLOWED_ORIGINS || "")
+    .split(",")
+    .map((host) => host.trim())
+    .filter(Boolean),
   async redirects() {
     return [
       // /bot has no page of its own; Settings is the default tab.

@@ -337,17 +337,19 @@ export function ShopifyHome({
             )}
           </Step>
 
-          <Step note title="WhatsApp option at checkout">
+          <Step note title="Phone number at checkout">
             <p className="mt-0.5 text-sm text-muted-foreground">
-              Turn on WhatsApp as a contact option at checkout in your Shopify
-              settings, so customers can share a WhatsApp number.{" "}
+              Order updates go to the phone number customers enter at checkout.
+              In Shopify, go to Settings › Checkout and set Shipping address
+              phone number to Required, or set the customer contact method to
+              Phone number or email.{" "}
               <a
                 href={SHOPIFY_CHECKOUT_CONTACT_HELP_URL}
                 target="_blank"
                 rel="noreferrer"
                 className={cn(outsideLink, "font-medium text-primary")}
               >
-                Customer contact information
+                Editing the checkout form options
                 <ExternalLink className="size-3.5" />
               </a>
             </p>

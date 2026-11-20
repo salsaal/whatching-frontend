@@ -1,5 +1,7 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from "axios";
 
+import { NGROK_SKIP_HEADER, usesNgrokFreeTunnel } from "../ngrok";
+
 /**
  * Requests from the screens inside Shopify admin (/shopify). There's no
  * Whatching login there and no cookies: every request carries a fresh
@@ -65,8 +67,8 @@ shopifyApi.interceptors.request.use(async (config) => {
   config.headers.set("Content-Type", "application/json");
   // Same as the main client: a test tunnel's warning page would answer
   // instead of the API otherwise.
-  if (process.env.NEXT_PUBLIC_API_BASE_URL?.includes("ngrok-free.app")) {
-    config.headers.set("ngrok-skip-browser-warning", "true");
+  if (usesNgrokFreeTunnel(process.env.NEXT_PUBLIC_API_BASE_URL)) {
+    config.headers.set(NGROK_SKIP_HEADER, "true");
   }
   return config;
 });
