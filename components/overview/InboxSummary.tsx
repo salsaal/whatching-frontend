@@ -101,48 +101,51 @@ export function InboxSummary() {
   return (
     <section className="grid gap-4 lg:grid-cols-5">
       <div className="flex flex-col rounded-lg border bg-white shadow-xs lg:col-span-3">
-        <div className="flex-1 p-5">
+        <div className="flex flex-1 flex-col p-5">
           <h2 className="text-sm font-semibold text-muted-foreground">
             Needs you
           </h2>
-          {caughtUp ? (
-            <div className="mt-4 flex items-center gap-3">
-              <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                <CheckCircle2 className="size-5" />
+          {/* Centred in the height the messages chart sets for the row. */}
+          <div className="flex flex-1 flex-col justify-center pt-3">
+            {caughtUp ? (
+              <div className="flex items-center gap-3">
+                <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                  <CheckCircle2 className="size-5" />
+                </div>
+                <div>
+                  <p className="font-heading text-xl font-semibold">
+                    You&apos;re all caught up
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    No unread chats, and nobody is waiting for a person.
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="font-heading text-xl font-semibold">
-                  You&apos;re all caught up
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  No unread chats, and nobody is waiting for a person.
-                </p>
+            ) : (
+              <div className="grid grid-cols-2 gap-6 sm:max-w-md">
+                <Count
+                  value={unread}
+                  label={unread === 1 ? "Unread chat" : "Unread chats"}
+                  attention={unread > 0}
+                />
+                <Count
+                  value={waiting}
+                  label="Waiting for a person"
+                  attention={waiting > 0}
+                />
               </div>
-            </div>
-          ) : (
-            <div className="mt-3 grid grid-cols-2 gap-6 sm:max-w-md">
-              <Count
-                value={unread}
-                label={unread === 1 ? "Unread chat" : "Unread chats"}
-                attention={unread > 0}
-              />
-              <Count
-                value={waiting}
-                label="Waiting for a person"
-                attention={waiting > 0}
-              />
-            </div>
-          )}
-          <Button
-            asChild
-            className="mt-5"
-            variant={caughtUp ? "outline" : "default"}
-          >
-            <Link href="/conversations">
-              <Inbox className="size-4" />
-              Open inbox
-            </Link>
-          </Button>
+            )}
+            <Button
+              asChild
+              className="mt-5 self-start"
+              variant={caughtUp ? "outline" : "default"}
+            >
+              <Link href="/conversations">
+                <Inbox className="size-4" />
+                Open inbox
+              </Link>
+            </Button>
+          </div>
         </div>
         {failed > 0 && (
           <Link
