@@ -13,6 +13,17 @@ export interface RecipientOutcome {
   tone: OutcomeTone;
 }
 
+// The backend skips a broadcast recipient without a phone number (a
+// WhatsApp customer who only shared a username) with this reason.
+const NO_PHONE_REASON = /does not have a whatsapp phone number/i;
+
+/** True for the backend's "no phone number" skip reason. */
+export const isNoPhoneSkipReason = (message?: string | null) =>
+  Boolean(message && NO_PHONE_REASON.test(message));
+
+export const NO_PHONE_SKIP_EXPLANATION =
+  "Not sent: this customer hasn't shared their phone number.";
+
 // Meta retries a 131049 (per-person marketing limit) recipient once, a
 // day later; the backend schedules it 24h10m after the deferral.
 const ENGAGEMENT_RETRY_DELAY_MS = (24 * 60 + 10) * 60 * 1000;
@@ -106,7 +117,9 @@ export const describeRecipientOutcome = ({
     case "skipped":
       return {
         label: "Skipped",
-        explanation: errorMessage || "",
+        explanation: isNoPhoneSkipReason(errorMessage)
+          ? NO_PHONE_SKIP_EXPLANATION
+          : errorMessage || "",
         tone: "grey"
       };
     case "canceled":

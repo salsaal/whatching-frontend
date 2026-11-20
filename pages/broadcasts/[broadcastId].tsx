@@ -73,7 +73,13 @@ import {
   formatWhen
 } from "@/lib/displayFormat";
 import {
+  contactFullName,
+  formatPhoneNumber,
+  whatsappContactName
+} from "@/lib/inbox";
+import {
   describeRecipientOutcome,
+  isNoPhoneSkipReason,
   outcomeToneClass
 } from "@/lib/recipientOutcome";
 import {
@@ -101,9 +107,20 @@ const recipientFilters = [
 ] as const;
 
 const recipientName = (recipient: BroadcastRecipient) =>
-  [recipient.subscriberId?.firstName, recipient.subscriberId?.lastName]
-    .filter(Boolean)
-    .join(" ") || recipient.phoneNumber;
+  whatsappContactName({
+    ...recipient.subscriberId,
+    phoneNumber: recipient.phoneNumber || recipient.subscriberId?.phoneNumber
+  });
+
+// The phone line under the name; empty when there's none or the name is it.
+const recipientPhoneLine = (recipient: BroadcastRecipient) => {
+  const phone = formatPhoneNumber(recipient.phoneNumber);
+  return phone === recipientName(recipient) ? "" : phone;
+};
+
+// What "Open conversation" searches the inbox for.
+const recipientSearch = (recipient: BroadcastRecipient) =>
+  recipient.phoneNumber || contactFullName(recipient.subscriberId);
 
 const recipientError = (recipient: BroadcastRecipient) => ({
   errorCode: recipient.errorCode || recipient.messageId?.errorCode,
@@ -294,7 +311,7 @@ function BroadcastDetailsPageContent() {
       (recipient) =>
         !query ||
         recipientName(recipient).toLowerCase().includes(query) ||
-        recipient.phoneNumber.includes(query)
+        (recipient.phoneNumber || "").includes(query)
     );
   }, [data?.pages, search]);
   const recipientsTotal =
@@ -737,8 +754,12 @@ function BroadcastDetailsPageContent() {
                             deferredAt: recipient.deferredAt,
                             ...recipientError(recipient)
                           });
-                          const metaText =
+                          const errorMessage =
                             recipientError(recipient).errorMessage;
+                          // The reworded no-phone reason needs no tooltip.
+                          const metaText = isNoPhoneSkipReason(errorMessage)
+                            ? ""
+                            : errorMessage;
                           return (
                             <tr
                               key={recipient._id}
@@ -748,9 +769,11 @@ function BroadcastDetailsPageContent() {
                                 <p className="font-medium">
                                   {recipientName(recipient)}
                                 </p>
-                                <p className="text-xs text-muted-foreground">
-                                  {recipient.phoneNumber}
-                                </p>
+                                {recipientPhoneLine(recipient) && (
+                                  <p className="text-xs text-muted-foreground">
+                                    {recipientPhoneLine(recipient)}
+                                  </p>
+                                )}
                               </td>
                               <td className="px-4 py-3">
                                 <span
@@ -802,7 +825,9 @@ function BroadcastDetailsPageContent() {
                                 )}
                               </td>
                               <td className="px-2 py-3">
-                                <RecipientMenu phone={recipient.phoneNumber} />
+                                <RecipientMenu
+                                  search={recipientSearch(recipient)}
+                                />
                               </td>
                             </tr>
                           );
@@ -826,9 +851,11 @@ function BroadcastDetailsPageContent() {
                             <p className="font-medium">
                               {recipientName(recipient)}
                             </p>
-                            <p className="text-xs text-muted-foreground">
-                              {recipient.phoneNumber}
-                            </p>
+                            {recipientPhoneLine(recipient) && (
+                              <p className="text-xs text-muted-foreground">
+                                {recipientPhoneLine(recipient)}
+                              </p>
+                            )}
                             <span
                               className={cn(
                                 "inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold",
@@ -843,7 +870,7 @@ function BroadcastDetailsPageContent() {
                               </p>
                             )}
                           </div>
-                          <RecipientMenu phone={recipient.phoneNumber} />
+                          <RecipientMenu search={recipientSearch(recipient)} />
                         </li>
                       );
                     })}
@@ -890,7 +917,8 @@ function BroadcastDetailsPageContent() {
   );
 }
 
-function RecipientMenu({ phone }: { phone: string }) {
+function RecipientMenu({ search }: { search: string }) {
+  if (!search) return null;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -905,7 +933,7 @@ function RecipientMenu({ phone }: { phone: string }) {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuItem asChild>
-          <Link href={`/conversations?search=${encodeURIComponent(phone)}`}>
+          <Link href={`/conversations?search=${encodeURIComponent(search)}`}>
             <MessageCircle className="size-4" />
             Open conversation
           </Link>

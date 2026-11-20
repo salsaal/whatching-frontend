@@ -477,24 +477,54 @@ export const getString = (...values: unknown[]) => {
   return "";
 };
 
-/** The contact's name, else their Instagram handle or phone number. */
-export const subscriberName = (conversation?: Conversation | null) => {
-  const subscriber = conversation?.subscriberId;
-  const name = [subscriber?.firstName, subscriber?.lastName]
-    .filter(Boolean)
-    .join(" ")
-    .trim();
-  if (name) return name;
-  if (conversation?.channel === "instagram") {
-    const handle = subscriberHandle(conversation);
-    if (handle.startsWith("@")) return handle;
-  }
-  return (
-    formatPhoneNumber(subscriber?.phoneNumber || subscriber?.waId) || "Customer"
-  );
+/** What says who a WhatsApp contact is; chat and contact lists both carry it. */
+export type WhatsAppIdentity = {
+  firstName?: string | null;
+  lastName?: string | null;
+  phoneNumber?: string | null;
+  waId?: string | null;
+  whatsappUsername?: string | null;
 };
 
-/** The phone number, or the @handle for Instagram. */
+/** "@name" for a WhatsApp username, "" without one. */
+export const formatWhatsAppUsername = (username?: string | null) => {
+  const handle = (username || "").trim().replace(/^@+/, "");
+  return handle ? `@${handle}` : "";
+};
+
+export const contactFullName = (contact?: WhatsAppIdentity | null) =>
+  [contact?.firstName, contact?.lastName].filter(Boolean).join(" ").trim();
+
+/**
+ * The line under a WhatsApp contact's name: the phone number, or @username
+ * for a customer who uses a WhatsApp username and hasn't shared a number.
+ * "" with neither, so callers can leave the line out.
+ */
+export const whatsappContactLine = (contact?: WhatsAppIdentity | null) =>
+  formatPhoneNumber(contact?.phoneNumber || contact?.waId) ||
+  formatWhatsAppUsername(contact?.whatsappUsername);
+
+/** Name, else @username, else phone number, else "WhatsApp customer". */
+export const whatsappContactName = (contact?: WhatsAppIdentity | null) =>
+  contactFullName(contact) ||
+  formatWhatsAppUsername(contact?.whatsappUsername) ||
+  formatPhoneNumber(contact?.phoneNumber || contact?.waId) ||
+  "WhatsApp customer";
+
+/** The contact's name, else their Instagram handle, username or number. */
+export const subscriberName = (conversation?: Conversation | null) => {
+  const subscriber = conversation?.subscriberId;
+  if (conversation?.channel === "instagram") {
+    const name = contactFullName(subscriber);
+    if (name) return name;
+    const handle = subscriberHandle(conversation);
+    if (handle.startsWith("@")) return handle;
+    return formatPhoneNumber(subscriber?.phoneNumber) || "Customer";
+  }
+  return whatsappContactName(subscriber);
+};
+
+/** The phone number or WhatsApp @username, or the @handle for Instagram. */
 export function subscriberHandle(conversation?: Conversation | null) {
   const subscriber = conversation?.subscriberId;
   if (!subscriber) return "";
@@ -512,8 +542,15 @@ export function subscriberHandle(conversation?: Conversation | null) {
       "Instagram user"
     );
   }
-  return (
-    formatPhoneNumber(getString(subscriber.phoneNumber, subscriber.waId)) ||
-    getString(conversation?.channel)
-  );
+  return whatsappContactLine(subscriber);
 }
+
+/**
+ * The line under the name, unless the name already says it (the backend
+ * names a username customer after their username, without the "@").
+ */
+export const subscriberSubtitle = (conversation?: Conversation | null) => {
+  const handle = subscriberHandle(conversation);
+  const name = subscriberName(conversation);
+  return handle === name || handle === `@${name}` ? "" : handle;
+};

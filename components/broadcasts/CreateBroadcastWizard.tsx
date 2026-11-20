@@ -92,6 +92,7 @@ import {
   resolveSlotValue,
   VariableMapping
 } from "@/lib/templateVariables";
+import { whatsappContactLine, whatsappContactName } from "@/lib/inbox";
 import { cn } from "@/lib/utils";
 import { useOrganizationStore } from "@/stores/organizationStore";
 
@@ -107,9 +108,7 @@ const shortDate = () =>
     new Date()
   );
 
-const contactName = (contact: Subscriber) =>
-  [contact.firstName, contact.lastName].filter(Boolean).join(" ") ||
-  contact.phoneNumber;
+const contactName = (contact: Subscriber) => whatsappContactName(contact);
 
 export function CreateBroadcastWizard({
   open,
@@ -752,9 +751,13 @@ export function CreateBroadcastWizard({
                             <span className="block truncate font-medium">
                               {contactName(contact)}
                             </span>
-                            <span className="block truncate text-xs text-muted-foreground">
-                              {contact.phoneNumber}
-                            </span>
+                            {whatsappContactLine(contact) &&
+                              whatsappContactLine(contact) !==
+                                contactName(contact) && (
+                                <span className="block truncate text-xs text-muted-foreground">
+                                  {whatsappContactLine(contact)}
+                                </span>
+                              )}
                           </span>
                         </label>
                       ))}

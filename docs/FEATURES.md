@@ -106,6 +106,7 @@ Supported WhatsApp action types:
 - Conversations with legacy/unassigned WhatsApp sender state may require backend backfill before template sends work reliably.
 - Team quick replies (saved answers, not template quick-reply buttons): typing `/` in the reply box opens a filtered list from `/quick-replies`; choosing one inserts its text for the agent to edit, never sends it.
 - Messages the inbox can't show use `payload.unsupported` (Meta's original kind and error code) for a specific explanation (`describeUnsupportedMessage` in `lib/inbox.ts`). Stickers (`displayType: "sticker"`) render without a bubble; reactions (`displayType: "reaction"`) show as an emoji on the message they react to, or as a small line when that message isn't loaded.
+- WhatsApp customers with a WhatsApp username may have no phone number. Their name falls back to `@username` and then "WhatsApp customer"; the line under the name shows the phone, else `@username`, else nothing (`whatsappContactName` / `whatsappContactLine` in `lib/inbox.ts`, used by the inbox, contacts, broadcasts and Overview). Inbox template sends address them by `subscriberId`. Broadcasts leave them out; a recipient skipped for having no phone reads "Not sent: this customer hasn't shared their phone number." (`lib/recipientOutcome.ts`). Never display `whatsappUserIds`.
 - An Instagram contact picture that fails to load asks `/subscribers/:id/instagram-picture/refresh` for a fresh link, once per contact per page load.
 
 ## Contacts

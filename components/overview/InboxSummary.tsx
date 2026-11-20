@@ -19,6 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { recentDayActivity } from "@/lib/analyticsFormat";
 import { formatCount } from "@/lib/displayFormat";
 import {
+  contactFullName,
   describeLastMessage,
   formatListTime,
   subscriberName
@@ -51,13 +52,15 @@ const dayDate = (key: string) => new Date(`${key}T12:00:00Z`);
 const LIST_SIZE = 3;
 
 // Opens the chat through the inbox's ?search= link (the same one broadcast
-// recipients use): the phone number, or the Instagram username.
+// recipients use): the phone number or Instagram username, else the name (a
+// WhatsApp customer with only a username has no phone to search by).
 const chatHref = (conversation: Conversation) => {
   const subscriber = conversation.subscriberId;
   const term =
-    conversation.channel === "instagram"
+    (conversation.channel === "instagram"
       ? subscriber?.instagramUsername
-      : subscriber?.phoneNumber || subscriber?.waId;
+      : subscriber?.phoneNumber || subscriber?.waId) ||
+    contactFullName(subscriber);
   return term
     ? `/conversations?search=${encodeURIComponent(term)}`
     : "/conversations";

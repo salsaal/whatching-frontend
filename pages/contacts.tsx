@@ -78,7 +78,11 @@ import { describePermission } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { LockedButton, PermissionGate } from "@/components/common/NoAccess";
 import { formatCount, formatDate } from "@/lib/displayFormat";
-import { formatPhoneNumber } from "@/lib/inbox";
+import {
+  contactFullName,
+  formatPhoneNumber,
+  formatWhatsAppUsername
+} from "@/lib/inbox";
 
 type ContactChannel = "all" | "whatsapp" | "instagram";
 const CONTACTS_PAGE_SIZE = 50;
@@ -270,6 +274,7 @@ function ContactsPageContent() {
           subscriber.firstName,
           subscriber.lastName,
           subscriber.waId,
+          subscriber.whatsappUsername,
           subscriber.instagramUsername,
           subscriber.instagramUserId,
           subscriber.tags.join(",")
@@ -881,20 +886,32 @@ function ContactsPageContent() {
                         />
                       </td>
                       <td className="p-4 font-medium">
-                        {[subscriber.firstName, subscriber.lastName]
-                          .filter(Boolean)
-                          .join(" ") || (
-                          <span className="font-normal text-muted-foreground">
-                            No name
-                          </span>
-                        )}
+                        {contactFullName(subscriber) ||
+                          formatWhatsAppUsername(
+                            subscriber.whatsappUsername
+                          ) || (
+                            <span className="font-normal text-muted-foreground">
+                              No name
+                            </span>
+                          )}
                       </td>
                       <td className="p-4">
                         <div className="space-y-1">
-                          {subscriber.phoneNumber && (
+                          {subscriber.phoneNumber ? (
                             <p className="whitespace-nowrap">
                               {formatPhoneNumber(subscriber.phoneNumber)}
                             </p>
+                          ) : (
+                            subscriber.whatsappUsername && (
+                              <p
+                                className="whitespace-nowrap"
+                                title="WhatsApp username. This customer hasn't shared their phone number."
+                              >
+                                {formatWhatsAppUsername(
+                                  subscriber.whatsappUsername
+                                )}
+                              </p>
+                            )
                           )}
                           {(subscriber.instagramUsername ||
                             subscriber.instagramUserId) && (
@@ -905,6 +922,7 @@ function ContactsPageContent() {
                             </p>
                           )}
                           {!subscriber.phoneNumber &&
+                            !subscriber.whatsappUsername &&
                             !subscriber.instagramUsername &&
                             !subscriber.instagramUserId &&
                             "-"}
@@ -928,7 +946,9 @@ function ContactsPageContent() {
                       </td>
                       {channel !== "instagram" && (
                         <td className="p-4">
-                          {subscriber.instagramUserId && !subscriber.phoneNumber
+                          {subscriber.instagramUserId &&
+                          !subscriber.phoneNumber &&
+                          !subscriber.whatsappUsername
                             ? "-"
                             : subscriber.isOptedIn
                               ? "Yes"
@@ -1065,13 +1085,11 @@ function ContactsPageContent() {
             <AlertDialogTitle>Delete subscriber?</AlertDialogTitle>
             <AlertDialogDescription>
               This will delete{" "}
-              {[
-                deleteSubscriberTarget?.firstName,
-                deleteSubscriberTarget?.lastName
-              ]
-                .filter(Boolean)
-                .join(" ") ||
-                deleteSubscriberTarget?.phoneNumber ||
+              {contactFullName(deleteSubscriberTarget) ||
+                formatWhatsAppUsername(
+                  deleteSubscriberTarget?.whatsappUsername
+                ) ||
+                formatPhoneNumber(deleteSubscriberTarget?.phoneNumber) ||
                 "this contact"}
               .
             </AlertDialogDescription>

@@ -179,7 +179,10 @@ import {
   parseWhatsAppFormatting,
   rewriteSystemNote,
   subscriberHandle,
-  subscriberName
+  subscriberName,
+  subscriberSubtitle,
+  whatsappContactLine,
+  whatsappContactName
 } from "@/lib/inbox";
 import { formatWhen } from "@/lib/displayFormat";
 import {
@@ -224,13 +227,6 @@ const channelOptions: Array<{
 const CONTACT_SEARCH_PAGE_SIZE = 50;
 
 const formatDateTime = (value?: string | null) => formatWhen(value);
-
-// The line under the contact's name: the phone number or handle, unless the
-// name already is that.
-const subscriberSubtitle = (conversation?: Conversation | null) => {
-  const handle = subscriberHandle(conversation);
-  return handle === subscriberName(conversation) ? "" : handle;
-};
 
 // Who is answering the customer right now, in plain words.
 const replyingLabel = (conversation: Conversation) => {
@@ -2088,7 +2084,12 @@ function ConversationsPageContent() {
     const uniqueContacts = new Map<string, Subscriber>();
     contactsData?.pages
       .flatMap((page) => page.data.subscribers || [])
-      .filter((subscriber) => subscriber.phoneNumber || subscriber.waId)
+      .filter(
+        (subscriber) =>
+          subscriber.phoneNumber ||
+          subscriber.waId ||
+          subscriber.whatsappUsername
+      )
       .forEach((subscriber) => uniqueContacts.set(subscriber._id, subscriber));
     return Array.from(uniqueContacts.values());
   }, [contactsData?.pages]);
@@ -2248,6 +2249,16 @@ function ConversationsPageContent() {
       : contextConversation?.subscriberId?.phoneNumber ||
         contextConversation?.subscriberId?.waId ||
         "";
+  // A customer with only a WhatsApp username has no phone; the template is
+  // then addressed by contact and the server finds them.
+  const templateRecipientSubscriberId =
+    templateMode === "contact"
+      ? selectedContact?._id || ""
+      : contextConversation?.subscriberId?._id || "";
+  const templateRecipientLabel =
+    templateMode === "contact"
+      ? whatsappContactLine(selectedContact)
+      : subscriberHandle(contextConversation);
 
   useEffect(() => {
     const subscriber =
@@ -2404,7 +2415,7 @@ function ConversationsPageContent() {
       return;
     }
 
-    if (!templateRecipientPhone) {
+    if (!templateRecipientPhone && !templateRecipientSubscriberId) {
       toast.error(
         templateMode === "contact"
           ? "This contact does not have a WhatsApp phone number."
@@ -2457,7 +2468,9 @@ function ConversationsPageContent() {
     sendTemplateMutate({
       ...(templateMode === "contact" && selectedContact
         ? { subscriberId: selectedContact._id }
-        : { phoneNumber: templateRecipientPhone }),
+        : templateRecipientPhone
+          ? { phoneNumber: templateRecipientPhone }
+          : { subscriberId: templateRecipientSubscriberId }),
       templateName: selectedTemplate.name,
       languageCode: selectedTemplate.language || "en_US",
       phoneNumberId: templateSenderPhoneNumberId,
@@ -3785,7 +3798,7 @@ function ConversationsPageContent() {
             </DialogTitle>
             <DialogDescription>
               Queue a WhatsApp template to{" "}
-              {templateRecipientPhone || "this contact"} without creating a
+              {templateRecipientLabel || "this contact"} without creating a
               broadcast.
             </DialogDescription>
           </DialogHeader>
@@ -3813,12 +3826,8 @@ function ConversationsPageContent() {
                   ) : whatsappContacts.length ? (
                     whatsappContacts.map((contact) => {
                       const selected = selectedContactId === contact._id;
-                      const name =
-                        [contact.firstName, contact.lastName]
-                          .filter(Boolean)
-                          .join(" ") ||
-                        contact.phoneNumber ||
-                        contact.waId;
+                      const name = whatsappContactName(contact);
+                      const line = whatsappContactLine(contact);
                       return (
                         <button
                           key={contact._id}
@@ -3831,9 +3840,11 @@ function ConversationsPageContent() {
                           )}
                         >
                           <span className="font-medium">{name}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {contact.phoneNumber || contact.waId}
-                          </span>
+                          {line && line !== name && (
+                            <span className="text-xs text-muted-foreground">
+                              {line}
+                            </span>
+                          )}
                         </button>
                       );
                     })

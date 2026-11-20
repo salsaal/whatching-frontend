@@ -18,7 +18,10 @@ import {
   parseWhatsAppFormatting,
   rewriteSystemNote,
   stripWhatsAppFormatting,
-  subscriberName
+  formatWhatsAppUsername,
+  subscriberName,
+  subscriberSubtitle,
+  whatsappContactLine
 } from "./inbox";
 
 describe("parseWhatsAppFormatting", () => {
@@ -389,10 +392,55 @@ describe("subscriberName", () => {
     ).toBe("@asha");
   });
 
-  it("falls back to the phone number, then to Customer", () => {
+  it("falls back to the phone number, then to WhatsApp customer", () => {
     expect(
       subscriberName(conversation("whatsapp", { phoneNumber: "919876543210" }))
-    ).not.toBe("Customer");
-    expect(subscriberName(conversation("whatsapp", {}))).toBe("Customer");
+    ).toBe("+91 98765 43210");
+    expect(subscriberName(conversation("whatsapp", {}))).toBe(
+      "WhatsApp customer"
+    );
+  });
+
+  it("names a WhatsApp username customer @username", () => {
+    expect(
+      subscriberName(conversation("whatsapp", { whatsappUsername: "asha" }))
+    ).toBe("@asha");
+    expect(
+      subscriberName(
+        conversation("whatsapp", {
+          whatsappUsername: "@asha",
+          phoneNumber: "919876543210"
+        })
+      )
+    ).toBe("@asha");
+  });
+});
+
+describe("WhatsApp contact lines", () => {
+  const chat = (subscriber: Record<string, unknown>) =>
+    ({
+      channel: "whatsapp",
+      subscriberId: { _id: "s1", ...subscriber }
+    }) as unknown as Parameters<typeof subscriberSubtitle>[0];
+
+  it("shows the phone, else @username, else nothing", () => {
+    expect(whatsappContactLine({ phoneNumber: "919876543210" })).toBe(
+      "+91 98765 43210"
+    );
+    expect(whatsappContactLine({ whatsappUsername: "asha" })).toBe("@asha");
+    expect(whatsappContactLine({})).toBe("");
+    expect(formatWhatsAppUsername("  ")).toBe("");
+  });
+
+  it("leaves the line out when the name already says it", () => {
+    // The backend names a username customer after the username.
+    expect(
+      subscriberSubtitle(chat({ firstName: "asha", whatsappUsername: "asha" }))
+    ).toBe("");
+    expect(subscriberSubtitle(chat({ whatsappUsername: "asha" }))).toBe("");
+    expect(
+      subscriberSubtitle(chat({ firstName: "Asha", whatsappUsername: "asha" }))
+    ).toBe("@asha");
+    expect(subscriberSubtitle(chat({}))).toBe("");
   });
 });

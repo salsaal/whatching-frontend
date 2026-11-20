@@ -41,6 +41,8 @@ export interface ConversationSubscriber {
   _id: string;
   phoneNumber?: string;
   waId?: string;
+  /** Set for a customer with a WhatsApp username; they may have no phone. */
+  whatsappUsername?: string;
   firstName?: string;
   lastName?: string;
   instagramUserId?: string;

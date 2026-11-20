@@ -1,7 +1,10 @@
 export interface Subscriber {
   _id: string;
   orgId: string;
-  phoneNumber: string;
+  /** Missing for a WhatsApp customer who only shared a username. */
+  phoneNumber?: string;
+  /** Set for a customer with a WhatsApp username. */
+  whatsappUsername?: string;
   firstName?: string;
   lastName?: string;
   tags: string[];

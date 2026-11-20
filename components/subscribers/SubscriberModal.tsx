@@ -3,6 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { getSubscriberCampaignTouches } from "@/client-api/functions/campaigns";
 import { formatDate } from "@/lib/displayFormat";
+import { formatWhatsAppUsername } from "@/lib/inbox";
 import { updateSubscriberBroadcastEligibility } from "@/client-api/functions/subscribers";
 import {
   Subscriber,
@@ -104,27 +105,44 @@ export default function SubscriberModal({
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <Label>Phone number</Label>
-              <div className="mt-2">
-                <PhoneNumberInput
-                  countryCode={countryCode}
-                  countryIso={countryIso}
-                  phoneNumber={phoneNumber}
-                  disabled={Boolean(subscriber)}
-                  onCountryCodeChange={setCountryCode}
-                  onCountryIsoChange={setCountryIso}
-                  onPhoneNumberChange={setPhoneNumber}
-                  placeholder="9876543210"
+            {subscriber &&
+            !subscriber.phoneNumber &&
+            subscriber.whatsappUsername ? (
+              <div>
+                <Label>WhatsApp username</Label>
+                <Input
+                  className="mt-2"
+                  value={formatWhatsAppUsername(subscriber.whatsappUsername)}
+                  disabled
+                  readOnly
                 />
-              </div>
-              {subscriber && (
                 <p className="mt-1 text-xs text-muted-foreground">
-                  This is the contact&apos;s WhatsApp identity, so it can&apos;t
-                  be changed.
+                  This customer hasn&apos;t shared their phone number.
                 </p>
-              )}
-            </div>
+              </div>
+            ) : (
+              <div>
+                <Label>Phone number</Label>
+                <div className="mt-2">
+                  <PhoneNumberInput
+                    countryCode={countryCode}
+                    countryIso={countryIso}
+                    phoneNumber={phoneNumber}
+                    disabled={Boolean(subscriber)}
+                    onCountryCodeChange={setCountryCode}
+                    onCountryIsoChange={setCountryIso}
+                    onPhoneNumberChange={setPhoneNumber}
+                    placeholder="9876543210"
+                  />
+                </div>
+                {subscriber && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    This is the contact&apos;s WhatsApp identity, so it
+                    can&apos;t be changed.
+                  </p>
+                )}
+              </div>
+            )}
             <div>
               <Label>First name</Label>
               <Input
