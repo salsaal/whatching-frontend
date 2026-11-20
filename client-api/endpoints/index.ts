@@ -116,7 +116,16 @@ export const SUBSCRIBER_ENDPOINTS = {
   BROADCAST_ELIGIBILITY: (subscriberId: string) =>
     `${ORGANIZATIONS_BASE}/subscribers/${subscriberId}/broadcast-eligibility`,
   CAMPAIGN_TOUCHES: (subscriberId: string) =>
-    `${ORGANIZATIONS_BASE}/subscribers/${subscriberId}/campaign-touches`
+    `${ORGANIZATIONS_BASE}/subscribers/${subscriberId}/campaign-touches`,
+  INSTAGRAM_PICTURE_REFRESH: (subscriberId: string) =>
+    `${ORGANIZATIONS_BASE}/subscribers/${subscriberId}/instagram-picture/refresh`
+};
+
+export const QUICK_REPLY_ENDPOINTS = {
+  LIST: `${ORGANIZATIONS_BASE}/quick-replies`,
+  CREATE: `${ORGANIZATIONS_BASE}/quick-replies`,
+  BY_ID: (quickReplyId: string) =>
+    `${ORGANIZATIONS_BASE}/quick-replies/${quickReplyId}`
 };
 
 export const MEDIA_ENDPOINTS = {

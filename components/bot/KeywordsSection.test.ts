@@ -17,10 +17,17 @@ describe("toExtraKeywords", () => {
   it("drops built-ins that older orgs have stored as their defaults", () => {
     expect(
       toExtraKeywords(
-        ["STOP", "UNSUBSCRIBE", "opt out", "OPTOUT", "CANCEL", "band karo"],
+        ["STOP", "UNSUBSCRIBE", "opt out", "OPTOUT", "band karo"],
         BUILT_IN_OPT_OUT_KEYWORDS
       )
     ).toEqual(["BAND KARO"]);
+  });
+
+  it("keeps CANCEL as an extra word: it's no longer built in", () => {
+    expect(BUILT_IN_OPT_OUT_KEYWORDS).not.toContain("CANCEL");
+    expect(
+      toExtraKeywords(["STOP", "CANCEL"], BUILT_IN_OPT_OUT_KEYWORDS)
+    ).toEqual(["CANCEL"]);
   });
 
   it("de-duplicates regardless of case and spacing, and skips blanks", () => {

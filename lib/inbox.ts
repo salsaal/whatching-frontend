@@ -2,7 +2,9 @@ import { formatPhoneNumberIntl } from "react-phone-number-input/input";
 
 import type {
   ChatMessage,
-  ConversationStatus
+  ConversationChannel,
+  ConversationStatus,
+  UnsupportedMessageDetails
 } from "@/client-api/types/chat.type";
 
 // Pure helpers for the inbox (pages/conversations.tsx), kept out of the page
@@ -260,11 +262,84 @@ export const rewriteSystemNote = (text: string) => {
 // with this text. The inbox explains it instead of showing the bare label.
 const UNSUPPORTED_MESSAGE_TEXT = "Unsupported message";
 export const UNSUPPORTED_MESSAGE_PREVIEW = "Message can't be shown here";
-export const UNSUPPORTED_MESSAGE_EXPLANATION =
-  "This message can't be shown here. WhatsApp doesn't pass on some kinds of message, such as buttons or lists sent by another business.";
 
 export const isUnsupportedMessageText = (text?: string | null) =>
   typeof text === "string" && text.trim() === UNSUPPORTED_MESSAGE_TEXT;
+
+const WHATSAPP_UNSUPPORTED_FALLBACK =
+  "WhatsApp doesn't let apps show this kind of message. Check it on your phone.";
+const INSTAGRAM_UNSUPPORTED_FALLBACK =
+  "Instagram doesn't let apps show this kind of message. Check it in the Instagram app.";
+
+// Meta's `unsupported.type` values, in the words the inbox uses.
+const UNSUPPORTED_BY_ORIGINAL_TYPE: Record<string, string> = {
+  poll_creation:
+    "The customer sent a poll. WhatsApp doesn't let apps show polls; check your phone.",
+  poll_update:
+    "The customer sent a poll. WhatsApp doesn't let apps show polls; check your phone.",
+  edit: "The customer edited a message. Edits can't be shown here.",
+  gif: "The customer sent a GIF that can't be shown here.",
+  pin: "The customer pinned a message.",
+  group_invite: "The customer sent a group invite that can't be shown here.",
+  order: "The customer sent an order or product that can't be shown here.",
+  product: "The customer sent an order or product that can't be shown here.",
+  // What another business's WhatsApp sends: buttons and lists.
+  button:
+    "The customer sent a message with buttons. WhatsApp doesn't let apps show these; check your phone.",
+  interactive:
+    "The customer sent a message with buttons or a list. WhatsApp doesn't let apps show these; check your phone.",
+  list: "The customer sent a list to choose from. WhatsApp doesn't let apps show these; check your phone."
+};
+
+/**
+ * Says what a message the inbox can't show was, from what Meta passed on
+ * with it. Older messages have no details and get the general line.
+ */
+export const describeUnsupportedMessage = (
+  details?: Partial<UnsupportedMessageDetails> | null,
+  channel: ConversationChannel = "whatsapp"
+) => {
+  if (channel === "instagram") return INSTAGRAM_UNSUPPORTED_FALLBACK;
+  if (details?.errorCode === "131060") {
+    return "This message couldn't be loaded here. Open the WhatsApp Business app on your phone to see it.";
+  }
+  if (details?.metaType === "revoke") return "The customer deleted a message.";
+  const byType =
+    details?.originalType && UNSUPPORTED_BY_ORIGINAL_TYPE[details.originalType];
+  return byType || WHATSAPP_UNSUPPORTED_FALLBACK;
+};
+
+// ---------------------------------------------------------------------------
+// Reactions. Each one arrives as its own message pointing at the message it
+// reacts to; WhatsApp keeps one reaction per person, so the latest wins and a
+// removal clears it.
+
+type ReactionSource = Pick<ChatMessage, "displayType" | "payload">;
+
+export const isReactionMessage = (message: ReactionSource) =>
+  message.displayType === "reaction" && Boolean(message.payload?.reaction);
+
+/** WhatsApp message id → the emoji currently on it. */
+export const collectReactions = (messages: ReactionSource[]) => {
+  const reactions = new Map<string, string>();
+  for (const message of messages) {
+    if (!isReactionMessage(message)) continue;
+    const reaction = message.payload.reaction;
+    const target = reaction?.reactedToMetaMessageId;
+    if (!target) continue;
+    if (reaction.removed || !reaction.emoji) reactions.delete(target);
+    else reactions.set(target, reaction.emoji);
+  }
+  return reactions;
+};
+
+/** The small centred line for a reaction whose message isn't loaded. */
+export const describeReaction = (message: ReactionSource) => {
+  const reaction = message.payload?.reaction;
+  return !reaction || reaction.removed || !reaction.emoji
+    ? "Removed a reaction"
+    : `Reacted ${reaction.emoji} to a message`;
+};
 
 /** The chat list preview, with the unsupported label reworded. */
 export const describeLastMessage = (text?: string | null) => {

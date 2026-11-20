@@ -8,7 +8,8 @@ import {
   Settings,
   SlidersHorizontal,
   Trash2,
-  UsersRound
+  UsersRound,
+  Zap
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/router";
@@ -36,11 +37,18 @@ import AppLayout from "@/layouts/AppLayout";
 import { cn } from "@/lib/utils";
 import { useOrganizationStore } from "@/stores/organizationStore";
 
-const settingsLinks = [
+const settingsLinks: Array<{
+  href: string;
+  title: string;
+  description: string;
+  icon: typeof Settings;
+  ownerOnly: boolean;
+  permission?: string;
+}> = [
   {
     href: "/settings/general",
     title: "General",
-    description: "Organisation name and timezone.",
+    description: "Business name and timezone.",
     icon: SlidersHorizontal,
     ownerOnly: false
   },
@@ -50,6 +58,14 @@ const settingsLinks = [
     description: "Invite staff, manage roles, and assign inbox access.",
     icon: UsersRound,
     ownerOnly: false
+  },
+  {
+    href: "/settings/quick-replies",
+    title: "Quick replies",
+    description: "Saved answers your team can use in any chat by typing /.",
+    icon: Zap,
+    ownerOnly: false,
+    permission: "conversations:view"
   },
   {
     href: "/settings/billing",
@@ -76,9 +92,10 @@ export default function SettingsPage() {
   const clearOrganizations = useOrganizationStore(
     (state) => state.clearOrganizations
   );
-  const { isOwner } = useCurrentMembership();
+  const { isOwner, can } = useCurrentMembership();
   const visibleSettingsLinks = settingsLinks.filter(
-    (item) => !item.ownerOnly || isOwner
+    (item) =>
+      (!item.ownerOnly || isOwner) && (!item.permission || can(item.permission))
   );
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [confirmation, setConfirmation] = useState("");

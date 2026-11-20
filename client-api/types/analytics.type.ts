@@ -28,12 +28,20 @@ export interface DashboardAnalytics {
     unreadMessages: number;
     unreadConversations: number;
     deliveryRate: number;
+    /** Conversations with at least one message in the period. */
+    activeConversations?: number;
+    /** Conversations started in the period. */
+    newConversations?: number;
   };
   trends?: {
     totalContacts: AnalyticsTrend;
+    /** All-time total against the total when the period started. */
     conversations: AnalyticsTrend;
     messagesSent: AnalyticsTrend;
     deliveryRate: AnalyticsTrend;
+    /** Against the previous period of the same length. */
+    activeConversations?: AnalyticsTrend;
+    newConversations?: AnalyticsTrend;
   };
   messageActivity: AnalyticsPoint[];
   deliveryRateSeries: Array<{ date: string; rate: number | null }>;

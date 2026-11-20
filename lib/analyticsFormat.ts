@@ -150,3 +150,34 @@ export const describeHealthAlert = (
     actionLabel: url ? "Open in Meta" : undefined
   };
 };
+
+export interface DayActivity {
+  date: string;
+  received: number;
+  sent: number;
+}
+
+/**
+ * The last `days` days of message activity, ending on `endKey` (today, as
+ * "YYYY-MM-DD"), with quiet days as zeros. Feeds the Overview mini chart.
+ */
+export const recentDayActivity = (
+  rows: Array<{ date: string; [key: string]: string | number }>,
+  endKey: string,
+  days = 7
+): DayActivity[] => {
+  const end = parseDayKey(endKey);
+  if (end === null) return [];
+  const byDate = new Map(rows.map((row) => [row.date, row]));
+  const result: DayActivity[] = [];
+  for (let offset = days - 1; offset >= 0; offset -= 1) {
+    const key = new Date(end - offset * DAY_MS).toISOString().slice(0, 10);
+    const row = byDate.get(key);
+    result.push({
+      date: key,
+      received: Number(row?.inbound || 0),
+      sent: Number(row?.outbound || 0)
+    });
+  }
+  return result;
+};

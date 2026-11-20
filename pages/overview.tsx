@@ -41,8 +41,11 @@ import AppLayout from "@/layouts/AppLayout";
 import WhatsAppNumbersPanel from "@/components/whatsapp/WhatsAppNumbersPanel";
 import { cn, formatCompactNumber, formatTokenCount } from "@/lib/utils";
 import { formatWhen } from "@/lib/displayFormat";
-import { TodayActivity } from "@/components/analytics/TodayActivity";
-import { StatCard, StatSection } from "@/components/shared/StatCard";
+import {
+  AccountStrip,
+  type AccountStat
+} from "@/components/overview/AccountStrip";
+import { InboxSummary } from "@/components/overview/InboxSummary";
 import { useOrganizationStore } from "@/stores/organizationStore";
 
 interface EmbeddedSignupSession {
@@ -470,7 +473,12 @@ export default function OverviewPage() {
 
   const aiTokenUsage = aiTokenUsageData?.data.usage;
   const aiTokenIncludedLimit = aiTokenUsageData?.data.includedLimit;
-  const stats = [
+  const hasAiAllowance =
+    isOwner &&
+    Boolean(aiTokenUsage) &&
+    typeof aiTokenIncludedLimit === "number" &&
+    aiTokenIncludedLimit > 0;
+  const stats: AccountStat[] = [
     {
       label: "Contacts",
       value: formatCompactNumber(
@@ -483,9 +491,13 @@ export default function OverviewPage() {
     {
       label: "AI tokens used",
       value:
-        isOwner && aiTokenUsage && typeof aiTokenIncludedLimit === "number"
-          ? `${formatTokenCount(aiTokenUsage.used)} of ${formatTokenCount(aiTokenIncludedLimit)}`
+        hasAiAllowance && aiTokenUsage
+          ? `${formatTokenCount(aiTokenUsage.used)} of ${formatTokenCount(aiTokenIncludedLimit as number)}`
           : formatTokenCount(activeOrganization?.usage?.aiTokensUsed || 0),
+      progress:
+        hasAiAllowance && aiTokenUsage
+          ? aiTokenUsage.used / (aiTokenIncludedLimit as number)
+          : undefined,
       detail: "This billing cycle",
       icon: Bot,
       // The usage card on the AI tab is owner-only; others land on the tab.
@@ -704,13 +716,14 @@ export default function OverviewPage() {
           )}
         </section>
 
-        {isMetaReady && can("conversations:view") && <TodayActivity />}
+        {isMetaReady && can("conversations:view") && <InboxSummary />}
 
-        <StatSection title="Usage">
-          {stats.map((stat) => (
-            <StatCard key={stat.label} {...stat} />
-          ))}
-        </StatSection>
+        <AccountStrip
+          stats={stats}
+          action={
+            isOwner ? { href: "/settings/billing", label: "Plan" } : undefined
+          }
+        />
 
         {!isSetupComplete && (
           <section className="grid gap-5 lg:grid-cols-[1.25fr_0.75fr]">

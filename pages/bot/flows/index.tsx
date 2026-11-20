@@ -71,6 +71,9 @@ function FlowsPageContent() {
   const [deleteCanvas, setDeleteCanvas] = useState<BotCanvasRecord | null>(
     null
   );
+  // The server's reason when it refuses a delete our own check allowed
+  // (for example, a number changed in another tab).
+  const [deleteRefusal, setDeleteRefusal] = useState("");
 
   const queryKey = ["bot-canvases", activeOrganization?._id];
   const {
@@ -159,7 +162,16 @@ function FlowsPageContent() {
       setDeleteCanvas(null);
       await invalidate();
     },
-    onError: handleError
+    onError: (error: AxiosError<{ message?: string }>) => {
+      const status = error.response?.status;
+      const message = error.response?.data?.message;
+      if ((status === 400 || status === 409) && message) {
+        setDeleteRefusal(message);
+        void invalidate();
+        return;
+      }
+      handleError(error);
+    }
   });
   return (
     <>
@@ -404,13 +416,17 @@ function FlowsPageContent() {
 
       <AlertDialog
         open={Boolean(deleteCanvas)}
-        onOpenChange={() => setDeleteCanvas(null)}
+        onOpenChange={() => {
+          setDeleteCanvas(null);
+          setDeleteRefusal("");
+        }}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete flow?</AlertDialogTitle>
             <AlertDialogDescription>
               {deleteBlockedReason ||
+                deleteRefusal ||
                 `This deletes ${deleteCanvas?.name}. It's removed for good after 30 days.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -418,7 +434,12 @@ function FlowsPageContent() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-white hover:bg-destructive/90"
-              disabled={isDeleting || !deleteCanvas || !!deleteBlockedReason}
+              disabled={
+                isDeleting ||
+                !deleteCanvas ||
+                !!deleteBlockedReason ||
+                !!deleteRefusal
+              }
               onClick={(event) => {
                 event.preventDefault();
                 if (deleteCanvas) archiveCanvasMutate(deleteCanvas._id);

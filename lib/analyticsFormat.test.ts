@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   describeHealthAlert,
   describeTrend,
-  fillDailyGaps
+  fillDailyGaps,
+  recentDayActivity
 } from "./analyticsFormat";
 
 const trend = (current: number, previous: number) => ({
@@ -125,5 +126,31 @@ describe("describeHealthAlert", () => {
     expect(
       describeHealthAlert({ message: "Instagram needs reconnecting." })
     ).toEqual({ text: "Instagram needs reconnecting." });
+  });
+});
+
+describe("recentDayActivity", () => {
+  it("returns the last days up to today, with quiet days as zeros", () => {
+    const days = recentDayActivity(
+      [
+        { date: "2026-11-14", inbound: 9, outbound: 9 },
+        { date: "2026-11-18", inbound: 4, outbound: 2 },
+        { date: "2026-11-20", inbound: "3", outbound: 1 }
+      ],
+      "2026-11-20",
+      3
+    );
+    expect(days).toEqual([
+      { date: "2026-11-18", received: 4, sent: 2 },
+      { date: "2026-11-19", received: 0, sent: 0 },
+      { date: "2026-11-20", received: 3, sent: 1 }
+    ]);
+  });
+
+  it("crosses month ends and handles a bad key", () => {
+    expect(
+      recentDayActivity([], "2026-12-01", 2).map((day) => day.date)
+    ).toEqual(["2026-11-30", "2026-12-01"]);
+    expect(recentDayActivity([], "not a day")).toEqual([]);
   });
 });

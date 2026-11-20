@@ -221,7 +221,12 @@ const pageMeta: Record<string, PageMeta> = {
   },
   "/settings/general": {
     title: "General Settings | Whatching",
-    description: "Your business details and timezone on Whatching."
+    description: "Your business name and timezone on Whatching."
+  },
+  "/settings/quick-replies": {
+    title: "Quick Replies | Whatching",
+    description:
+      "Save answers your team can drop into any WhatsApp or Instagram chat by typing /."
   },
   "/settings/help": {
     title: "Help and Support | Whatching",

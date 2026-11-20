@@ -52,8 +52,10 @@ export const getMyOrganizations = async (): Promise<OrganizationsResponse> => {
   return res.data;
 };
 
+// Owners and admins. Send at least one; `name` is 2-80 characters.
 export const updateOrganizationSettings = async (payload: {
-  timezone: string;
+  name?: string;
+  timezone?: string;
 }): Promise<OrganizationResponse> => {
   const res = await api.patch<OrganizationResponse>(
     ORGANIZATION_ENDPOINTS.UPDATE_SETTINGS,

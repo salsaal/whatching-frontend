@@ -418,12 +418,24 @@ function AnalyticsPageContent() {
                   icon: Contact,
                   trend: dashboard.trends?.totalContacts
                 },
-                {
-                  label: "Conversations",
-                  value: dashboard.cards.conversations,
-                  icon: Inbox,
-                  trend: dashboard.trends?.conversations
-                },
+                // Chats with a message in the period, against the period
+                // before. Older servers only send the all-time total.
+                typeof dashboard.cards.activeConversations === "number"
+                  ? {
+                      label: "Conversations",
+                      value: dashboard.cards.activeConversations,
+                      icon: Inbox,
+                      trend: dashboard.trends?.activeConversations,
+                      detail: `With messages in this period · ${numberFormat.format(
+                        dashboard.cards.conversations
+                      )} in total`
+                    }
+                  : {
+                      label: "Conversations",
+                      value: dashboard.cards.conversations,
+                      icon: Inbox,
+                      trend: dashboard.trends?.conversations
+                    },
                 {
                   label: "Messages sent",
                   value: dashboard.cards.messagesSent,
@@ -456,6 +468,11 @@ function AnalyticsPageContent() {
                       </p>
                       {item.trend && <TrendBadge trend={item.trend} />}
                     </div>
+                    {"detail" in item && item.detail && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {item.detail}
+                      </p>
+                    )}
                   </div>
                 );
               })}

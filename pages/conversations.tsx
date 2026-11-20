@@ -51,6 +51,7 @@ import {
   useQueryClient
 } from "@tanstack/react-query";
 import { io, Socket } from "socket.io-client";
+import Link from "next/link";
 import { useRouter } from "next/router";
 import { toast } from "sonner";
 
@@ -75,9 +76,12 @@ import {
 } from "@/client-api/functions/bot";
 import {
   getAllSubscribers,
+  refreshInstagramPicture,
   updateSubscriber
 } from "@/client-api/functions/subscribers";
 import { getAllTemplates } from "@/client-api/functions/templates";
+import { listQuickReplies } from "@/client-api/functions/quickReplies";
+import type { QuickReply } from "@/client-api/types/quickReplies.type";
 import { VariableMappingRows } from "@/components/broadcasts/VariableMappingRows";
 import { TemplatePickerList } from "@/components/templates/TemplatePickerList";
 import { WhatsAppPreview } from "@/components/whatsapp/WhatsAppPreview";
@@ -158,10 +162,12 @@ import {
   CarouselCard,
   FormattedText,
   STATUS_DESCRIPTIONS,
-  UNSUPPORTED_MESSAGE_EXPLANATION,
+  collectReactions,
   dayKey,
   describeHandoffReason,
   describeLastMessage,
+  describeReaction,
+  describeUnsupportedMessage,
   formatClockTime,
   formatDayDivider,
   formatListTime,
@@ -169,12 +175,19 @@ import {
   formatUntil,
   getCarouselCards,
   insertMessageInOrder,
+  isReactionMessage,
   isUnsupportedMessageText,
   messageTimestamp,
   parseWhatsAppFormatting,
   rewriteSystemNote
 } from "@/lib/inbox";
 import { formatWhen, getInitials } from "@/lib/displayFormat";
+import {
+  findSlashQuery,
+  firstLine,
+  insertQuickReply,
+  matchQuickReplies
+} from "@/lib/quickReplies";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
 import { useOrganizationStore } from "@/stores/organizationStore";
@@ -792,6 +805,21 @@ const renderOutboundStatusIcon = (status: ChatMessage["status"]) => {
   return <CheckCheck className="size-3" aria-label="Sent" />;
 };
 
+// Instagram picture links expire after a few days. When one fails, the
+// server is asked for a fresh link once per contact per page load; every
+// avatar of that contact shares the answer.
+const instagramPictureRefreshes = new Map<string, Promise<string | null>>();
+const refreshInstagramPictureOnce = (subscriberId: string) => {
+  let pending = instagramPictureRefreshes.get(subscriberId);
+  if (!pending) {
+    pending = refreshInstagramPicture(subscriberId)
+      .then((result) => result.profilePictureUrl)
+      .catch(() => null);
+    instagramPictureRefreshes.set(subscriberId, pending);
+  }
+  return pending;
+};
+
 function ContactAvatar({
   conversation,
   className,
@@ -803,13 +831,38 @@ function ContactAvatar({
   fallbackClassName?: string;
   withChannel?: boolean;
 }) {
-  const pictureUrl = conversation.subscriberId?.instagramProfilePictureUrl;
+  const subscriberId = conversation.subscriberId?._id;
+  const storedPictureUrl =
+    conversation.subscriberId?.instagramProfilePictureUrl;
+  // Tied to the contact: the header avatar stays mounted across chats.
+  const [freshPicture, setFreshPicture] = useState<{
+    subscriberId: string;
+    url: string;
+  } | null>(null);
+  const freshPictureUrl =
+    freshPicture && freshPicture.subscriberId === subscriberId
+      ? freshPicture.url
+      : null;
+  const pictureUrl = freshPictureUrl || storedPictureUrl;
   const isInstagram = conversation.channel === "instagram";
+  const handlePictureStatus = (status: string) => {
+    if (status !== "error" || !subscriberId || freshPictureUrl) return;
+    void refreshInstagramPictureOnce(subscriberId).then((url) => {
+      // The same link would fail again; keep the initials instead.
+      if (url && url !== storedPictureUrl) {
+        setFreshPicture({ subscriberId, url });
+      }
+    });
+  };
   return (
     <div className="relative shrink-0">
       <Avatar className={className}>
         {pictureUrl && (
-          <AvatarImage src={pictureUrl} alt={subscriberName(conversation)} />
+          <AvatarImage
+            src={pictureUrl}
+            alt={subscriberName(conversation)}
+            onLoadingStatusChange={handlePictureStatus}
+          />
         )}
         <AvatarFallback
           className={cn("bg-primary/10 text-primary", fallbackClassName)}
@@ -940,12 +993,17 @@ function ConversationListItem({
 
 function MessageBubble({
   message,
+  channel,
+  reaction,
   onPreview,
   onReplyTo,
   replyContext,
   replyPreview
 }: {
   message: ChatMessage;
+  channel?: Conversation["channel"];
+  /** The customer's emoji reaction on this message, if any. */
+  reaction?: string;
   onPreview: (preview: MessageMediaPreview) => void;
   onReplyTo: (message: ChatMessage) => void;
   replyContext?: ReplyContext | null;
@@ -954,6 +1012,10 @@ function MessageBubble({
   const isOutbound = message.direction === "outbound";
   const isSystem =
     message.direction === "system" || message.senderRole === "system";
+  const stickerUrl =
+    message.displayType === "sticker"
+      ? message.attachment?.mediaUrl || getString(message.payload?.mediaUrl)
+      : "";
   const attachmentName = getAttachmentName(message);
   const mediaPreviews = getMessageMedia(message);
   const imageVideoPreviews = mediaPreviews.filter((item) =>
@@ -972,10 +1034,12 @@ function MessageBubble({
     MEDIA_MESSAGE_TYPES.has(message.type) && mediaPreviews.length
       ? getString(message.payload?.caption)
       : messageText(message);
+  // Meta's details say what it was; older ones only carry the stored label.
   const isUnsupported =
     !isOutbound &&
-    message.type === "unknown" &&
-    isUnsupportedMessageText(bodyText);
+    (message.displayType || message.type) === "unknown" &&
+    (Boolean(message.payload?.unsupported) ||
+      isUnsupportedMessageText(bodyText));
   if (isSystem) {
     return (
       <div className="flex justify-center">
@@ -986,11 +1050,75 @@ function MessageBubble({
     );
   }
 
+  // A reaction whose message isn't loaded (loaded ones show on the message).
+  if (isReactionMessage(message)) {
+    return (
+      <div className="flex justify-center">
+        <div className="max-w-md rounded-full bg-muted px-3 py-1 text-center text-xs text-muted-foreground">
+          {describeReaction(message)}
+          <span className="ml-1.5 opacity-70">
+            {formatClockTime(messageTimestamp(message))}
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  const reactionBadge = reaction ? (
+    <span
+      className={cn(
+        "absolute -bottom-3 flex h-6 min-w-6 items-center justify-center rounded-full border bg-white px-1 text-sm leading-none shadow-xs",
+        isOutbound ? "right-2" : "left-2"
+      )}
+      title={`The customer reacted ${reaction}`}
+    >
+      {reaction}
+    </span>
+  ) : null;
+
+  // Stickers sit on the chat background, without a bubble, like WhatsApp.
+  if (stickerUrl) {
+    return (
+      <div
+        className={cn(
+          "flex",
+          isOutbound ? "justify-end" : "justify-start",
+          reaction && "pb-3"
+        )}
+      >
+        <div className="relative flex flex-col items-end gap-0.5">
+          <button
+            type="button"
+            className="cursor-pointer"
+            onClick={() =>
+              onPreview({ type: "image", url: stickerUrl, name: "Sticker" })
+            }
+          >
+            <img
+              src={stickerUrl}
+              alt={
+                message.payload?.sticker?.animated
+                  ? "Animated sticker"
+                  : "Sticker"
+              }
+              className="size-32 object-contain"
+            />
+          </button>
+          <span className="rounded-full bg-white/80 px-1.5 text-[10px] text-muted-foreground">
+            {formatClockTime(messageTimestamp(message))}
+          </span>
+          {reactionBadge}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className={cn(
         "group flex items-center gap-2",
-        isOutbound ? "justify-end" : "justify-start"
+        isOutbound ? "justify-end" : "justify-start",
+        reaction && "pb-3"
       )}
       onDoubleClick={() => {
         if (canReplyToMessage(message)) onReplyTo(message);
@@ -1008,7 +1136,7 @@ function MessageBubble({
       )}
       <div
         className={cn(
-          "min-w-0 max-w-[78%] rounded-2xl px-3 py-2 text-sm shadow-xs",
+          "relative min-w-0 max-w-[78%] rounded-2xl px-3 py-2 text-sm shadow-xs",
           isOutbound
             ? "rounded-br-sm bg-primary text-primary-foreground"
             : "rounded-bl-sm bg-white"
@@ -1153,7 +1281,7 @@ function MessageBubble({
         )}
         {isUnsupported ? (
           <p className="text-muted-foreground italic">
-            {UNSUPPORTED_MESSAGE_EXPLANATION}
+            {describeUnsupportedMessage(message.payload?.unsupported, channel)}
           </p>
         ) : (
           contacts.length === 0 &&
@@ -1226,6 +1354,7 @@ function MessageBubble({
             </span>
           </div>
         )}
+        {reactionBadge}
       </div>
       {isOutbound && canReplyToMessage(message) && (
         <button
@@ -1355,6 +1484,13 @@ function ConversationsPageContent() {
   const messageScrollRef = useRef<HTMLDivElement | null>(null);
   const olderMessagesRequestRef = useRef(false);
   const replyInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const [slash, setSlash] = useState<{ start: number; query: string } | null>(
+    null
+  );
+  const [slashIndex, setSlashIndex] = useState(0);
+  const [dismissedSlashStart, setDismissedSlashStart] = useState<number | null>(
+    null
+  );
   const selectedIdRef = useRef("");
   const listScrollRef = useRef<HTMLDivElement | null>(null);
   const listEndRef = useRef<HTMLDivElement | null>(null);
@@ -1502,7 +1638,7 @@ function ConversationsPageContent() {
   });
   // Each inbox action has its own grant; a view-only agent can read but not
   // reply, assign, change status, or delete. All false while loading.
-  const { can } = useCurrentMembership();
+  const { can, isOwnerOrAdmin } = useCurrentMembership();
   const hasReplyAccess = can("conversations:reply");
   const canAssign = can("conversations:assign");
   const canManageStatus = can("conversations:manage_status");
@@ -2142,6 +2278,18 @@ function ConversationsPageContent() {
     });
     return { byId, byMetaId };
   }, [messages]);
+  // Reactions show on the message they react to; only a reaction to a
+  // message that isn't loaded keeps its own line in the thread.
+  const reactions = useMemo(() => collectReactions(messages), [messages]);
+  const threadMessages = useMemo(
+    () =>
+      messages.filter((message) => {
+        if (!isReactionMessage(message)) return true;
+        const target = message.payload.reaction?.reactedToMetaMessageId;
+        return !target || !messagesById.byMetaId.has(target);
+      }),
+    [messages, messagesById]
+  );
   useEffect(() => {
     messages.forEach((message) => {
       const replyContext = getReplyContext(message);
@@ -2208,6 +2356,23 @@ function ConversationsPageContent() {
   const replyWindow = contextConversation?.replyWindow;
   const isReplyWindowClosed = Boolean(replyWindow && !replyWindow.isOpen);
   const canReply = Boolean(hasReplyAccess && replyWindow?.isOpen && selectedId);
+  const { data: quickRepliesData } = useQuery({
+    queryKey: ["quick-replies", activeOrganization?._id],
+    queryFn: () => listQuickReplies(),
+    enabled: Boolean(activeOrganization?._id) && hasReplyAccess,
+    staleTime: 60_000
+  });
+  const quickReplies = quickRepliesData?.data.quickReplies;
+  const slashMatches =
+    slash && quickReplies ? matchQuickReplies(quickReplies, slash.query) : [];
+  // With nothing saved yet, a bare "/" says where to add them; a "/word"
+  // that matches nothing is left alone (it may just be text).
+  const isSlashOpen =
+    Boolean(slash) &&
+    canReply &&
+    Boolean(quickReplies) &&
+    (slashMatches.length > 0 ||
+      (quickReplies?.length === 0 && slash?.query === ""));
   const isInstagramConversation = contextConversation?.channel === "instagram";
   const canSendMediaReply = canReply;
   const canSendTemplate =
@@ -2291,7 +2456,61 @@ function ConversationsPageContent() {
     attachFile(event.dataTransfer.files?.[0]);
   };
 
+  // Typing "/" opens the team's quick replies; choosing one puts its text in
+  // the box to edit. Nothing is sent until the agent presses Send.
+  const updateSlash = (text: string, caret: number | null) => {
+    const next = findSlashQuery(text, caret ?? text.length);
+    if (!next) {
+      setDismissedSlashStart(null);
+      setSlash(null);
+      return;
+    }
+    if (next.start === dismissedSlashStart) {
+      setSlash(null);
+      return;
+    }
+    if (next.query !== slash?.query) setSlashIndex(0);
+    setSlash(next);
+  };
+
+  const chooseQuickReply = (reply: QuickReply) => {
+    const input = replyInputRef.current;
+    if (!slash) return;
+    const caret = input?.selectionStart ?? replyText.length;
+    const next = insertQuickReply(replyText, slash, caret, reply.text);
+    setReplyText(next.text);
+    setSlash(null);
+    requestAnimationFrame(() => {
+      input?.focus();
+      input?.setSelectionRange(next.caret, next.caret);
+    });
+  };
+
   const handleReplyKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (isSlashOpen) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setDismissedSlashStart(slash?.start ?? null);
+        setSlash(null);
+        return;
+      }
+      if (slashMatches.length) {
+        if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+          event.preventDefault();
+          const step = event.key === "ArrowDown" ? 1 : -1;
+          setSlashIndex(
+            (index) =>
+              (index + step + slashMatches.length) % slashMatches.length
+          );
+          return;
+        }
+        if ((event.key === "Enter" && !event.shiftKey) || event.key === "Tab") {
+          event.preventDefault();
+          chooseQuickReply(slashMatches[slashIndex] || slashMatches[0]);
+          return;
+        }
+      }
+    }
     if (event.key !== "Enter" || event.shiftKey) return;
     event.preventDefault();
     submitReply();
@@ -3230,7 +3449,7 @@ function ConversationsPageContent() {
                           Conversation start reached.
                         </p>
                       )}
-                      {messages.map((message, index) => {
+                      {threadMessages.map((message, index) => {
                         const replyContext =
                           getReplyContext(message) ||
                           replyContextCacheRef.current[message._id] ||
@@ -3238,7 +3457,8 @@ function ConversationsPageContent() {
                         const startsNewDay =
                           index === 0 ||
                           dayKey(messageTimestamp(message)) !==
-                            dayKey(messageTimestamp(messages[index - 1]));
+                            dayKey(messageTimestamp(threadMessages[index - 1]));
+                        const metaId = getMessageMetaId(message);
                         return (
                           <Fragment key={message._id}>
                             {startsNewDay && (
@@ -3250,6 +3470,10 @@ function ConversationsPageContent() {
                             )}
                             <MessageBubble
                               message={message}
+                              channel={contextConversation?.channel}
+                              reaction={
+                                metaId ? reactions.get(metaId) : undefined
+                              }
                               onPreview={setPreviewMedia}
                               onReplyTo={selectReplyTarget}
                               replyContext={replyContext}
@@ -3303,6 +3527,77 @@ function ConversationsPageContent() {
                   {isDraggingFile && (
                     <div className="pointer-events-none absolute inset-2 z-10 flex items-center justify-center rounded-xl border border-dashed border-primary bg-white/80 text-sm font-medium text-primary">
                       Drop file to attach
+                    </div>
+                  )}
+                  {isSlashOpen && (
+                    <div className="absolute inset-x-3 bottom-full z-20 mb-2 overflow-hidden rounded-lg border bg-white shadow-lg">
+                      <p className="border-b px-3 py-1.5 text-xs font-medium text-muted-foreground">
+                        Quick replies
+                      </p>
+                      {slashMatches.length ? (
+                        <>
+                          <ul
+                            id="quick-reply-list"
+                            role="listbox"
+                            aria-label="Quick replies"
+                            className="max-h-64 overflow-y-auto py-1"
+                          >
+                            {slashMatches.map((reply, index) => (
+                              <li
+                                key={reply.id}
+                                role="option"
+                                aria-selected={index === slashIndex}
+                              >
+                                <button
+                                  type="button"
+                                  className={cn(
+                                    "flex w-full cursor-pointer items-baseline gap-2 px-3 py-2 text-left text-sm",
+                                    index === slashIndex && "bg-primary/5"
+                                  )}
+                                  // Keeps the cursor in the reply box.
+                                  onMouseDown={(event) =>
+                                    event.preventDefault()
+                                  }
+                                  onMouseEnter={() => setSlashIndex(index)}
+                                  onClick={() => chooseQuickReply(reply)}
+                                >
+                                  <span className="shrink-0 font-medium text-primary">
+                                    /{reply.shortcut}
+                                  </span>
+                                  <span className="min-w-0 flex-1 truncate">
+                                    <span className="font-medium">
+                                      {reply.title}
+                                    </span>
+                                    <span className="text-muted-foreground">
+                                      {" "}
+                                      · {firstLine(reply.text)}
+                                    </span>
+                                  </span>
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                          <p className="border-t px-3 py-1.5 text-[11px] text-muted-foreground max-sm:hidden">
+                            ↑ ↓ to choose · Enter to add it to your reply · Esc
+                            to close
+                          </p>
+                        </>
+                      ) : (
+                        <p className="px-3 py-2.5 text-sm text-muted-foreground">
+                          No quick replies yet.{" "}
+                          {isOwnerOrAdmin ? (
+                            <Link
+                              href="/settings/quick-replies"
+                              className="font-medium text-primary hover:underline"
+                              onMouseDown={(event) => event.preventDefault()}
+                            >
+                              Add your first one
+                            </Link>
+                          ) : (
+                            "Ask your organisation owner or an admin to add some."
+                          )}
+                        </p>
+                      )}
                     </div>
                   )}
                   {isReplyWindowClosed && (
@@ -3445,9 +3740,28 @@ function ConversationsPageContent() {
                               : "You can reply once the customer messages again."
                             : attachment
                               ? "Add a caption..."
-                              : "Type a reply..."
+                              : quickReplies?.length
+                                ? "Type a reply, or / for a quick reply"
+                                : "Type a reply..."
                       }
-                      onChange={(event) => setReplyText(event.target.value)}
+                      aria-expanded={isSlashOpen}
+                      aria-controls={
+                        isSlashOpen ? "quick-reply-list" : undefined
+                      }
+                      onChange={(event) => {
+                        setReplyText(event.target.value);
+                        updateSlash(
+                          event.target.value,
+                          event.target.selectionStart
+                        );
+                      }}
+                      onSelect={(event) =>
+                        updateSlash(
+                          event.currentTarget.value,
+                          event.currentTarget.selectionStart
+                        )
+                      }
+                      onBlur={() => setSlash(null)}
                       onKeyDown={handleReplyKeyDown}
                     />
                     <Button

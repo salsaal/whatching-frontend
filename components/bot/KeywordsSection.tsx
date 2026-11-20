@@ -12,12 +12,14 @@ const MAX_KEYWORDS = 50;
 export const normalizeKeyword = (value: string) =>
   value.trim().replace(/\s+/g, " ").toUpperCase();
 
+// Matches the backend. "CANCEL" was dropped in Nov 2026: in a shopping chat
+// it usually means "cancel my order". Lists that still have it saved show it
+// as an extra word, which the backend does match.
 export const BUILT_IN_OPT_OUT_KEYWORDS = [
   "STOP",
   "UNSUBSCRIBE",
   "OPT OUT",
-  "OPTOUT",
-  "CANCEL"
+  "OPTOUT"
 ];
 export const BUILT_IN_OPT_IN_KEYWORDS = [
   "START",

@@ -104,6 +104,9 @@ Supported WhatsApp action types:
 - Older history loads seven messages at a time, preserves the viewport, and removes duplicate message IDs across cursor pages.
 - Template sends use linked template media by default and let the agent replace it from the media library.
 - Conversations with legacy/unassigned WhatsApp sender state may require backend backfill before template sends work reliably.
+- Team quick replies (saved answers, not template quick-reply buttons): typing `/` in the reply box opens a filtered list from `/quick-replies`; choosing one inserts its text for the agent to edit, never sends it.
+- Messages the inbox can't show use `payload.unsupported` (Meta's original kind and error code) for a specific explanation (`describeUnsupportedMessage` in `lib/inbox.ts`). Stickers (`displayType: "sticker"`) render without a bubble; reactions (`displayType: "reaction"`) show as an emoji on the message they react to, or as a small line when that message isn't loaded.
+- An Instagram contact picture that fails to load asks `/subscribers/:id/instagram-picture/refresh` for a fresh link, once per contact per page load.
 
 ## Contacts
 
@@ -153,6 +156,8 @@ Preview is intentionally not shown for control blocks such as the follower check
 ## Settings
 
 - Main settings page exists.
+- General: owners and admins change the business name (shown inside Whatching only) and timezone through `PATCH /settings`.
+- Quick replies (`/settings/quick-replies`): owners and admins add, edit and delete; anyone who can view conversations sees the list.
 - Billing page uses backend billing/subscription endpoints.
 - Plans are selected on `/plans`; paid checkout runs on `/checkout` with base price, 18% GST, total amount, and backend-required India billing profile fields before opening Razorpay. GSTIN is optional and the free-trial flow does not request billing details.
 - `/congratulations` shows the post-checkout confirmation state, syncs backend subscription status, and links back to Overview and Billing.

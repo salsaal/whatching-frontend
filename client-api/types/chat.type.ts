@@ -107,6 +107,27 @@ export interface Conversation {
   };
 }
 
+/** A customer's emoji reaction; stored as its own message. */
+export interface MessageReaction {
+  /** Null when the customer removed their reaction. */
+  emoji: string | null;
+  removed: boolean;
+  /** The WhatsApp id of the message they reacted to. */
+  reactedToMetaMessageId: string | null;
+}
+
+/**
+ * What Meta said about a message the inbox can't show. Every field can be
+ * null, and messages from before Nov 2026 don't have it.
+ */
+export interface UnsupportedMessageDetails {
+  metaType: string | null;
+  originalType: string | null;
+  errorCode: string | null;
+  errorTitle: string | null;
+  errorDetails: string | null;
+}
+
 export interface ChatMessage {
   _id: string;
   orgId: string;
@@ -133,6 +154,9 @@ export interface ChatMessage {
       name?: string;
       address?: string;
     };
+    sticker?: { animated?: boolean };
+    reaction?: MessageReaction;
+    unsupported?: UnsupportedMessageDetails;
     [key: string]: unknown;
   };
   attachment?: {

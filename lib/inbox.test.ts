@@ -2,14 +2,18 @@ import { describe, expect, it } from "vitest";
 
 import {
   UNSUPPORTED_MESSAGE_PREVIEW,
+  collectReactions,
   compareMessages,
   describeHandoffReason,
   describeLastMessage,
+  describeReaction,
+  describeUnsupportedMessage,
   formatDayDivider,
   formatListTime,
   formatPhoneNumber,
   getCarouselCards,
   insertMessageInOrder,
+  isReactionMessage,
   isUnsupportedMessageText,
   parseWhatsAppFormatting,
   rewriteSystemNote,
@@ -264,5 +268,94 @@ describe("unsupported messages", () => {
     );
     expect(describeLastMessage("*Hi* there")).toBe("Hi there");
     expect(describeLastMessage("")).toBe("No messages yet");
+  });
+});
+
+describe("describeUnsupportedMessage", () => {
+  const details = {
+    metaType: "unsupported",
+    originalType: null,
+    errorCode: "131051",
+    errorTitle: null,
+    errorDetails: null
+  };
+
+  it("says what Meta told us the message was", () => {
+    expect(
+      describeUnsupportedMessage({ ...details, originalType: "poll_creation" })
+    ).toMatch(/sent a poll/);
+    expect(
+      describeUnsupportedMessage({ ...details, originalType: "edit" })
+    ).toBe("The customer edited a message. Edits can't be shown here.");
+    expect(
+      describeUnsupportedMessage({ ...details, originalType: "interactive" })
+    ).toMatch(/buttons or a list/);
+    expect(describeUnsupportedMessage({ ...details, metaType: "revoke" })).toBe(
+      "The customer deleted a message."
+    );
+  });
+
+  it("sends 'unavailable' messages to the phone app", () => {
+    expect(
+      describeUnsupportedMessage({
+        ...details,
+        errorCode: "131060",
+        originalType: "gif"
+      })
+    ).toMatch(/WhatsApp Business app on your phone/);
+  });
+
+  it("falls back for unknown kinds and older messages", () => {
+    const fallback =
+      "WhatsApp doesn't let apps show this kind of message. Check it on your phone.";
+    expect(
+      describeUnsupportedMessage({ ...details, originalType: "keep_in_chat" })
+    ).toBe(fallback);
+    expect(describeUnsupportedMessage(undefined)).toBe(fallback);
+    expect(describeUnsupportedMessage(null)).toBe(fallback);
+  });
+
+  it("doesn't blame WhatsApp in an Instagram chat", () => {
+    expect(describeUnsupportedMessage(undefined, "instagram")).toMatch(
+      /^Instagram/
+    );
+  });
+});
+
+describe("reactions", () => {
+  const reaction = (
+    emoji: string | null,
+    target: string | null = "wamid.A"
+  ) => ({
+    displayType: "reaction",
+    payload: {
+      text: emoji ? `Reacted ${emoji}` : "Removed a reaction",
+      reaction: { emoji, removed: !emoji, reactedToMetaMessageId: target }
+    }
+  });
+
+  it("recognises reaction messages", () => {
+    expect(isReactionMessage(reaction("👍"))).toBe(true);
+    expect(isReactionMessage({ displayType: "text", payload: {} })).toBe(false);
+    expect(isReactionMessage({ displayType: "reaction", payload: {} })).toBe(
+      false
+    );
+  });
+
+  it("keeps the latest reaction per message and clears removed ones", () => {
+    const reactions = collectReactions([
+      reaction("👍"),
+      reaction("❤️"),
+      reaction("😂", "wamid.B"),
+      reaction(null, "wamid.B"),
+      reaction("🔥", null),
+      { displayType: "text", payload: { text: "hi" } }
+    ]);
+    expect(Object.fromEntries(reactions)).toEqual({ "wamid.A": "❤️" });
+  });
+
+  it("describes a reaction whose message isn't loaded", () => {
+    expect(describeReaction(reaction("👍"))).toBe("Reacted 👍 to a message");
+    expect(describeReaction(reaction(null))).toBe("Removed a reaction");
   });
 });

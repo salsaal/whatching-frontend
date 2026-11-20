@@ -169,3 +169,18 @@ export const removeSubscriberTag = async ({
   );
   return res.data;
 };
+
+/**
+ * Instagram picture links expire after a few days. Asks for a fresh one;
+ * Meta is asked at most every 6 hours per contact, otherwise the saved link
+ * comes back with `refreshed: false`.
+ */
+export const refreshInstagramPicture = async (
+  subscriberId: string
+): Promise<{ profilePictureUrl: string | null; refreshed: boolean }> => {
+  const res = await api.post<{
+    status: string;
+    data: { profilePictureUrl: string | null; refreshed: boolean };
+  }>(SUBSCRIBER_ENDPOINTS.INSTAGRAM_PICTURE_REFRESH(subscriberId));
+  return res.data.data;
+};
