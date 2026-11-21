@@ -176,6 +176,26 @@ describe("Cart reminders on the Store page", () => {
     expect(screen.queryByText("Cart reminders plugin")).toBe(null);
     expect(screen.queryByText("Cart reminders")).toBe(null);
     expect(getStoreCarts).not.toHaveBeenCalled();
+    expect(
+      screen.getByText(
+        "Stops order messages. Your order history here is kept for 30 days."
+      )
+    ).toBeTruthy();
+  });
+
+  it("says Disconnect also stops cart reminders", async () => {
+    renderStore(connection());
+    expect(
+      screen.getByText(
+        "Stops order messages and cart reminders. Your order history here is kept for 30 days."
+      )
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
+    expect(
+      await screen.findByText(
+        "Order messages and cart reminders will stop. Your order history here is kept for 30 days."
+      )
+    ).toBeTruthy();
   });
 
   it("walks through installing and linking the plugin", () => {

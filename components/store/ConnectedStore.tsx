@@ -122,7 +122,9 @@ function EndConnectionDialog({
           <AlertDialogDescription>
             {action === "reconnect"
               ? "We'll remove the current connection so you can connect your store again. Order messages stop until you do. Your order history here is kept for 30 days."
-              : "Order messages will stop. Your order history here is kept for 30 days."}
+              : hasStorePlugin(connection)
+                ? "Order messages and cart reminders will stop. Your order history here is kept for 30 days."
+                : "Order messages will stop. Your order history here is kept for 30 days."}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -480,7 +482,9 @@ export function ConnectedStore({
           <div>
             <h2 className="font-medium">Disconnect store</h2>
             <p className="mt-0.5 text-sm text-muted-foreground">
-              Stops order messages. Your order history here is kept for 30 days.
+              {showPlugin
+                ? "Stops order messages and cart reminders. Your order history here is kept for 30 days."
+                : "Stops order messages. Your order history here is kept for 30 days."}
             </p>
           </div>
           <Button
