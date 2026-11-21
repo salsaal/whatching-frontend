@@ -422,7 +422,10 @@ describe("Cart reminders on the Store page", () => {
     updateStoreSettings.mockRejectedValue({
       response: {
         status: 400,
-        data: { message: "This template has no link button." }
+        data: {
+          message:
+            "Cart reminders need a template with a link button whose web address ends in {{1}}, so the button can bring back the shopper’s cart."
+        }
       }
     });
     renderStore(connection());
@@ -432,7 +435,9 @@ describe("Cart reminders on the Store page", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Save reminders" }));
     expect(
-      await screen.findByText("This template has no link button.")
+      await screen.findByText(
+        "Cart reminders need a template with a link button whose web address ends in {{1}}, so the button can bring back the shopper’s cart."
+      )
     ).toBeTruthy();
   });
 
@@ -561,6 +566,13 @@ describe("Cart log", () => {
                 reason: "No template is chosen for this reminder yet.",
                 templateName: null,
                 at: new Date().toISOString()
+              },
+              {
+                step: 2,
+                status: "failed",
+                reason: null,
+                templateName: "store_cart_reminder",
+                at: new Date().toISOString()
               }
             ]
           }
@@ -589,6 +601,9 @@ describe("Cart log", () => {
     expect(
       screen.getByText("No template is chosen for this reminder yet.")
     ).toBeTruthy();
+    // A failed reminder can come without a reason: the chip alone.
+    const failed = screen.getByText("Reminder 2: Failed");
+    expect(failed.closest("li")?.querySelector("p")).toBeNull();
   });
 
   it("explains an empty log", async () => {

@@ -31,8 +31,8 @@ export const CART_DELAY_RANGE_MESSAGE =
 const PLUGIN_QUIET_AFTER_MS = 24 * 60 * 60 * 1000;
 
 /**
- * The plugin parts show only for WooCommerce stores, and only once the
- * backend sends `plugin` (production doesn't yet).
+ * The plugin parts show only for WooCommerce stores, and only when the
+ * backend sends `plugin` (it does for WooCommerce stores; null otherwise).
  */
 export const hasStorePlugin = (connection?: StoreConnection | null) =>
   connection?.platform === "woocommerce" && Boolean(connection.plugin);
