@@ -164,6 +164,14 @@ Preview is intentionally not shown for control blocks such as the follower check
 - Settings save per change, sending only that field (`useStoreSettings`); the API's reason a template can't be used shows under its picker, and `warnings` show as toasts.
 - Inbox: order messages (`payload.storeOrder`) carry a "Store · Order #1201" label above the bubble.
 
+### Cart reminders and the WordPress plugin (WooCommerce only)
+
+- Spec: the backend's `docs/STORE_CART_FRONTEND_SPEC.md` (branch `feature/woo-cart-recovery`). Shown only when `connection.platform === "woocommerce"` and `GET /organizations/stores` sends `connection.plugin` (`hasStorePlugin` in `lib/storeCarts.ts`), so nothing appears until that backend is deployed. Helpers and wording live in `lib/storeCarts.ts`.
+- Plugin card (`StorePluginCard`, under the store header): not linked, the three install steps (Download plugin (.zip) from `public/downloads/whatching-cart-recovery.zip`, the WordPress upload step, Get code); linked, the "Linked" badge, version and last check-in, a warning after 24 h without a check-in, and Get a new code. A code (`POST /:id/plugin-code`) shows with Copy; while it's valid the store is asked for again every 5 s, and a new `plugin.connectedAt` clears it with "Plugin linked."; once it expires it becomes Get a new code.
+- Cart reminders (`StoreCartReminders`, after cash on delivery): until the plugin is linked, only "Install and link the plugin above…". Then the on/off switch (the first switch-on asks for the marketing-consent checkbox and sends `consentConfirmed: true`), the two notes, three reminders edited together and saved with Save reminders (all three steps, delays checked on the client with the backend's wording: 30 minutes to 72 hours, each later than the one before), Create ready-made reminder template (`POST /:id/cart-template`) when no reminder has a template, and the approval wait note.
+- Reminder template pickers list approved or in-review Marketing templates of the sending number's account with exactly one link button ending in `{{1}}` (`isCartReminderTemplate`).
+- Carts log (`StoreCartLog`, after the order log, once the plugin is linked): `GET /:id/carts`, 25 a page, the recovered summary per currency, shopper (opens the chat when there's a contact), cart, last activity, status and one chip per reminder (the order log's status words).
+
 ## Shopify (screens inside Shopify admin)
 
 - `/shopify`, opened by Shopify admin in an iframe when a merchant clicks the Whatching app; backed by `/api/v1/shopify` (`client-api/functions/shopify.ts`). Spec: the backend's `docs/SHOPIFY_EMBEDDED_FRONTEND_SPEC.md`. Not live yet: production answers 503 until the App Store submission.

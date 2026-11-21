@@ -34,7 +34,7 @@ import { storeErrorMessage, storeMessageCopy } from "@/lib/store";
 
 // Languages WhatsApp templates are commonly written in. The text below is
 // what gets sent, so it should be written in the language picked here.
-const LANGUAGES = [
+export const STORE_TEMPLATE_LANGUAGES = [
   "en",
   "en_US",
   "en_GB",
@@ -181,7 +181,7 @@ export function StoreTemplatesForm({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {LANGUAGES.map((code) => (
+                {STORE_TEMPLATE_LANGUAGES.map((code) => (
                   <SelectItem key={code} value={code}>
                     {formatLanguage(code)}
                   </SelectItem>

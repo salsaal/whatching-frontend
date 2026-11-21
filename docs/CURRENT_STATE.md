@@ -2,6 +2,12 @@
 
 This document reflects the frontend and verified sibling-backend contracts on 2026-08-27.
 
+## 2026-11-21 — Cart reminders and the WordPress plugin
+
+- Built on the Store page for WooCommerce (see `docs/FEATURES.md`), hidden until the backend sends `connection.plugin`. The backend (`feature/woo-cart-recovery`) is on dev only, so it was checked with tests and a production build, not against a real store.
+- The plugin zip isn't in `public/downloads/` yet; the backend side will send it. Until then Download plugin (.zip) is a 404. Add the WordPress.org link once the plugin is listed there.
+- Shopify work is paused (waiting on Shopify's billing answer); `/shopify` stays as it is.
+
 ## 2026-11-20 — Store page and WhatsApp usernames
 
 - The Store page (WooCommerce order messages) is built and stays hidden until `GET /organizations/stores` answers 200. The store backend isn't on production yet (it answers 404), so the page hasn't been tried against a real store. Do that once the backend says it's live.

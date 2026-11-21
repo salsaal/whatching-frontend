@@ -2,12 +2,16 @@ import api from "../axiosInstance";
 import { STORE_ENDPOINTS } from "../endpoints";
 import {
   ConnectWooCommercePayload,
+  CreateCartTemplatePayload,
+  CreateCartTemplateResponse,
   ConnectWooCommerceResponse,
   CreateStoreTemplatesPayload,
   CreateStoreTemplatesResponse,
+  StoreCartsResponse,
   StoreCheckResponse,
   StoreDisconnectResponse,
   StoreOrdersResponse,
+  StorePluginCodeResponse,
   StoreResponse,
   StoreStatusesResponse,
   UpdateStoreSettingsPayload,
@@ -96,6 +100,47 @@ export const disconnectStore = async (
 ): Promise<StoreDisconnectResponse> => {
   const res = await api.delete<StoreDisconnectResponse>(
     STORE_ENDPOINTS.BY_ID(connectionId)
+  );
+  return res.data;
+};
+
+/** A one-time code for linking the WordPress plugin. */
+export const createStorePluginCode = async (
+  connectionId: string
+): Promise<StorePluginCodeResponse> => {
+  const res = await api.post<StorePluginCodeResponse>(
+    STORE_ENDPOINTS.PLUGIN_CODE(connectionId)
+  );
+  return res.data;
+};
+
+export const getStoreCarts = async ({
+  connectionId,
+  page = 1,
+  limit = 25
+}: {
+  connectionId: string;
+  page?: number;
+  limit?: number;
+}): Promise<StoreCartsResponse> => {
+  const res = await api.get<StoreCartsResponse>(
+    STORE_ENDPOINTS.CARTS(connectionId),
+    { params: { page, limit } }
+  );
+  return res.data;
+};
+
+/** The ready-made reminder; the backend also puts it on empty reminders. */
+export const createCartTemplate = async ({
+  connectionId,
+  payload
+}: {
+  connectionId: string;
+  payload: CreateCartTemplatePayload;
+}): Promise<CreateCartTemplateResponse> => {
+  const res = await api.post<CreateCartTemplateResponse>(
+    STORE_ENDPOINTS.CART_TEMPLATE(connectionId),
+    payload
   );
   return res.data;
 };

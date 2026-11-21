@@ -139,6 +139,11 @@ export const STORE_ENDPOINTS = {
   STATUSES: (connectionId: string) => `${STORES_BASE}/${connectionId}/statuses`,
   ORDERS: (connectionId: string) => `${STORES_BASE}/${connectionId}/orders`,
   CHECK: (connectionId: string) => `${STORES_BASE}/${connectionId}/check`,
+  PLUGIN_CODE: (connectionId: string) =>
+    `${STORES_BASE}/${connectionId}/plugin-code`,
+  CARTS: (connectionId: string) => `${STORES_BASE}/${connectionId}/carts`,
+  CART_TEMPLATE: (connectionId: string) =>
+    `${STORES_BASE}/${connectionId}/cart-template`,
   BY_ID: (connectionId: string) => `${STORES_BASE}/${connectionId}`
 };
 

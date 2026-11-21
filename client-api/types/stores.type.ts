@@ -32,12 +32,39 @@ export interface StoreCustomStatusRule {
   templateLanguage?: string | null;
 }
 
+/** One of the three cart reminders: sent this long after the shopper leaves. */
+export interface StoreCartReminderStep {
+  enabled?: boolean;
+  delayMinutes: number;
+  templateName?: string | null;
+  templateLanguage?: string | null;
+}
+
+export interface StoreCartReminderSettings {
+  enabled?: boolean;
+  /** Set once the merchant confirms their store collects marketing consent. */
+  consentConfirmedAt?: string | null;
+  consentConfirmedBy?: string | null;
+  steps?: StoreCartReminderStep[];
+}
+
 export interface StoreSettings {
   senderPhoneNumberId?: string;
   shippedStatuses?: string[];
   messages?: Partial<Record<StoreFixedMessageKind, StoreMessageSetting>>;
   customStatusRules?: StoreCustomStatusRule[];
   cod?: { autoCancel?: boolean; paymentMethods?: string[] };
+  /** WooCommerce only. */
+  cartReminders?: StoreCartReminderSettings;
+}
+
+/** The Whatching WordPress plugin (cart reminders), WooCommerce only. */
+export interface StorePluginInfo {
+  connected: boolean;
+  connectedAt?: string | null;
+  version?: string | null;
+  /** The plugin's last check-in. */
+  lastSeenAt?: string | null;
 }
 
 /** WooCommerce from the Store page; Shopify from inside Shopify admin. */
@@ -64,6 +91,11 @@ export interface StoreConnection {
   setupFailure?: { message: string } | null;
   disconnectedAt?: string | null;
   settings?: StoreSettings;
+  /**
+   * WooCommerce stores, once the backend has cart reminders (null for
+   * Shopify; missing before then, which keeps those parts hidden).
+   */
+  plugin?: StorePluginInfo | null;
 }
 
 /** What a store message's template picker needs from a template. */
@@ -85,14 +117,25 @@ export interface ReadyMadeStoreTemplate {
   buttons: string[];
 }
 
+/** The ready-made cart reminder (a Marketing template with a link button). */
+export interface ReadyMadeCartTemplate {
+  name: string;
+  body: string;
+  linkButton: string;
+}
+
 export interface StoreResponse {
   status: string;
   data: {
     enabledForPlan: boolean;
     connection: StoreConnection | null;
-    /** Per message type, plus `custom_status` for extra status messages. */
+    /**
+     * Per message type, plus `custom_status` for extra status messages
+     * and `cart_reminder` for cart reminders.
+     */
     templateVariables: Record<string, StoreTemplateVariable[]>;
     readyMadeTemplates: ReadyMadeStoreTemplate[];
+    readyMadeCartTemplate?: ReadyMadeCartTemplate;
   };
 }
 
@@ -114,6 +157,15 @@ export interface UpdateStoreSettingsPayload {
   messages?: Partial<Record<StoreFixedMessageKind, StoreMessageSetting>>;
   customStatusRules?: StoreCustomStatusRule[];
   cod?: { autoCancel?: boolean; paymentMethods?: string[] };
+  /**
+   * `consentConfirmed` only with the first `enabled: true`; `steps` is
+   * always all three, in order.
+   */
+  cartReminders?: {
+    enabled?: boolean;
+    consentConfirmed?: boolean;
+    steps?: StoreCartReminderStep[];
+  };
 }
 
 export interface UpdateStoreSettingsResponse {
@@ -198,4 +250,71 @@ export interface StoreCheckResponse {
 export interface StoreDisconnectResponse {
   status: string;
   data: { webhooksRemoved: boolean; hadAccessKey: boolean };
+}
+
+/** A one-time code that links the WordPress plugin (15 minutes). */
+export interface StorePluginCodeResponse {
+  status: string;
+  data: { code: string; expiresAt: string };
+}
+
+export interface CreateCartTemplatePayload {
+  language: string;
+  /** Only when the text was changed; {{1}}-{{4}} only. */
+  body?: string;
+}
+
+export interface CreateCartTemplateResponse {
+  status: string;
+  data: {
+    outcome: "created" | "already_existed";
+    templateName: string;
+    language: string;
+    status: string;
+    category: string;
+  };
+}
+
+export type StoreCartStatus = "open" | "converted" | "stopped" | "expired";
+
+export interface StoreCartReminder {
+  step: number;
+  status: string;
+  /** Why it wasn't sent, in plain words. */
+  reason?: string | null;
+  templateName?: string | null;
+  at?: string | null;
+}
+
+export interface StoreCart {
+  id: string;
+  customerName?: string | null;
+  subscriberId?: string | null;
+  items: string;
+  itemCount: number;
+  total?: string | null;
+  currency?: string | null;
+  status: StoreCartStatus;
+  /** Why reminders stopped, in plain words. */
+  stopReason?: string | null;
+  /** It became an order after a reminder went out. */
+  recovered: boolean;
+  orderNumber?: string | null;
+  lastActivityAt?: string | null;
+  nextReminderAt?: string | null;
+  reminders: StoreCartReminder[];
+}
+
+export interface StoreCartsResponse {
+  status: string;
+  data: {
+    page: number;
+    limit: number;
+    total: number;
+    summary: {
+      recoveredCount: number;
+      recoveredTotals: { currency: string | null; amount: string }[];
+    };
+    carts: StoreCart[];
+  };
 }

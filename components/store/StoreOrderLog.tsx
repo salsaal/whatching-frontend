@@ -1,10 +1,7 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
-import { useRouter } from "next/router";
+import { Loader2 } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
 
-import { getSubscriberById } from "@/client-api/functions/subscribers";
 import type {
   StoreCustomStatusRule,
   StoreOrder,
@@ -12,10 +9,13 @@ import type {
   StorePlatform
 } from "@/client-api/types/stores.type";
 import { QueryErrorState } from "@/components/shared/QueryErrorState";
-import { Button } from "@/components/ui/button";
 import { useStoreApi } from "@/components/store/StoreApiContext";
+import {
+  StoreContactLink,
+  StoreLogPagination
+} from "@/components/store/StoreLogParts";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatCount, formatWhen } from "@/lib/displayFormat";
+import { formatWhen } from "@/lib/displayFormat";
 import { badgeToneClass } from "@/lib/statusPresentation";
 import {
   COD_STATE_LABELS,
@@ -29,47 +29,6 @@ import {
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 25;
-
-/**
- * The customer's name, opening their chat. The order only carries the
- * contact's id, so the contact is looked up on click.
- */
-function CustomerLink({ order }: { order: StoreOrder }) {
-  const router = useRouter();
-  const [isOpening, setIsOpening] = useState(false);
-  const name = order.customerName || "Customer";
-  if (!order.subscriberId) return <span>{name}</span>;
-  const subscriberId = order.subscriberId;
-
-  const open = async () => {
-    setIsOpening(true);
-    try {
-      const response = await getSubscriberById(subscriberId);
-      const contact = response.data.subscriber;
-      const search =
-        contact.phoneNumber ||
-        [contact.firstName, contact.lastName].filter(Boolean).join(" ") ||
-        name;
-      await router.push(`/conversations?search=${encodeURIComponent(search)}`);
-    } catch {
-      toast.error("This customer's chat couldn't be opened.");
-      setIsOpening(false);
-    }
-  };
-
-  return (
-    <button
-      type="button"
-      onClick={open}
-      disabled={isOpening}
-      className="inline-flex cursor-pointer items-center gap-1 text-left font-medium text-primary hover:underline disabled:cursor-wait"
-      title="Open this customer's chat"
-    >
-      {name}
-      {isOpening && <Loader2 className="size-3 animate-spin" />}
-    </button>
-  );
-}
 
 function OrderMessages({
   order,
@@ -135,7 +94,6 @@ export function StoreOrderLog({
   });
   const orders = data?.data.orders || [];
   const total = data?.data.total || 0;
-  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const statusName = (slug: string) =>
     statuses.find((status) => status.slug === slug)?.name ||
     humanizeStatus(slug);
@@ -199,7 +157,10 @@ export function StoreOrderLog({
                   </td>
                   <td className="px-4 py-3">
                     {api.opensChats ? (
-                      <CustomerLink order={order} />
+                      <StoreContactLink
+                        name={order.customerName || "Customer"}
+                        subscriberId={order.subscriberId}
+                      />
                     ) : (
                       <span>{order.customerName || "Customer"}</span>
                     )}
@@ -231,35 +192,13 @@ export function StoreOrderLog({
         </div>
       )}
 
-      {total > PAGE_SIZE && (
-        <div className="flex items-center justify-between gap-3 border-t px-4 py-3 text-sm text-muted-foreground sm:px-5">
-          <span>
-            Page {page} of {pageCount} · {formatCount(total)} orders
-          </span>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page <= 1}
-              onClick={() => setPage((current) => Math.max(1, current - 1))}
-            >
-              <ChevronLeft className="size-4" />
-              Previous
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page >= pageCount}
-              onClick={() =>
-                setPage((current) => Math.min(pageCount, current + 1))
-              }
-            >
-              Next
-              <ChevronRight className="size-4" />
-            </Button>
-          </div>
-        </div>
-      )}
+      <StoreLogPagination
+        page={page}
+        pageSize={PAGE_SIZE}
+        total={total}
+        noun="orders"
+        onPageChange={setPage}
+      />
     </section>
   );
 }

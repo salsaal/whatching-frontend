@@ -22,10 +22,13 @@ import type {
   StoreConnection,
   StoreResponse
 } from "@/client-api/types/stores.type";
+import { StoreCartLog } from "@/components/store/StoreCartLog";
+import { StoreCartReminders } from "@/components/store/StoreCartReminders";
 import { StoreCheckNote } from "@/components/store/StoreCheckNote";
 import { StoreCodSection } from "@/components/store/StoreCodSection";
 import { StoreMessagesSection } from "@/components/store/StoreMessagesSection";
 import { StoreOrderLog } from "@/components/store/StoreOrderLog";
+import { StorePluginCard } from "@/components/store/StorePluginCard";
 import { StoreTemplatesDialog } from "@/components/store/StoreTemplatesDialog";
 import { useStoreSettings } from "@/components/store/useStoreSettings";
 import {
@@ -59,6 +62,7 @@ import {
   storeTemplateOptions,
   storeTemplatesState
 } from "@/lib/store";
+import { hasStorePlugin, isCartReminderTemplate } from "@/lib/storeCarts";
 import { cn } from "@/lib/utils";
 import { useOrganizationStore } from "@/stores/organizationStore";
 
@@ -210,6 +214,12 @@ export function ConnectedStore({
     () => storeTemplateOptions(allTemplates, sender?.wabaId),
     [allTemplates, sender?.wabaId]
   );
+  // Cart reminders: WooCommerce with the backend's plugin support.
+  const showPlugin = hasStorePlugin(connection);
+  const cartTemplateOptions = useMemo(
+    () => templateOptions.filter(isCartReminderTemplate),
+    [templateOptions]
+  );
 
   const { mutate: check, isPending: isChecking } = useMutation({
     mutationFn: () => checkStoreConnection(connection.id),
@@ -346,6 +356,10 @@ export function ConnectedStore({
         </p>
       </section>
 
+      {showPlugin && (
+        <StorePluginCard connection={connection} canManage={canManage} />
+      )}
+
       {/* Set-up checklist, until it's complete */}
       {templatesData && !checklistDone && (
         <section className="rounded-lg border bg-white p-5 shadow-xs sm:p-6">
@@ -441,11 +455,25 @@ export function ConnectedStore({
 
       <StoreCodSection connection={connection} canManage={canManage} />
 
+      {showPlugin && (
+        <StoreCartReminders
+          connection={connection}
+          readyMadeCartTemplate={data.readyMadeCartTemplate}
+          variables={data.templateVariables.cart_reminder}
+          templates={{ options: cartTemplateOptions, allTemplates }}
+          canManage={canManage}
+        />
+      )}
+
       <StoreOrderLog
         connectionId={connection.id}
         customRules={connection.settings?.customStatusRules || []}
         statuses={statuses}
       />
+
+      {showPlugin && connection.plugin?.connected && (
+        <StoreCartLog connectionId={connection.id} />
+      )}
 
       {canManage && (
         <section className="flex flex-col gap-3 rounded-lg border bg-white p-5 shadow-xs sm:flex-row sm:items-center sm:justify-between sm:p-6">
