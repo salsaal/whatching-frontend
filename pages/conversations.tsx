@@ -1229,9 +1229,16 @@ function MessageBubble({
       )}
     </div>
   );
-  // Order messages from a connected store say which order they're about.
+  // Messages from a connected store say which order, or which cart
+  // reminder, they are.
   const storeOrderNumber = message.payload?.storeOrder?.orderNumber;
-  if (!storeOrderNumber) return row;
+  const storeCart = message.payload?.storeCart;
+  const storeLabel = storeOrderNumber
+    ? `Store · Order #${storeOrderNumber}`
+    : storeCart
+      ? `Store · Cart reminder${storeCart.step ? ` ${storeCart.step}` : ""}`
+      : null;
+  if (!storeLabel) return row;
   return (
     <div className="flex flex-col gap-1">
       <p
@@ -1240,7 +1247,7 @@ function MessageBubble({
           isOutbound ? "self-end" : "self-start"
         )}
       >
-        Store · Order #{storeOrderNumber}
+        {storeLabel}
       </p>
       {row}
     </div>

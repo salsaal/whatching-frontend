@@ -13,7 +13,9 @@ import {
   StoreOrdersResponse,
   StorePluginCodeResponse,
   StoreResponse,
+  StoreOrdersShow,
   StoreStatusesResponse,
+  StoreSummaryResponse,
   UpdateStoreSettingsPayload,
   UpdateStoreSettingsResponse
 } from "../types/stores.type";
@@ -73,15 +75,28 @@ export const getStoreStatuses = async (
 export const getStoreOrders = async ({
   connectionId,
   page = 1,
-  limit = 25
+  limit = 25,
+  show
 }: {
   connectionId: string;
   page?: number;
   limit?: number;
+  /** Only orders with a message not sent, or COD orders awaiting an answer. */
+  show?: StoreOrdersShow;
 }): Promise<StoreOrdersResponse> => {
   const res = await api.get<StoreOrdersResponse>(
     STORE_ENDPOINTS.ORDERS(connectionId),
-    { params: { page, limit } }
+    { params: { page, limit, ...(show && show !== "all" ? { show } : {}) } }
+  );
+  return res.data;
+};
+
+/** This calendar month's numbers for the top of the Store page. */
+export const getStoreSummary = async (
+  connectionId: string
+): Promise<StoreSummaryResponse> => {
+  const res = await api.get<StoreSummaryResponse>(
+    STORE_ENDPOINTS.SUMMARY(connectionId)
   );
   return res.data;
 };

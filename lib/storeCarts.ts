@@ -192,7 +192,7 @@ export const storeCartStatusPresentation = (
           Number.isFinite(due) && due > now.getTime()
             ? `Reminder due ${formatRelative(cart.nextReminderAt, now)}`
             : "Reminder due now",
-        tone: "blue"
+        tone: "amber"
       };
     }
     case "converted":

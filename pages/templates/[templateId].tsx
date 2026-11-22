@@ -10,7 +10,9 @@ import {
 import TemplateCreateForm from "@/components/templates/TemplateCreateForm";
 import { mapDraftToTemplate } from "@/components/templates/templateUtils";
 import { DetailLoadingSkeleton } from "@/components/ui/loading-skeletons";
+import { useStore } from "@/hooks/useStore";
 import AppLayout from "@/layouts/AppLayout";
+import { storeTemplateUses } from "@/lib/storePage";
 import { PermissionGate } from "@/components/common/NoAccess";
 
 function TemplateDetailPageContent() {
@@ -36,6 +38,11 @@ function TemplateDetailPageContent() {
     },
     enabled: Boolean(templateId)
   });
+  const storeConnection = useStore().data?.data.connection;
+  const storeUses =
+    data && source === "meta"
+      ? storeTemplateUses(storeConnection, data.name, data.language)
+      : [];
 
   return (
     <AppLayout>
@@ -43,7 +50,11 @@ function TemplateDetailPageContent() {
         {isLoading || !data ? (
           <DetailLoadingSkeleton className="min-h-80" />
         ) : (
-          <TemplateCreateForm initialTemplate={data} editKind={source} />
+          <TemplateCreateForm
+            initialTemplate={data}
+            editKind={source}
+            storeUses={storeUses}
+          />
         )}
       </div>
     </AppLayout>

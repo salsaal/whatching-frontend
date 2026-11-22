@@ -26,7 +26,10 @@ const getStoreCarts = vi.fn();
 const createStorePluginCode = vi.fn();
 const createCartTemplate = vi.fn();
 const updateStoreSettings = vi.fn();
+const getStoreSummary = vi.fn();
 const toastSuccess = vi.fn();
+// The Store page keeps its tab in the URL (?tab=carts).
+const routerQuery: Record<string, string> = {};
 
 vi.mock("sonner", () => ({
   toast: {
@@ -41,6 +44,7 @@ vi.mock("@/client-api/functions/stores", () => ({
   createStorePluginCode: (id: string) => createStorePluginCode(id),
   createCartTemplate: (args: unknown) => createCartTemplate(args),
   updateStoreSettings: (args: unknown) => updateStoreSettings(args),
+  getStoreSummary: () => getStoreSummary(),
   getStoreOrders: () =>
     Promise.resolve({
       status: "success",
@@ -69,7 +73,12 @@ vi.mock("@/components/whatsapp/WhatsAppNumberSwitcher", () => ({
   })
 }));
 vi.mock("next/router", () => ({
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), query: {} })
+  useRouter: () => ({
+    push: vi.fn(),
+    replace: vi.fn(),
+    query: routerQuery,
+    pathname: "/store"
+  })
 }));
 
 const { ConnectedStore } = await import("@/components/store/ConnectedStore");
@@ -140,10 +149,39 @@ const storeData = (
   }
 });
 
-const renderStore = (storeConnection: StoreConnection) =>
-  render(<ConnectedStore data={storeData(storeConnection)} enabledForPlan />, {
-    wrapper: wrapperWith(newClient())
-  });
+const renderStore = (
+  storeConnection: StoreConnection,
+  query: Record<string, string> = {}
+) => {
+  Object.assign(routerQuery, query);
+  return render(
+    <ConnectedStore data={storeData(storeConnection)} enabledForPlan />,
+    { wrapper: wrapperWith(newClient()) }
+  );
+};
+
+const CARTS_TAB = { tab: "carts" };
+
+/** The "···" menu, then one of its items. */
+const chooseFromMenu = async (item: string) => {
+  fireEvent.keyDown(
+    screen.getByRole("button", { name: "More store options" }),
+    { key: "Enter" }
+  );
+  fireEvent.click(await screen.findByRole("menuitem", { name: item }));
+};
+
+const summary = (extra: Record<string, unknown> = {}) => ({
+  status: "success",
+  data: {
+    month: "2026-11",
+    ordersMessaged: 0,
+    cod: { waiting: 0, confirmed: 0, cancelRequested: 0, cancelled: 0, noReply: 0 },
+    carts: { remindersSent: 0, recoveredCount: 0, recoveredTotals: [] },
+    notSent: { orders: 0, cartReminders: 0 },
+    ...extra
+  }
+});
 
 const savedWith = (storeConnection: StoreConnection) =>
   updateStoreSettings.mockResolvedValue({
@@ -155,6 +193,8 @@ afterEach(cleanup);
 
 beforeEach(() => {
   vi.clearAllMocks();
+  for (const key of Object.keys(routerQuery)) delete routerQuery[key];
+  getStoreSummary.mockResolvedValue(summary());
   useOrganizationStore.setState({
     activeOrganization: { _id: "org-1", name: "Asha's Shop" }
   } as never);
@@ -171,26 +211,25 @@ beforeEach(() => {
 });
 
 describe("Cart reminders on the Store page", () => {
-  it("stays hidden until the backend sends the plugin", () => {
-    renderStore(connection({ plugin: undefined }));
+  it("stays hidden until the backend sends the plugin", async () => {
+    renderStore(connection({ plugin: undefined }), CARTS_TAB);
+    expect(screen.queryByRole("tab", { name: "Cart reminders" })).toBe(null);
     expect(screen.queryByText("Cart reminders plugin")).toBe(null);
-    expect(screen.queryByText("Cart reminders")).toBe(null);
+    // Without it, ?tab=carts falls back to Overview, with no carts step.
+    expect(screen.getByText("What your customers receive")).toBeTruthy();
+    expect(screen.queryByText("Link the cart plugin")).toBe(null);
     expect(getStoreCarts).not.toHaveBeenCalled();
+    await chooseFromMenu("Disconnect store");
     expect(
-      screen.getByText(
-        "Stops order messages. Your order history here is kept for 30 days."
+      await screen.findByText(
+        "Order messages will stop. Your order history here is kept for 30 days."
       )
     ).toBeTruthy();
   });
 
   it("says Disconnect also stops cart reminders", async () => {
     renderStore(connection());
-    expect(
-      screen.getByText(
-        "Stops order messages and cart reminders. Your order history here is kept for 30 days."
-      )
-    ).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
+    await chooseFromMenu("Disconnect store");
     expect(
       await screen.findByText(
         "Order messages and cart reminders will stop. Your order history here is kept for 30 days."
@@ -198,8 +237,22 @@ describe("Cart reminders on the Store page", () => {
     ).toBeTruthy();
   });
 
-  it("walks through installing and linking the plugin", () => {
+  it("leads from Setup to linking the plugin", () => {
     renderStore(connection({ plugin: unlinkedPlugin }));
+    expect(
+      screen.getByText("Install and link the plugin to turn them on")
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Link the cart plugin" }));
+    expect(
+      screen.getByRole("tab", { name: "Cart reminders" }).getAttribute(
+        "aria-selected"
+      )
+    ).toBe("true");
+    expect(screen.getByRole("button", { name: "Get code" })).toBeTruthy();
+  });
+
+  it("walks through installing and linking the plugin", () => {
+    renderStore(connection({ plugin: unlinkedPlugin }), CARTS_TAB);
     expect(screen.getByText("Cart reminders plugin")).toBeTruthy();
     expect(screen.getByText(/Install our free WordPress plugin/)).toBeTruthy();
     const download = screen.getByRole("link", {
@@ -210,13 +263,11 @@ describe("Cart reminders on the Store page", () => {
     );
     expect(screen.getByText(/Plugins › Add New › Upload Plugin/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Get code" })).toBeTruthy();
-    // Nothing to set up or list until the plugin is linked.
+    // Nothing to set up until the plugin is linked.
     expect(
-      screen.getByText(
-        "Install and link the plugin above to send cart reminders."
-      )
-    ).toBeTruthy();
-    expect(screen.queryByText("Carts")).toBe(null);
+      screen.queryByRole("switch", { name: "Send cart reminders" })
+    ).toBe(null);
+    expect(screen.queryByText("Save reminders")).toBe(null);
   });
 
   it("shows the code, asks every 5 seconds, then says the plugin is linked", async () => {
@@ -234,6 +285,7 @@ describe("Cart reminders on the Store page", () => {
           expiresAt: new Date(Date.now() + 15 * 60_000).toISOString()
         }
       });
+      Object.assign(routerQuery, CARTS_TAB);
       function Page() {
         const store = useStore({ fresh: true });
         return store.data ? (
@@ -279,7 +331,7 @@ describe("Cart reminders on the Store page", () => {
         expiresAt: new Date(Date.now() - 1000).toISOString()
       }
     });
-    renderStore(connection({ plugin: unlinkedPlugin }));
+    renderStore(connection({ plugin: unlinkedPlugin }), CARTS_TAB);
     fireEvent.click(screen.getByRole("button", { name: "Get code" }));
     expect(
       await screen.findByRole("button", { name: "Get a new code" })
@@ -288,13 +340,17 @@ describe("Cart reminders on the Store page", () => {
   });
 
   it("shows a linked plugin, and warns when it's been quiet", () => {
-    renderStore(connection());
+    renderStore(connection(), CARTS_TAB);
+    expect(screen.getByText("Whatching Cart Recovery plugin")).toBeTruthy();
     expect(screen.getByText("Linked")).toBeTruthy();
-    expect(
-      screen.getByText("Version 1.0.0 · last checked in 3 h ago")
-    ).toBeTruthy();
+    expect(screen.getByText("Version 1.0.0 · checked in 3 h ago")).toBeTruthy();
     expect(screen.queryByText(/haven't heard from the plugin/)).toBe(null);
     expect(screen.getByRole("button", { name: "Get a new code" })).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Use this if you reinstalled the plugin or moved your store."
+      )
+    ).toBeTruthy();
     cleanup();
 
     renderStore(
@@ -303,7 +359,8 @@ describe("Cart reminders on the Store page", () => {
           ...linkedPlugin,
           lastSeenAt: new Date(Date.now() - 30 * 3_600_000).toISOString()
         }
-      })
+      }),
+      CARTS_TAB
     );
     expect(
       screen.getByText(
@@ -315,7 +372,7 @@ describe("Cart reminders on the Store page", () => {
   it("asks for consent the first time reminders are turned on", async () => {
     const current = connection();
     savedWith(current);
-    renderStore(current);
+    renderStore(current, CARTS_TAB);
     expect(screen.getByText(/get up to 3 WhatsApp reminders/)).toBeTruthy();
     expect(screen.getByText(/charges its marketing rate/)).toBeTruthy();
 
@@ -347,7 +404,7 @@ describe("Cart reminders on the Store page", () => {
       }
     });
     savedWith(current);
-    renderStore(current);
+    renderStore(current, CARTS_TAB);
     fireEvent.click(
       screen.getByRole("switch", { name: "Send cart reminders" })
     );
@@ -363,11 +420,12 @@ describe("Cart reminders on the Store page", () => {
   it("checks the delays, then saves all three reminders", async () => {
     const current = connection();
     savedWith(current);
-    renderStore(current);
+    renderStore(current, CARTS_TAB);
     const save = screen.getByRole("button", { name: "Save reminders" });
     expect((save as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByText("You have unsaved changes")).toBe(null);
 
-    const second = screen.getByLabelText("Send after", {
+    const second = screen.getByLabelText("Send after the shopper leaves", {
       selector: "#cart-delay-1"
     });
     fireEvent.change(second, { target: { value: "0.5" } });
@@ -386,6 +444,8 @@ describe("Cart reminders on the Store page", () => {
     fireEvent.change(second, { target: { value: "8" } });
     fireEvent.click(screen.getByRole("switch", { name: "Send reminder 3" }));
     expect((save as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByText("You have unsaved changes")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Discard" })).toBeTruthy();
     fireEvent.click(save);
     await waitFor(() =>
       expect(updateStoreSettings).toHaveBeenCalledWith({
@@ -428,9 +488,11 @@ describe("Cart reminders on the Store page", () => {
         }
       }
     });
-    renderStore(connection());
+    renderStore(connection(), CARTS_TAB);
     fireEvent.change(
-      screen.getByLabelText("Send after", { selector: "#cart-delay-0" }),
+      screen.getByLabelText("Send after the shopper leaves", {
+        selector: "#cart-delay-0"
+      }),
       { target: { value: "2" } }
     );
     fireEvent.click(screen.getByRole("button", { name: "Save reminders" }));
@@ -452,15 +514,18 @@ describe("Cart reminders on the Store page", () => {
         category: "MARKETING"
       }
     });
-    renderStore(connection());
-    expect(screen.getByText("Link button")).toBeTruthy();
-    expect(screen.getByText("Items in the cart")).toBeTruthy();
+    renderStore(connection(), CARTS_TAB);
+    // Each reminder previews what the shopper reads, until a template is chosen.
+    expect(
+      screen.getAllByText("Choose a template to see what customers will read.")
+    ).toHaveLength(3);
     fireEvent.click(
       screen.getByRole("button", {
         name: "Create ready-made reminder template"
       })
     );
     expect(await screen.findByText("Complete my order")).toBeTruthy();
+    expect(screen.getByText("Items in the cart")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Create template" }));
     await waitFor(() =>
       expect(createCartTemplate).toHaveBeenCalledWith({
@@ -495,7 +560,8 @@ describe("Cart reminders on the Store page", () => {
             ]
           }
         }
-      })
+      }),
+      CARTS_TAB
     );
     expect(
       screen.getByText(/Waiting for WhatsApp to approve your template/)
@@ -508,8 +574,27 @@ describe("Cart reminders on the Store page", () => {
   });
 });
 
-describe("Cart log", () => {
+describe("Activity › Carts", () => {
+  const CARTS_VIEW = { tab: "activity", view: "carts" };
+
+  it("asks to link the plugin first", () => {
+    renderStore(connection({ plugin: unlinkedPlugin }), CARTS_VIEW);
+    expect(
+      screen.getByText("Link the cart plugin to see carts here.")
+    ).toBeTruthy();
+    expect(getStoreCarts).not.toHaveBeenCalled();
+  });
+
   it("lists carts with what happened to each", async () => {
+    getStoreSummary.mockResolvedValue(
+      summary({
+        carts: {
+          remindersSent: 3,
+          recoveredCount: 1,
+          recoveredTotals: [{ currency: "INR", amount: "299.00" }]
+        }
+      })
+    );
     getStoreCarts.mockResolvedValue({
       status: "success",
       data: {
@@ -579,18 +664,21 @@ describe("Cart log", () => {
         ]
       }
     });
-    renderStore(connection());
+    renderStore(connection(), CARTS_VIEW);
     expect(await screen.findByText("Zaki")).toBeTruthy();
     expect(getStoreCarts).toHaveBeenCalledWith({
       connectionId: "c1",
       page: 1,
       limit: 25
     });
-    expect(screen.getByText("Recovered:")).toBeTruthy();
-    expect(screen.getByText(/1 cart · ₹299.00/)).toBeTruthy();
     expect(
-      screen.getByText("Carts that became orders after a reminder.")
+      await screen.findByText("Recovered this month: 1 cart · ₹299.00")
     ).toBeTruthy();
+    expect(
+      screen.getByText(/Carts that became orders after a reminder/)
+    ).toBeTruthy();
+    // Orders filters belong to Orders only.
+    expect(screen.queryByRole("button", { name: "Not sent" })).toBe(null);
     expect(screen.getByText("Recovered · order #18")).toBeTruthy();
     expect(screen.getByText("Reminder 1: Read")).toBeTruthy();
     // The column heading, and the cart without a name.
@@ -607,12 +695,14 @@ describe("Cart log", () => {
   });
 
   it("explains an empty log", async () => {
-    renderStore(connection());
+    renderStore(connection(), CARTS_VIEW);
     expect(
       await screen.findByText(
         "No carts yet. When a shopper types their phone number at checkout and leaves, it shows up here."
       )
     ).toBeTruthy();
-    expect(screen.getByText(/0 carts/)).toBeTruthy();
+    expect(
+      await screen.findByText("Recovered this month: 0 carts")
+    ).toBeTruthy();
   });
 });

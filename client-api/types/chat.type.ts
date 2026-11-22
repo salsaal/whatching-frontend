@@ -161,6 +161,8 @@ export interface ChatMessage {
     unsupported?: UnsupportedMessageDetails;
     /** Set on order messages sent for a connected store. */
     storeOrder?: { orderNumber?: string; kind?: string };
+    /** Set on cart reminders sent for a connected store. */
+    storeCart?: { connectionId?: string; cartId?: string; step?: number };
     [key: string]: unknown;
   };
   attachment?: {

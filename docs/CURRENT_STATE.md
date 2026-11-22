@@ -2,10 +2,16 @@
 
 This document reflects the frontend and verified sibling-backend contracts on 2026-08-27.
 
+## 2026-11-22 — Store redesign
+
+- Built from the backend's `docs/STORE_REDESIGN_FRONTEND_SPEC.md` (backend main 970b47e): the tabbed Store page, summary row, previews, lasting setup checklist, Activity filters, a disconnected store's past orders, and the Store in the Templates tab, inbox and Contacts (see `docs/FEATURES.md`). It replaces the earlier Store UX spec. Shopify screens are unchanged.
+- Spec differences, handled on our side: the store card's "checked" time uses `lastSyncAt` (the connection has no `lastHealthCheckAt`), and "disconnected by the owner" is a disconnected store without `setupFailure` (`disconnectReason` isn't sent).
+- Choices: the eyebrow reads "Store" like other pages' eyebrows; "Choose a number" opens a small picker (the spec doesn't place it), and the sending number has Change once chosen; Get a new code's help text shows on the linked card; the Setup templates step says "Waiting for WhatsApp…" only when templates are in review, and points to Order messages when an extra status message has no usable template.
+
 ## 2026-11-22 — Free customer replies and per-message wording
 
 - Built from the backend's `docs/FREE_REPLIES_FRONTEND_SPEC.md` (backend live on production, main dbedcaa): the Analytics free replies card, the Meta-charge wording from conversations to messages, and the Billing note (see `docs/FEATURES.md`).
-- Left as "Cost per conversation" on purpose, though the spec listed it: on campaign performance it is ad spend divided by the contacts the ad brought in, not a Meta message charge. "Cost per contact" would describe it; waiting on a decision.
+- The spec listed the campaign "Cost per conversation" as "Cost per message", but it is ad spend divided by the contacts the ad brought in, not a Meta message charge; with the user's agreement it reads "Cost per contact".
 - Beyond the spec's table, the same rule changed "Billable share" to "Charged share", the category card's empty text to "No message data for this range.", and the "figures haven't arrived" note to messages and "every few hours" (the backend now refreshes Meta's figures every 6 hours).
 
 ## 2026-11-21 — Cart reminders and the WordPress plugin

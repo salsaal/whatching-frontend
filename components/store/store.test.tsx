@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   cleanup,
+  fireEvent,
   render,
   renderHook,
   screen,
@@ -24,11 +25,18 @@ globalThis.ResizeObserver ??= class {
 const getStore = vi.fn();
 const getStoreOrders = vi.fn();
 const getStoreStatuses = vi.fn();
+const getStoreSummary = vi.fn();
+const getStoreCarts = vi.fn();
+// The Store page keeps its tab and filter in the URL.
+const routerQuery: Record<string, string> = {};
+const routerReplace = vi.fn();
 
 vi.mock("@/client-api/functions/stores", () => ({
   getStore: () => getStore(),
-  getStoreOrders: () => getStoreOrders(),
+  getStoreOrders: (args: unknown) => getStoreOrders(args),
   getStoreStatuses: () => getStoreStatuses(),
+  getStoreSummary: () => getStoreSummary(),
+  getStoreCarts: (args: unknown) => getStoreCarts(args),
   checkStoreConnection: vi.fn(),
   connectWooCommerce: vi.fn(),
   createStoreTemplates: vi.fn(),
@@ -48,7 +56,12 @@ vi.mock("@/client-api/functions/templates", () => ({
             status: "APPROVED",
             category: "UTILITY",
             wabaId: "waba-1",
-            components: []
+            components: [
+              {
+                type: "BODY",
+                text: "Hi {{1}}, thanks for order #{{2}} at {{3}}. Total {{4}}."
+              }
+            ]
           }
         ]
       }
@@ -80,14 +93,23 @@ vi.mock("@/components/whatsapp/WhatsAppNumberSwitcher", () => ({
   })
 }));
 vi.mock("next/router", () => ({
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), query: {} })
+  useRouter: () => ({
+    push: vi.fn(),
+    replace: routerReplace,
+    query: routerQuery,
+    pathname: "/store"
+  })
 }));
 
 const { ConnectedStore } = await import("@/components/store/ConnectedStore");
 const { StoreConnectForm, StorePlanNotice } = await import(
   "@/components/store/StoreConnectScreens"
 );
+const { StorePastOrders } = await import(
+  "@/components/store/StorePastOrders"
+);
 const { useStore } = await import("@/hooks/useStore");
+const { formatDayMonth } = await import("@/lib/storePage");
 const { useOrganizationStore } = await import("@/stores/organizationStore");
 
 const wrapper = ({ children }: { children: ReactNode }) => (
@@ -151,9 +173,65 @@ const storeData = (
   ]
 });
 
+const renderStore = (
+  storeConnection: StoreConnection,
+  query: Record<string, string> = {}
+) => {
+  Object.assign(routerQuery, query);
+  return render(
+    <ConnectedStore data={storeData(storeConnection)} enabledForPlan />,
+    { wrapper }
+  );
+};
+
+/** Radix tabs switch on mouse-down. */
+const openTab = (name: string) =>
+  fireEvent.mouseDown(screen.getByRole("tab", { name }), { button: 0 });
+
+/** The "···" menu, then one of its items. */
+const chooseFromMenu = async (item: string) => {
+  fireEvent.keyDown(
+    screen.getByRole("button", { name: "More store options" }),
+    { key: "Enter" }
+  );
+  fireEvent.click(await screen.findByRole("menuitem", { name: item }));
+};
+
 afterEach(cleanup);
 
 beforeEach(() => {
+  vi.clearAllMocks();
+  for (const key of Object.keys(routerQuery)) delete routerQuery[key];
+  getStoreSummary.mockResolvedValue({
+    status: "success",
+    data: {
+      month: "2026-11",
+      ordersMessaged: 21,
+      cod: {
+        waiting: 1,
+        confirmed: 8,
+        cancelRequested: 0,
+        cancelled: 2,
+        noReply: 1
+      },
+      carts: {
+        remindersSent: 0,
+        recoveredCount: 3,
+        recoveredTotals: [{ currency: "INR", amount: "897.00" }]
+      },
+      notSent: { orders: 1, cartReminders: 0 }
+    }
+  });
+  getStoreCarts.mockResolvedValue({
+    status: "success",
+    data: {
+      page: 1,
+      limit: 25,
+      total: 0,
+      summary: { recoveredCount: 0, recoveredTotals: [] },
+      carts: []
+    }
+  });
   useOrganizationStore.setState({
     activeOrganization: { _id: "org-1", name: "Asha's Shop" }
   } as never);
@@ -167,7 +245,17 @@ beforeEach(() => {
       ]
     }
   });
-  getStoreOrders.mockResolvedValue({
+  getStoreOrders.mockImplementation(async (args: { show?: string }) =>
+    args.show === "not_sent"
+      ? {
+          status: "success",
+          data: { page: 1, limit: 25, total: 0, orders: [] }
+        }
+      : ordersPage
+  );
+});
+
+const ordersPage = {
     status: "success",
     data: {
       page: 1,
@@ -196,67 +284,179 @@ beforeEach(() => {
         }
       ]
     }
-  });
-});
+  };
 
 describe("Store screens", () => {
-  it("shows a connected store with its messages, COD and orders", async () => {
-    render(
-      <ConnectedStore
-        data={storeData(connection("connected"))}
-        enabledForPlan
-      />,
-      { wrapper }
-    );
+  it("shows the store card, this month's summary and the Overview", async () => {
+    renderStore(connection("connected"));
     expect(screen.getByText("Asha's Shop")).toBeTruthy();
     expect(screen.getByText("Connected")).toBeTruthy();
-    expect(screen.getByText(/Meta bills you directly/)).toBeTruthy();
-    expect(screen.getByText("Order confirmed")).toBeTruthy();
-    expect(screen.getByText("Cash on delivery check")).toBeTruthy();
-    expect(screen.getByText("Order completed / shipped")).toBeTruthy();
-    expect(screen.getByText("Order cancelled")).toBeTruthy();
+    expect(screen.getByText(/· WooCommerce · checked just now/)).toBeTruthy();
     expect(
-      screen.getByText("Send a message when an order moves to…")
-    ).toBeTruthy();
+      screen.getByRole("link", { name: "shop.example" }).getAttribute("href")
+    ).toBe("https://shop.example");
+
+    // Summary
+    expect(await screen.findByText("Orders messaged")).toBeTruthy();
+    expect(screen.getByText("21")).toBeTruthy();
+    expect(screen.getByText("8 confirmed")).toBeTruthy();
+    expect(screen.getByText("2 cancelled · 1 no reply · 1 waiting")).toBeTruthy();
+    expect(screen.getByText("₹897.00")).toBeTruthy();
+    expect(screen.getByText("Link the plugin to start")).toBeTruthy();
     expect(
-      screen.getAllByText(
-        "Cancel the order in my store when the customer taps Cancel"
-      ).length
-    ).toBeGreaterThan(0);
-    // Two numbers: the sender step shows until one is chosen.
-    expect(
-      await screen.findByText("Choose the WhatsApp number to send from")
+      screen.getByRole("button", { name: "See Activity for why" })
     ).toBeTruthy();
 
+    // Tabs: no Cart reminders without the plugin field.
+    expect(
+      screen.getAllByRole("tab").map((tab) => tab.textContent)
+    ).toEqual(["Overview", "Order messages", "Activity"]);
+    expect(
+      screen.getByRole("tab", { name: "Overview" }).getAttribute("aria-selected")
+    ).toBe("true");
+
+    // What customers receive
+    expect(screen.getByText("What your customers receive")).toBeTruthy();
+    expect(screen.getByText("Order confirmed")).toBeTruthy();
+    expect(screen.getByText("Cash on delivery check")).toBeTruthy();
+    expect(screen.getByText("Order completed")).toBeTruthy();
+    expect(screen.getByText("When the order is marked Completed")).toBeTruthy();
+    expect(screen.getByText("Order cancelled")).toBeTruthy();
+    expect(
+      screen.getByText("When the order moves to Out for delivery")
+    ).toBeTruthy();
+    expect(screen.getAllByText("On")).toHaveLength(4);
+    expect(screen.getAllByText("Off")).toHaveLength(1);
+
+    // Setup, which stays
+    expect(screen.getByText("Orders reach Whatching")).toBeTruthy();
+    expect(
+      await screen.findByText("1 of 4 approved by WhatsApp")
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Create ready-made templates" })
+    ).toBeTruthy();
+    // Two numbers and none chosen.
+    expect(screen.getByRole("button", { name: "Choose a number" })).toBeTruthy();
+    expect(
+      screen.getByText(/charges for each order message and cart reminder/)
+    ).toBeTruthy();
+  });
+
+  it("opens Order messages, with what each customer reads", async () => {
+    renderStore(connection("connected"));
+    openTab("Order messages");
+    expect(routerReplace).toHaveBeenCalledWith(
+      { pathname: "/store", query: { tab: "messages" } },
+      undefined,
+      { shallow: true, scroll: false }
+    );
+    expect(
+      screen.getByText(
+        "Turn messages on or off. Each preview shows what a customer reads."
+      )
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Ready-made templates" })
+    ).toBeTruthy();
+
+    expect(await screen.findByText("Approved by WhatsApp")).toBeTruthy();
+    expect(
+      await screen.findByText(
+        "Hi Zaki, thanks for order #1042 at Asha's Shop. Total ₹499.00."
+      )
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("combobox", {
+        name: "Change the template for Order confirmed"
+      })
+    ).toBeTruthy();
+    // The others have no template yet.
+    expect(
+      screen.getAllByText("Choose a template to see what customers will read.")
+    ).toHaveLength(4);
+    expect(
+      screen.getByRole("combobox", {
+        name: "Choose the template for Cash on delivery check"
+      })
+    ).toBeTruthy();
+
+    expect(screen.getByText("Send when an order is marked")).toBeTruthy();
+    expect(screen.getByText("Message for another order status")).toBeTruthy();
+    expect(
+      screen.getByRole("switch", {
+        name: "Cancel the order when the customer taps Cancel"
+      })
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/Cash-on-delivery payment methods/).textContent
+    ).toBe("Cash-on-delivery payment methods: Cash on delivery · Change");
+    expect(screen.getByText(/Customers get tags you can use/)).toBeTruthy();
+  });
+
+  it("lists orders in Activity, with filters", async () => {
+    renderStore(connection("connected"), { tab: "activity" });
     expect(await screen.findByText("#1201")).toBeTruthy();
     expect(screen.getByText("Asha Rao")).toBeTruthy();
     expect(screen.getByText("₹1,499.00")).toBeTruthy();
-    expect(screen.getByText("Waiting for customer")).toBeTruthy();
-    expect(screen.getByText("Not sent")).toBeTruthy();
+    // The filter, and the order's cash-on-delivery state.
+    expect(screen.getAllByText("Waiting for customer")).toHaveLength(2);
     expect(
       screen.getByText("No template is chosen for this message yet.")
     ).toBeTruthy();
-    expect(screen.getAllByText("Out for delivery").length).toBeGreaterThan(0);
+    expect(screen.getByText("Out for delivery")).toBeTruthy();
+
+    const notSent = screen.getByRole("button", { name: /Not sent/ });
+    // This month's count from the summary.
+    await waitFor(() => expect(notSent.textContent).toBe("Not sent1"));
+    fireEvent.click(notSent);
+    expect(
+      await screen.findByText("Nothing to fix. Every message went out.")
+    ).toBeTruthy();
+    expect(getStoreOrders).toHaveBeenCalledWith({
+      connectionId: "c1",
+      page: 1,
+      limit: 25,
+      show: "not_sent"
+    });
+    expect(notSent.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("opens Activity's Not sent orders from the summary", async () => {
+    renderStore(connection("connected"));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "See Activity for why" })
+    );
+    expect(
+      screen.getByRole("tab", { name: "Activity" }).getAttribute("aria-selected")
+    ).toBe("true");
+    expect(
+      screen
+        .getByRole("button", { name: /Not sent/ })
+        .getAttribute("aria-pressed")
+    ).toBe("true");
+  });
+
+  it("keeps Reconnect and Disconnect in the store's menu", async () => {
+    renderStore(connection("connected"));
+    await chooseFromMenu("Reconnect");
+    expect(await screen.findByText("Reconnect your store?")).toBeTruthy();
   });
 
   it("explains a store that needs attention and offers Reconnect", () => {
-    render(
-      <ConnectedStore
-        data={storeData(
-          connection("needs_attention", {
-            attention: {
-              reason: "unreachable",
-              message:
-                "Whatching hasn’t been able to reach your store for the last 30 minutes."
-            }
-          })
-        )}
-        enabledForPlan
-      />,
-      { wrapper }
+    renderStore(
+      connection("needs_attention", {
+        attention: {
+          reason: "unreachable",
+          message:
+            "Whatching hasn’t been able to reach your store for the last 30 minutes."
+        }
+      })
     );
     expect(screen.getByText("Needs attention")).toBeTruthy();
-    expect(screen.getByText(/for the last 30 minutes/)).toBeTruthy();
+    expect(screen.getAllByText(/for the last 30 minutes/).length).toBeGreaterThan(
+      0
+    );
     expect(screen.getByRole("button", { name: "Reconnect" })).toBeTruthy();
   });
 
@@ -294,6 +494,50 @@ describe("Store screens", () => {
       ).disabled
     ).toBe(true);
     expect(screen.getByText(/WooCommerce will ask you/)).toBeTruthy();
+  });
+
+  it("keeps a disconnected store's past orders for 30 days", async () => {
+    const disconnectedAt = new Date(Date.now() - 3 * 86_400_000);
+    const previous = connection("disconnected", {
+      disconnectedAt: disconnectedAt.toISOString()
+    });
+    render(
+      <>
+        <StoreConnectForm previous={previous} />
+        <StorePastOrders connection={previous} />
+      </>,
+      { wrapper }
+    );
+    expect(
+      screen.getByText(
+        `You disconnected Asha's Shop on ${formatDayMonth(disconnectedAt)}. Connect it again below.`
+      )
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/cash-on-delivery checks and completed-order updates/)
+    ).toBeTruthy();
+    expect(screen.getByText("Past orders from Asha's Shop")).toBeTruthy();
+    const until = new Date(disconnectedAt.getTime() + 30 * 86_400_000);
+    expect(
+      screen.getByText(`Kept until ${formatDayMonth(until)}, then deleted.`)
+    ).toBeTruthy();
+    expect(await screen.findByText("#1201")).toBeTruthy();
+    // No carts: no Carts list.
+    await waitFor(() => expect(getStoreCarts).toHaveBeenCalled());
+    expect(screen.queryByText("Carts")).toBe(null);
+  });
+
+  it("shows nothing once a disconnected store's history is gone", () => {
+    const { container } = render(
+      <StorePastOrders
+        connection={connection("disconnected", {
+          disconnectedAt: new Date(Date.now() - 31 * 86_400_000).toISOString()
+        })}
+      />,
+      { wrapper }
+    );
+    expect(container.innerHTML).toBe("");
+    expect(getStoreOrders).not.toHaveBeenCalled();
   });
 
   it("tells a workspace without the plan where stores are included", () => {

@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useCurrentMembership } from "@/hooks/useCurrentMembership";
 import { storeErrorMessage } from "@/lib/store";
+import { disconnectedByOwner, formatDayMonth } from "@/lib/storePage";
 import { useOrganizationStore } from "@/stores/organizationStore";
 
 /** Screen A: the plan doesn't include store connections. */
@@ -102,8 +103,8 @@ export function StoreConnectForm({
           Connect your WooCommerce store
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Send order confirmations, cash-on-delivery checks and shipping updates
-          to your customers on WhatsApp.
+          Send order confirmations, cash-on-delivery checks and completed-order
+          updates to your customers on WhatsApp.
         </p>
       </div>
 
@@ -113,6 +114,13 @@ export function StoreConnectForm({
             <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
             <p>{previous.setupFailure.message}</p>
           </div>
+        )}
+        {disconnectedByOwner(previous) && previous?.disconnectedAt && (
+          <p className="rounded-md bg-muted/60 p-3 text-sm text-muted-foreground">
+            You disconnected {previous.storeName} on{" "}
+            {formatDayMonth(new Date(previous.disconnectedAt))}. Connect it
+            again below.
+          </p>
         )}
         {previous?.status === "pending" && (
           <p className="rounded-md bg-muted/60 p-3 text-sm text-muted-foreground">

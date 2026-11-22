@@ -3,7 +3,7 @@
 // in the backend repo. The screens inside Shopify admin get the same shapes
 // from /shopify/store (types/shopify.type.ts).
 
-import type { MessageTemplate } from "./templates.type";
+import type { MessageTemplate, TemplateComponent } from "./templates.type";
 
 export type StoreConnectionStatus =
   | "pending"
@@ -102,7 +102,11 @@ export interface StoreConnection {
 export type StoreTemplateChoice = Pick<
   MessageTemplate,
   "name" | "language" | "category" | "status"
-> & { wabaId?: string };
+> & {
+  wabaId?: string;
+  /** For previews: the header, body and buttons customers see. */
+  components?: TemplateComponent[];
+};
 
 export interface StoreTemplateVariable {
   variable: string;
@@ -236,9 +240,37 @@ export interface StoreOrder {
   messages: StoreOrderMessage[];
 }
 
+/** `not_sent`: a message didn't go out for a fixable reason. */
+export type StoreOrdersShow = "all" | "not_sent" | "cod_waiting";
+
 export interface StoreOrdersResponse {
   status: string;
   data: { page: number; limit: number; total: number; orders: StoreOrder[] };
+}
+
+/** This calendar month (UTC), for the Store page's summary row. */
+export interface StoreSummary {
+  month: string;
+  ordersMessaged: number;
+  cod: {
+    waiting: number;
+    confirmed: number;
+    cancelRequested: number;
+    cancelled: number;
+    noReply: number;
+  };
+  carts: {
+    remindersSent: number;
+    recoveredCount: number;
+    recoveredTotals: { currency: string | null; amount: string }[];
+  };
+  /** Only problems the owner can fix. */
+  notSent: { orders: number; cartReminders: number };
+}
+
+export interface StoreSummaryResponse {
+  status: string;
+  data: StoreSummary;
 }
 
 export interface StoreCheckResponse {

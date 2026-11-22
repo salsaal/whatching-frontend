@@ -38,6 +38,7 @@ import {
   TooltipContent,
   TooltipTrigger
 } from "@/components/ui/tooltip";
+import { StoreUseBadge } from "@/components/templates/StoreUseBadge";
 import { WhatsAppPreview } from "@/components/whatsapp/WhatsAppPreview";
 import { formatLanguage, formatRelative } from "@/lib/displayFormat";
 import { templateStatusHint } from "@/lib/statusPresentation";
@@ -58,6 +59,8 @@ interface TemplatesTableProps extends TemplateRowActions {
   deletingId?: string | null;
   // View-only members see the list but none of the edit/delete actions.
   canManage?: boolean;
+  /** The Store messages a template sends ("Used by Store"). */
+  storeUsesFor?: (template: MessageTemplate) => string[];
 }
 
 const qualityTone = (value: MessageTemplate["qualityScore"]) => {
@@ -210,6 +213,7 @@ export default function TemplatesTable({
   isLoading,
   deletingId,
   canManage = true,
+  storeUsesFor,
   ...actions
 }: TemplatesTableProps) {
   const [previewTemplate, setPreviewTemplate] =
@@ -266,7 +270,10 @@ export default function TemplatesTable({
                   )}
                 >
                   <td className="max-w-80 px-4 py-3">
-                    <p className="truncate font-medium">{template.name}</p>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <p className="truncate font-medium">{template.name}</p>
+                      <StoreUseBadge uses={storeUsesFor?.(template) || []} />
+                    </div>
                     <p className="truncate text-xs text-muted-foreground">
                       {templateBodyText(template)}
                     </p>
@@ -314,7 +321,10 @@ export default function TemplatesTable({
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="truncate font-medium">{template.name}</p>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <p className="truncate font-medium">{template.name}</p>
+                    <StoreUseBadge uses={storeUsesFor?.(template) || []} />
+                  </div>
                   <p className="line-clamp-2 text-xs text-muted-foreground">
                     {templateBodyText(template)}
                   </p>

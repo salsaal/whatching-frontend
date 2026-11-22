@@ -7,6 +7,7 @@ import { DetailLoadingSkeleton } from "@/components/ui/loading-skeletons";
 import { useStore } from "@/hooks/useStore";
 import AppLayout from "@/layouts/AppLayout";
 import { storeErrorMessage } from "@/lib/store";
+import { cn } from "@/lib/utils";
 
 /**
  * Wraps the Store routes. They exist only when GET /organizations/stores
@@ -16,11 +17,14 @@ import { storeErrorMessage } from "@/lib/store";
  */
 export function StoreGate({
   children,
-  pollWhileSettingUp = false
+  pollWhileSettingUp = false,
+  className = "max-w-5xl"
 }: {
   children: (data: StoreResponse["data"]) => ReactNode;
   /** The Store page; the return page polls on its own. */
   pollWhileSettingUp?: boolean;
+  /** The content's width. */
+  className?: string;
 }) {
   const router = useRouter();
   const store = useStore({ fresh: true, pollWhileSettingUp });
@@ -47,7 +51,7 @@ export function StoreGate({
 
   return (
     <AppLayout>
-      <div className="mx-auto max-w-5xl">{content}</div>
+      <div className={cn("mx-auto", className)}>{content}</div>
     </AppLayout>
   );
 }

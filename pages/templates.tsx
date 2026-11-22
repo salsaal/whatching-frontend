@@ -13,7 +13,7 @@ import { useRouter } from "next/router";
 import { parseAsString, useQueryState } from "nuqs";
 import { toast } from "sonner";
 import { AxiosError } from "axios";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { getAllBroadcasts } from "@/client-api/functions/broadcasts";
@@ -53,6 +53,8 @@ import {
   TooltipTrigger
 } from "@/components/ui/tooltip";
 import { useCurrentMembership } from "@/hooks/useCurrentMembership";
+import { useStore } from "@/hooks/useStore";
+import { storeTemplateUses } from "@/lib/storePage";
 import AppLayout from "@/layouts/AppLayout";
 import { formatRelative } from "@/lib/displayFormat";
 import { describePermission } from "@/lib/permissions";
@@ -179,7 +181,17 @@ function TemplatesPageContent() {
   const [deleteError, setDeleteError] = useState<{
     message: string;
     broadcastHref: string;
+    storeHref?: string;
   } | null>(null);
+  // "Used by Store": the store's turned-on messages that send a template.
+  const storeConnection = useStore().data?.data.connection;
+  const storeUsesFor = useCallback(
+    (template: MessageTemplate) =>
+      template.source === "draft"
+        ? []
+        : storeTemplateUses(storeConnection, template.name, template.language),
+    [storeConnection]
+  );
   const [mediaTarget, setMediaTarget] = useState<MessageTemplate | null>(null);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const bootstrappedOrgIdRef = useRef<string | null>(null);
@@ -312,12 +324,24 @@ function TemplatesPageContent() {
       onError: async (
         error: AxiosError<{
           message?: string;
-          details?: { broadcastId?: string } | null;
+          details?: {
+            broadcastId?: string;
+            storeMessages?: string[];
+          } | null;
         }>,
         template
       ) => {
         const message =
           error.response?.data?.message || "Couldn't delete this template.";
+        // 409 from the Store: turned-on Store messages send it. The
+        // backend's message says which; the link goes to the Store page.
+        if (
+          error.response?.status === 409 &&
+          error.response.data?.details?.storeMessages?.length
+        ) {
+          setDeleteError({ message, broadcastHref: "", storeHref: "/store" });
+          return;
+        }
         // 409: a scheduled or running broadcast still uses it. Explain in
         // the dialog (which stays open) and link to that broadcast -- the
         // backend names it; the search is only a fallback.
@@ -644,6 +668,7 @@ function TemplatesPageContent() {
             isLoading={isLoading}
             deletingId={deletingId}
             canManage={canManageTemplates}
+            storeUsesFor={storeUsesFor}
             onOpen={handleOpen}
             onDuplicate={handleDuplicate}
             onUseInBroadcast={
@@ -696,6 +721,14 @@ function TemplatesPageContent() {
                   className="font-medium underline"
                 >
                   Open broadcast
+                </Link>
+              )}
+              {deleteError.storeHref && (
+                <Link
+                  href={deleteError.storeHref}
+                  className="font-medium underline"
+                >
+                  Open Store page
                 </Link>
               )}
             </div>

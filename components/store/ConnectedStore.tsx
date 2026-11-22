@@ -1,10 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
-  CheckCircle2,
-  Circle,
-  ExternalLink,
   Loader2,
+  MoreHorizontal,
   RefreshCw,
   ShoppingBag
 } from "lucide-react";
@@ -22,15 +20,14 @@ import type {
   StoreConnection,
   StoreResponse
 } from "@/client-api/types/stores.type";
-import { StoreCartLog } from "@/components/store/StoreCartLog";
-import { StoreCartReminders } from "@/components/store/StoreCartReminders";
+import { StoreActivityTab } from "@/components/store/StoreActivityTab";
+import { StoreCartRemindersTab } from "@/components/store/StoreCartReminders";
 import { StoreCheckNote } from "@/components/store/StoreCheckNote";
-import { StoreCodSection } from "@/components/store/StoreCodSection";
-import { StoreMessagesSection } from "@/components/store/StoreMessagesSection";
-import { StoreOrderLog } from "@/components/store/StoreOrderLog";
-import { StorePluginCard } from "@/components/store/StorePluginCard";
+import { StoreOrderMessagesTab } from "@/components/store/StoreOrderMessagesTab";
+import { useStoreOrdersPage } from "@/components/store/StoreOrdersTable";
+import { StoreOverviewTab } from "@/components/store/StoreOverviewTab";
+import { StoreSummaryRow } from "@/components/store/StoreSummaryRow";
 import { StoreTemplatesDialog } from "@/components/store/StoreTemplatesDialog";
-import { useStoreSettings } from "@/components/store/useStoreSettings";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -43,26 +40,27 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from "@/components/ui/select";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from "@/components/ui/dropdown-menu";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useWhatsAppNumberContext } from "@/components/whatsapp/WhatsAppNumberSwitcher";
 import { useCurrentMembership } from "@/hooks/useCurrentMembership";
 import { storeQueryKey } from "@/hooks/useStore";
-import { formatWhen } from "@/lib/displayFormat";
-import { formatPhoneNumber } from "@/lib/inbox";
+import { useStoreView } from "@/hooks/useStoreView";
+import { formatRelative } from "@/lib/displayFormat";
 import { badgeToneClass } from "@/lib/statusPresentation";
 import {
   displayStoreUrl,
+  humanizeStatus,
   storeErrorMessage,
   storeStatusPresentation,
-  storeTemplateOptions,
-  storeTemplatesState
+  storeTemplateOptions
 } from "@/lib/store";
 import { hasStorePlugin, isCartReminderTemplate } from "@/lib/storeCarts";
+import { STORE_TABS, type StoreTab } from "@/lib/storePage";
 import { cn } from "@/lib/utils";
 import { useOrganizationStore } from "@/stores/organizationStore";
 
@@ -91,7 +89,7 @@ function EndConnectionDialog({
       } else {
         toast.success("Your store is disconnected.", {
           description: response.data.hadAccessKey
-            ? "To fully remove Whatching’s access, open WordPress → WooCommerce → Settings → Advanced → REST API and revoke the Whatching key."
+            ? "To fully remove Whatching’s access, open WordPress → WooCommerce → Settings → Advanced → REST API, find the Whatching entry, and click Revoke."
             : undefined,
           duration: response.data.hadAccessKey ? 20_000 : undefined
         });
@@ -149,15 +147,10 @@ function EndConnectionDialog({
   );
 }
 
-function StepIcon({ done }: { done: boolean }) {
-  return done ? (
-    <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-primary" />
-  ) : (
-    <Circle className="mt-0.5 size-5 shrink-0 text-muted-foreground/50" />
-  );
-}
+const TAB_TRIGGER =
+  "h-auto min-h-11 flex-none rounded-none border-0 border-b-2 border-transparent bg-transparent px-1 py-3 text-muted-foreground shadow-none hover:text-foreground data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:font-semibold data-[state=active]:text-primary data-[state=active]:shadow-none";
 
-/** Screen D and everything under it, for a store that is set up. */
+/** A connected (or connecting) WooCommerce store: card, summary and tabs. */
 export function ConnectedStore({
   data,
   enabledForPlan
@@ -173,13 +166,12 @@ export function ConnectedStore({
   const { can } = useCurrentMembership();
   const canManage = can("integrations:manage");
   const { numbers } = useWhatsAppNumberContext();
-  const { save } = useStoreSettings(connection.id);
+  const [view, setView] = useStoreView();
   const [endAction, setEndAction] = useState<EndAction | null>(null);
   const [isTemplatesOpen, setIsTemplatesOpen] = useState(false);
   const [checkResult, setCheckResult] = useState<
     StoreCheckResponse["data"] | null
   >(null);
-  const [senderError, setSenderError] = useState<string | null>(null);
 
   const { data: templatesData } = useQuery({
     queryKey: ["templates", organizationId],
@@ -190,6 +182,7 @@ export function ConnectedStore({
     () => templatesData?.data.templates || [],
     [templatesData]
   );
+  const templatesLoaded = Boolean(templatesData);
 
   const statusesQuery = useQuery({
     queryKey: ["store-statuses", connection.id],
@@ -198,13 +191,24 @@ export function ConnectedStore({
     staleTime: 5 * 60_000,
     retry: 1
   });
-  const statuses = statusesQuery.data?.data.statuses || [];
+  const statuses = useMemo(
+    () => statusesQuery.data?.data.statuses || [],
+    [statusesQuery.data]
+  );
   const statusesError = statusesQuery.isError
     ? storeErrorMessage(
         statusesQuery.error,
         "We couldn't read your store's order statuses just now."
       )
     : null;
+  const statusName = (slug: string) =>
+    statuses.find((status) => status.slug === slug)?.name ||
+    humanizeStatus(slug);
+
+  // The previews show totals in the store's currency, as its orders do.
+  const currency =
+    useStoreOrdersPage(connection.id, 1, "all", { live: false }).data?.data
+      .orders[0]?.currency || undefined;
 
   // Templates belong to the WhatsApp account of the number that sends.
   const senderId = connection.settings?.senderPhoneNumberId;
@@ -244,14 +248,16 @@ export function ConnectedStore({
   });
 
   const status = storeStatusPresentation(connection.status);
-  // Chosen: every message that's on has a template, some may be in review.
-  const { ready: templatesReady, chosen: templatesChosen } =
-    storeTemplatesState(connection.settings?.messages, allTemplates);
-  const needsSender = numbers.length > 1;
-  const checklistDone = templatesReady && (!needsSender || Boolean(senderId));
+  const checked = connection.lastSyncAt
+    ? formatRelative(connection.lastSyncAt).replace(/^Just now$/, "just now")
+    : null;
+  const tabs = STORE_TABS.filter((tab) => tab.id !== "carts" || showPlugin);
+  const tab: StoreTab =
+    view.tab === "carts" && !showPlugin ? "overview" : view.tab;
+  const openTab = (next: StoreTab) => setView({ tab: next });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {!enabledForPlan && (
         <div className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
           <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
@@ -263,16 +269,16 @@ export function ConnectedStore({
         </div>
       )}
 
-      {/* Header */}
-      <section className="rounded-lg border bg-white shadow-xs">
-        <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-start sm:justify-between sm:p-6">
-          <div className="flex min-w-0 gap-3">
-            <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-              <ShoppingBag className="size-5" />
+      {/* Store card */}
+      <section className="overflow-hidden rounded-lg border bg-white shadow-xs">
+        <div className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:p-5">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <div className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <ShoppingBag className="size-6" />
             </div>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="truncate font-heading text-xl font-semibold">
+                <h2 className="truncate font-heading text-lg font-semibold">
                   {connection.storeName}
                 </h2>
                 <span
@@ -284,50 +290,74 @@ export function ConnectedStore({
                   {status.label}
                 </span>
               </div>
-              <a
-                href={connection.storeUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-0.5 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-primary hover:underline"
-              >
-                {displayStoreUrl(connection.storeUrl)}
-                <ExternalLink className="size-3.5" />
-              </a>
-              {connection.lastSyncAt && (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Last checked {formatWhen(connection.lastSyncAt).toLowerCase()}
-                </p>
-              )}
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                <a
+                  href={connection.storeUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-medium text-primary hover:underline"
+                >
+                  {displayStoreUrl(connection.storeUrl)}
+                </a>
+                {" · WooCommerce"}
+                {checked && ` · checked ${checked}`}
+              </p>
             </div>
           </div>
-          {/* Nothing to check until setup finishes. */}
-          {canManage && connection.status !== "connecting" && (
-            <div className="flex shrink-0 flex-wrap gap-2">
-              <Button
-                variant="outline"
-                onClick={() => check()}
-                disabled={isChecking}
-              >
-                {isChecking ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="size-4" />
-                )}
-                Check connection
-              </Button>
+          {canManage && (
+            <div className="flex shrink-0 gap-2">
+              {/* Nothing to check until setup finishes. */}
+              {connection.status !== "connecting" && (
+                <Button
+                  variant="outline"
+                  className="min-h-11 sm:min-h-9"
+                  onClick={() => check()}
+                  disabled={isChecking}
+                >
+                  {isChecking ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="size-4" />
+                  )}
+                  Check connection
+                </Button>
+              )}
+              <DropdownMenu modal={false}>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="size-11 sm:size-9"
+                    aria-label="More store options"
+                  >
+                    <MoreHorizontal className="size-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={() => setEndAction("reconnect")}>
+                    Reconnect
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="text-destructive focus:text-destructive"
+                    onSelect={() => setEndAction("disconnect")}
+                  >
+                    Disconnect store
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           )}
         </div>
 
         {connection.status === "connecting" && (
-          <p className="border-t bg-muted/40 px-5 py-3 text-sm text-muted-foreground sm:px-6">
+          <p className="border-t bg-muted/40 px-4 py-3 text-sm text-muted-foreground sm:px-5">
             We&apos;re finishing setting up your store. This usually takes a
             minute.
           </p>
         )}
 
         {connection.status === "needs_attention" && (
-          <div className="flex flex-col gap-3 border-t border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <div className="flex flex-col gap-3 border-t border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between sm:px-5">
             <p className="flex gap-2">
               <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600" />
               {connection.attention?.message ||
@@ -348,154 +378,90 @@ export function ConnectedStore({
         {checkResult && (
           <StoreCheckNote
             result={checkResult}
-            className="border-t px-5 py-3 sm:px-6"
+            className="border-t px-4 py-3 sm:px-5"
           />
         )}
-
-        <p className="border-t px-5 py-3 text-xs text-muted-foreground sm:px-6">
-          WhatsApp (Meta) charges for each order message delivered. Meta bills
-          you directly; Whatching doesn&apos;t add a charge.
-        </p>
       </section>
 
-      {showPlugin && (
-        <StorePluginCard connection={connection} canManage={canManage} />
-      )}
-
-      {/* Set-up checklist, until it's complete */}
-      {templatesData && !checklistDone && (
-        <section className="rounded-lg border bg-white p-5 shadow-xs sm:p-6">
-          <h2 className="font-heading text-xl font-semibold">
-            Finish setting up
-          </h2>
-          <ol className="mt-4 space-y-4">
-            <li className="flex gap-3">
-              <StepIcon done={templatesReady} />
-              <div className="min-w-0 flex-1">
-                <p className="font-medium">Choose approved templates</p>
-                <p className="mt-0.5 text-sm text-muted-foreground">
-                  Every message that&apos;s turned on needs a WhatsApp template
-                  that&apos;s been approved. The quickest way is to use ours.
-                </p>
-                {!templatesReady && templatesChosen ? (
-                  <p className="mt-2 text-sm text-amber-800">
-                    Waiting for WhatsApp to approve your templates. This usually
-                    takes a few minutes.
-                  </p>
-                ) : (
-                  canManage &&
-                  !templatesReady && (
-                    <Button
-                      variant="outline"
-                      className="mt-3"
-                      onClick={() => setIsTemplatesOpen(true)}
-                    >
-                      Create ready-made templates
-                    </Button>
-                  )
-                )}
-              </div>
-            </li>
-            {needsSender && (
-              <li className="flex gap-3">
-                <StepIcon done={Boolean(senderId)} />
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium">
-                    Choose the WhatsApp number to send from
-                  </p>
-                  <p className="mt-0.5 text-sm text-muted-foreground">
-                    Order messages go out from this number, using its templates.
-                  </p>
-                  <Select
-                    value={senderId || ""}
-                    disabled={!canManage}
-                    onValueChange={async (value) => {
-                      setSenderError(
-                        await save({ senderPhoneNumberId: value })
-                      );
-                    }}
-                  >
-                    <SelectTrigger className="mt-3 w-full bg-white sm:w-80">
-                      <SelectValue placeholder="Choose a number" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {numbers.map((number) => (
-                        <SelectItem
-                          key={number.phoneNumberId}
-                          value={number.phoneNumberId}
-                        >
-                          {formatPhoneNumber(number.displayPhoneNumber) ||
-                            number.verifiedName ||
-                            "WhatsApp number"}
-                          {number.verifiedName &&
-                            number.displayPhoneNumber &&
-                            ` · ${number.verifiedName}`}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {senderError && (
-                    <p className="mt-2 text-xs text-destructive">
-                      {senderError}
-                    </p>
-                  )}
-                </div>
-              </li>
-            )}
-          </ol>
-        </section>
-      )}
-
-      <StoreMessagesSection
-        connection={connection}
-        templateVariables={data.templateVariables}
-        templates={{ options: templateOptions, allTemplates }}
-        statuses={statuses}
-        statusesError={statusesError}
-        canManage={canManage}
-      />
-
-      <StoreCodSection connection={connection} canManage={canManage} />
-
-      {showPlugin && (
-        <StoreCartReminders
-          connection={connection}
-          readyMadeCartTemplate={data.readyMadeCartTemplate}
-          variables={data.templateVariables.cart_reminder}
-          templates={{ options: cartTemplateOptions, allTemplates }}
-          canManage={canManage}
-        />
-      )}
-
-      <StoreOrderLog
+      <StoreSummaryRow
         connectionId={connection.id}
-        customRules={connection.settings?.customStatusRules || []}
-        statuses={statuses}
+        pluginLinked={connection.plugin?.connected === true}
+        onOpenActivity={setView}
       />
 
-      {showPlugin && connection.plugin?.connected && (
-        <StoreCartLog connectionId={connection.id} />
-      )}
+      <Tabs
+        value={tab}
+        onValueChange={(next) => openTab(next as StoreTab)}
+        className="gap-0 rounded-lg border bg-white shadow-xs"
+      >
+        <TabsList
+          aria-label="Store sections"
+          className="h-auto w-full justify-start gap-6 overflow-x-auto rounded-none border-b bg-transparent p-0 px-4 sm:px-5"
+        >
+          {tabs.map((entry) => (
+            <TabsTrigger key={entry.id} value={entry.id} className={TAB_TRIGGER}>
+              {entry.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
 
-      {canManage && (
-        <section className="flex flex-col gap-3 rounded-lg border bg-white p-5 shadow-xs sm:flex-row sm:items-center sm:justify-between sm:p-6">
-          <div>
-            <h2 className="font-medium">Disconnect store</h2>
-            <p className="mt-0.5 text-sm text-muted-foreground">
-              {showPlugin
-                ? "Stops order messages and cart reminders. Your order history here is kept for 30 days."
-                : "Stops order messages. Your order history here is kept for 30 days."}
-            </p>
-          </div>
-          <Button
-            variant="outline"
-            className="shrink-0 border-destructive/40 text-destructive hover:bg-destructive/5 hover:text-destructive"
-            onClick={() => setEndAction("disconnect")}
+        <TabsContent value="overview" className="p-4 sm:p-5">
+          <StoreOverviewTab
+            connection={connection}
+            statusName={statusName}
+            templates={allTemplates}
+            templatesLoaded={templatesLoaded}
+            numbers={numbers}
+            canManage={canManage}
+            showCarts={showPlugin}
+            onOpenTab={openTab}
+            onCreateTemplates={() => setIsTemplatesOpen(true)}
+          />
+        </TabsContent>
+
+        <TabsContent value="messages" className="p-4 sm:p-5">
+          <StoreOrderMessagesTab
+            connection={connection}
+            templateVariables={data.templateVariables}
+            templates={{ options: templateOptions, allTemplates }}
+            templatesLoaded={templatesLoaded}
+            statuses={statuses}
+            statusesError={statusesError}
+            currency={currency}
+            canManage={canManage}
+            onOpenTemplates={() => setIsTemplatesOpen(true)}
+          />
+        </TabsContent>
+
+        {showPlugin && (
+          // Kept mounted, so unsaved reminder changes survive other tabs.
+          <TabsContent
+            value="carts"
+            forceMount
+            className="p-4 data-[state=inactive]:hidden sm:p-5"
           >
-            Disconnect
-          </Button>
-        </section>
-      )}
+            <StoreCartRemindersTab
+              connection={connection}
+              readyMadeCartTemplate={data.readyMadeCartTemplate}
+              variables={data.templateVariables.cart_reminder}
+              templates={{ options: cartTemplateOptions, allTemplates }}
+              templatesLoaded={templatesLoaded}
+              currency={currency}
+              canManage={canManage}
+            />
+          </TabsContent>
+        )}
+
+        <TabsContent value="activity" className="p-4 sm:p-5">
+          <StoreActivityTab
+            connection={connection}
+            statuses={statuses}
+            view={view}
+            onChange={setView}
+            showCarts={showPlugin}
+          />
+        </TabsContent>
+      </Tabs>
 
       <EndConnectionDialog
         connection={connection}

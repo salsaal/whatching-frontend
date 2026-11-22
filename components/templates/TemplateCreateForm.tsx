@@ -67,6 +67,7 @@ import {
   TooltipContent,
   TooltipTrigger
 } from "@/components/ui/tooltip";
+import { StoreUseBadge } from "@/components/templates/StoreUseBadge";
 import { WhatsAppPreview } from "@/components/whatsapp/WhatsAppPreview";
 import { formatFileSize, formatRelative } from "@/lib/displayFormat";
 import { templateCategoryPresentation } from "@/lib/statusPresentation";
@@ -286,12 +287,18 @@ interface TemplateCreateFormProps {
   editKind?: "draft" | "meta";
   /** Prefill a new template from this one (Duplicate). */
   duplicateOf?: MessageTemplate | null;
+  /**
+   * The Store messages this template sends. Editing it asks first: WhatsApp
+   * reviews it again, and those messages wait until it's approved.
+   */
+  storeUses?: string[];
 }
 
 export default function TemplateCreateForm({
   initialTemplate,
   editKind,
-  duplicateOf
+  duplicateOf,
+  storeUses = []
 }: TemplateCreateFormProps) {
   const { can } = useCurrentMembership();
   const router = useRouter();
@@ -341,6 +348,11 @@ export default function TemplateCreateForm({
   const [footerText, setFooterText] = useState(DEFAULT_FOOTER_TEXT);
   const [buttons, setButtons] = useState<ButtonDraft[]>([]);
   const [isTypeChangeConfirmOpen, setIsTypeChangeConfirmOpen] = useState(false);
+  // Asked before saving an edit to a template the Store uses; remembers
+  // whether a type change was already confirmed on the way.
+  const [storeConfirm, setStoreConfirm] = useState<{
+    typeChangeConfirmed: boolean;
+  } | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [wallpaper, setWallpaper] = useState<"light" | "dark">("light");
   const [formError, setFormError] = useState<{
@@ -662,7 +674,10 @@ export default function TemplateCreateForm({
     saveDraft(payload);
   };
 
-  const handleSubmitForReview = (confirmedTypeChange = false) => {
+  const handleSubmitForReview = (
+    confirmedTypeChange = false,
+    confirmedStoreUse = false
+  ) => {
     setFormError(null);
     const payload = buildPayload();
     if (!payload) return;
@@ -674,6 +689,11 @@ export default function TemplateCreateForm({
       loadedTemplateType !== templateType
     ) {
       setIsTypeChangeConfirmOpen(true);
+      return;
+    }
+
+    if (isMetaTemplateEdit && storeUses.length && !confirmedStoreUse) {
+      setStoreConfirm({ typeChangeConfirmed: confirmedTypeChange });
       return;
     }
 
@@ -928,13 +948,16 @@ export default function TemplateCreateForm({
             <ArrowLeft className="size-4" />
             Templates
           </Link>
-          <h1 className="mt-2 font-heading text-2xl font-semibold">
-            {isEditing
-              ? "Edit template"
-              : duplicateOf
-                ? "Duplicate template"
-                : "Create template"}
-          </h1>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <h1 className="font-heading text-2xl font-semibold">
+              {isEditing
+                ? "Edit template"
+                : duplicateOf
+                  ? "Duplicate template"
+                  : "Create template"}
+            </h1>
+            {isMetaTemplateEdit && <StoreUseBadge uses={storeUses} />}
+          </div>
         </div>
         <ol className="flex gap-1.5 overflow-x-auto">
           {SECTIONS.map((section, index) => (
@@ -1458,6 +1481,35 @@ export default function TemplateCreateForm({
           )}
         </div>
       </div>
+
+      <AlertDialog
+        open={Boolean(storeConfirm)}
+        onOpenChange={(open) => !open && setStoreConfirm(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Edit a template your Store uses?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This template is used by your Store ({storeUses.join(", ")}).
+              After you edit it, WhatsApp reviews it again, and those messages
+              aren&apos;t sent until it&apos;s approved. Edit anyway?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const typeChangeConfirmed =
+                  storeConfirm?.typeChangeConfirmed || false;
+                setStoreConfirm(null);
+                handleSubmitForReview(typeChangeConfirmed, true);
+              }}
+            >
+              Edit anyway
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog
         open={isTypeChangeConfirmOpen}

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { getSubscriberCampaignTouches } from "@/client-api/functions/campaigns";
+import { broadcastRestrictionText, storeOptInText } from "@/lib/contactText";
 import { formatDate } from "@/lib/displayFormat";
 import { formatWhatsAppUsername } from "@/lib/inbox";
 import { updateSubscriberBroadcastEligibility } from "@/client-api/functions/subscribers";
@@ -101,6 +102,11 @@ export default function SubscriberModal({
           <DialogTitle>
             {subscriber ? "Edit contact" : "Add contact"}
           </DialogTitle>
+          {storeOptInText(subscriber?.optInSource) && (
+            <p className="text-sm text-muted-foreground">
+              {storeOptInText(subscriber?.optInSource)}
+            </p>
+          )}
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -212,8 +218,10 @@ export default function SubscriberModal({
                 <p className="text-sm font-medium">Exclude from broadcasts</p>
                 <p className="text-xs text-muted-foreground">
                   {subscriber.broadcastEligibility === "retained_only"
-                    ? subscriber.broadcastEligibilityReason
-                      ? `Auto-restricted: ${subscriber.broadcastEligibilityReason}`
+                    ? broadcastRestrictionText(
+                        subscriber.broadcastEligibilityReason
+                      )
+                      ? `Auto-restricted: ${broadcastRestrictionText(subscriber.broadcastEligibilityReason)}`
                       : "Currently restricted from broadcasts."
                     : "Currently eligible for broadcasts."}
                 </p>

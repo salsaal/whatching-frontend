@@ -38,7 +38,9 @@ export type StoreTemplateLists = {
 };
 
 // The API takes exactly these fields per rule (anything else is refused).
-const cleanRule = (rule: StoreCustomStatusRule): StoreCustomStatusRule => ({
+export const cleanRule = (
+  rule: StoreCustomStatusRule
+): StoreCustomStatusRule => ({
   status: rule.status,
   statusLabel: rule.statusLabel || undefined,
   enabled: rule.enabled !== false,
@@ -130,7 +132,7 @@ function MessageCard({
 }
 
 /** Which order status counts as shipped; it triggers "Order shipped". */
-function ShippedStatusPicker({
+export function ShippedStatusPicker({
   connection,
   statuses,
   statusesError,

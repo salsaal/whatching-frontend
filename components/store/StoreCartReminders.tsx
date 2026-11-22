@@ -12,10 +12,13 @@ import type {
   StoreTemplateVariable
 } from "@/client-api/types/stores.type";
 import { useStoreApi } from "@/components/store/StoreApiContext";
+import { StoreMessageCard } from "@/components/store/StoreOrderMessagesTab";
 import {
-  StoreTemplatePicker,
-  StoreVariableChips
-} from "@/components/store/StoreTemplatePicker";
+  StorePluginInstallCard,
+  StorePluginLinkedCard,
+  usePluginCode
+} from "@/components/store/StorePluginCard";
+import { StoreVariableChips } from "@/components/store/StoreTemplatePicker";
 import { STORE_TEMPLATE_LANGUAGES } from "@/components/store/StoreTemplatesDialog";
 import { useStoreSettings } from "@/components/store/useStoreSettings";
 import { Button } from "@/components/ui/button";
@@ -39,8 +42,10 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { useLeaveWarning } from "@/hooks/useLeaveWarning";
 import { formatLanguage } from "@/lib/displayFormat";
 import { storeErrorMessage } from "@/lib/store";
+import { storePreviewValues } from "@/lib/storePage";
 import {
   type DelayDraft,
   type DelayUnit,
@@ -295,23 +300,29 @@ const toDraft = (step: StoreCartReminderStep): StepDraft => ({
   templateLanguage: step.templateName ? step.templateLanguage || null : null
 });
 
+type TemplateLists = {
+  options: StoreTemplateChoice[];
+  allTemplates: StoreTemplateChoice[];
+};
+
 /**
- * The three reminders, edited together and saved with one button (the
- * delays depend on each other). Mounted afresh whenever the saved
- * reminders change.
+ * The three reminders as cards, edited together and saved with one button
+ * (the delays depend on each other). Mounted afresh whenever the saved
+ * reminders change. Leaving the page with changes asks first.
  */
 function ReminderSteps({
   connectionId,
   steps,
   templates,
+  templatesLoaded,
+  preview,
   canManage
 }: {
   connectionId: string;
   steps: StoreCartReminderStep[];
-  templates: {
-    options: StoreTemplateChoice[];
-    allTemplates: StoreTemplateChoice[];
-  };
+  templates: TemplateLists;
+  templatesLoaded: boolean;
+  preview: Record<string, string>;
   canManage: boolean;
 }) {
   const { save } = useStoreSettings(connectionId);
@@ -322,6 +333,7 @@ function ReminderSteps({
   const problem = cartDelaysProblem(drafts.map((draft) => draft.delay));
   const isDirty = JSON.stringify(drafts) !== JSON.stringify(initial);
   const disabled = !canManage || isSaving;
+  useLeaveWarning(isDirty);
 
   const update = (index: number, change: Partial<StepDraft>) => {
     setSaveError(null);
@@ -349,115 +361,105 @@ function ReminderSteps({
   };
 
   return (
-    <div className="space-y-3">
-      <ul className="divide-y rounded-md border">
-        {drafts.map((draft, index) => {
-          const label = `Reminder ${index + 1}`;
-          return (
-            <li key={label} className="space-y-2 p-3 sm:p-4">
-              <div className="grid gap-3 md:grid-cols-[minmax(0,9rem)_minmax(0,14rem)_minmax(0,1fr)] md:items-start">
-                <div className="flex items-center gap-2 md:pt-7">
-                  <Switch
-                    checked={draft.enabled}
+    <div className="space-y-4">
+      {drafts.map((draft, index) => {
+        const label = `Reminder ${index + 1}`;
+        return (
+          <StoreMessageCard
+            key={label}
+            id={`cart-template-${index}`}
+            title={label}
+            enabled={draft.enabled}
+            switchLabel={`Send ${label.toLowerCase()}`}
+            onToggle={(checked) => update(index, { enabled: checked })}
+            extra={
+              <div className="space-y-1.5">
+                <Label htmlFor={`cart-delay-${index}`} className="text-sm">
+                  Send after the shopper leaves
+                </Label>
+                <div className="flex gap-2">
+                  <Input
+                    id={`cart-delay-${index}`}
+                    type="number"
+                    inputMode="decimal"
+                    min={1}
+                    className="min-h-11 w-24 bg-white sm:min-h-9"
+                    value={draft.delay.value}
                     disabled={disabled}
-                    aria-label={`Send ${label.toLowerCase()}`}
-                    onCheckedChange={(checked) =>
-                      update(index, { enabled: checked })
-                    }
-                  />
-                  <span className="text-sm font-medium">{label}</span>
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor={`cart-delay-${index}`} className="text-xs">
-                    Send after
-                  </Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id={`cart-delay-${index}`}
-                      type="number"
-                      inputMode="decimal"
-                      min={1}
-                      className="w-24 bg-white"
-                      value={draft.delay.value}
-                      disabled={disabled}
-                      aria-invalid={problem?.index === index}
-                      onChange={(event) =>
-                        update(index, {
-                          delay: { ...draft.delay, value: event.target.value }
-                        })
-                      }
-                    />
-                    <Select
-                      value={draft.delay.unit}
-                      disabled={disabled}
-                      onValueChange={(unit) =>
-                        update(index, {
-                          delay: { ...draft.delay, unit: unit as DelayUnit }
-                        })
-                      }
-                    >
-                      <SelectTrigger
-                        className="w-28 bg-white"
-                        aria-label={`${label} unit`}
-                      >
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="minutes">minutes</SelectItem>
-                        <SelectItem value="hours">hours</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor={`cart-template-${index}`} className="text-xs">
-                    Template
-                  </Label>
-                  <StoreTemplatePicker
-                    id={`cart-template-${index}`}
-                    templateName={draft.templateName}
-                    templateLanguage={draft.templateLanguage}
-                    options={templates.options}
-                    allTemplates={templates.allTemplates}
-                    disabled={disabled}
-                    onChange={(choice) =>
+                    aria-invalid={problem?.index === index}
+                    onChange={(event) =>
                       update(index, {
-                        templateName: choice?.name || null,
-                        templateLanguage: choice?.language || null
+                        delay: { ...draft.delay, value: event.target.value }
                       })
                     }
                   />
+                  <Select
+                    value={draft.delay.unit}
+                    disabled={disabled}
+                    onValueChange={(unit) =>
+                      update(index, {
+                        delay: { ...draft.delay, unit: unit as DelayUnit }
+                      })
+                    }
+                  >
+                    <SelectTrigger
+                      className="min-h-11 w-28 bg-white sm:min-h-9"
+                      aria-label={`${label} unit`}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="minutes">minutes</SelectItem>
+                      <SelectItem value="hours">hours</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
-              {problem?.index === index && (
-                <p className="text-xs text-destructive" role="alert">
-                  {problem.message}
-                </p>
-              )}
-            </li>
-          );
-        })}
-      </ul>
+            }
+            templateName={draft.templateName}
+            templateLanguage={draft.templateLanguage}
+            templates={templates}
+            templatesLoaded={templatesLoaded}
+            onTemplateChange={(choice) =>
+              update(index, {
+                templateName: choice?.name || null,
+                templateLanguage: choice?.language || null
+              })
+            }
+            preview={preview}
+            error={problem?.index === index ? problem.message : null}
+            disabled={disabled}
+          />
+        );
+      })}
       {canManage && (
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-          {saveError && (
+          {saveError ? (
             <p className="text-sm text-destructive sm:mr-auto" role="alert">
               {saveError}
             </p>
+          ) : (
+            isDirty && (
+              <p className="text-sm font-medium text-amber-700 sm:mr-auto">
+                You have unsaved changes
+              </p>
+            )
           )}
           {isDirty && (
             <Button
-              variant="ghost"
+              variant="outline"
+              className="min-h-11 sm:min-h-9"
               disabled={isSaving}
               onClick={() => {
                 setDrafts(initial);
                 setSaveError(null);
               }}
             >
-              Discard changes
+              Discard
             </Button>
           )}
           <Button
+            className="min-h-11 sm:min-h-9"
             disabled={!isDirty || Boolean(problem) || isSaving}
             onClick={submit}
           >
@@ -471,26 +473,30 @@ function ReminderSteps({
 }
 
 /**
- * Cart reminders (WooCommerce, with the plugin linked): the on/off switch,
- * up to three reminders and their templates.
+ * The Cart reminders tab (WooCommerce): install and link the plugin, or,
+ * once linked, the switch, up to three reminders and their templates.
  */
-export function StoreCartReminders({
+export function StoreCartRemindersTab({
   connection,
   readyMadeCartTemplate,
   variables: variablesFromApi,
   templates,
+  templatesLoaded,
+  currency,
   canManage
 }: {
   connection: StoreConnection;
   readyMadeCartTemplate?: ReadyMadeCartTemplate;
   variables?: StoreTemplateVariable[];
-  templates: {
-    options: StoreTemplateChoice[];
-    allTemplates: StoreTemplateChoice[];
-  };
+  templates: TemplateLists;
+  templatesLoaded: boolean;
+  currency?: string;
   canManage: boolean;
 }) {
   const { save } = useStoreSettings(connection.id);
+  const plugin = connection.plugin || { connected: false };
+  // Lives here so a code outlasts the switch from "not linked" to "linked".
+  const flow = usePluginCode(connection.id, plugin);
   const settings = connection.settings?.cartReminders;
   const enabled = settings?.enabled === true;
   const steps = useMemo(
@@ -502,9 +508,16 @@ export function StoreCartReminders({
   const [switchError, setSwitchError] = useState<string | null>(null);
   const [isSwitching, setIsSwitching] = useState(false);
   const variables = cartReminderVariables(variablesFromApi);
-  const linked = connection.plugin?.connected === true;
   const noTemplates = steps.every((step) => !step.templateName);
   const waiting = cartTemplatesWaiting(steps, templates.allTemplates);
+  const preview = storePreviewValues("cart_reminder", variables, {
+    storeName: connection.storeName,
+    currency
+  });
+
+  if (!plugin.connected) {
+    return <StorePluginInstallCard flow={flow} canManage={canManage} />;
+  }
 
   const turn = async (checked: boolean) => {
     if (checked && !settings?.consentConfirmedAt) {
@@ -517,72 +530,62 @@ export function StoreCartReminders({
   };
 
   return (
-    <section className="rounded-lg border bg-white p-5 shadow-xs sm:p-6">
-      <div className="flex items-start justify-between gap-3">
-        <h2 className="font-heading text-xl font-semibold">Cart reminders</h2>
-        {linked && (
-          <Switch
-            checked={enabled}
-            disabled={!canManage || isSwitching}
-            aria-label="Send cart reminders"
-            onCheckedChange={turn}
-          />
-        )}
-      </div>
-
-      {!linked ? (
-        <p className="mt-1 text-sm text-muted-foreground">
-          Install and link the plugin above to send cart reminders.
+    <div className="space-y-4">
+      <StorePluginLinkedCard
+        connection={connection}
+        flow={flow}
+        canManage={canManage}
+        reminderSwitch={
+          <label className="flex min-h-11 shrink-0 cursor-pointer items-center gap-3 text-sm font-medium sm:min-h-0">
+            Cart reminders on
+            <Switch
+              checked={enabled}
+              disabled={!canManage || isSwitching}
+              aria-label="Send cart reminders"
+              onCheckedChange={turn}
+            />
+          </label>
+        }
+      />
+      {switchError && (
+        <p className="text-sm text-destructive" role="alert">
+          {switchError}
         </p>
-      ) : (
-        <div className="mt-1 space-y-4">
-          {switchError && (
-            <p className="text-sm text-destructive" role="alert">
-              {switchError}
-            </p>
-          )}
-          <div className="space-y-1">
-            <p className="text-sm text-muted-foreground">
-              Shoppers who type their phone number at checkout and leave without
-              ordering get up to 3 WhatsApp reminders, each with a button that
-              brings back their cart. Reminders stop when they order, reply, or
-              opt out.
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Cart reminders are marketing messages. WhatsApp (Meta) charges its
-              marketing rate for each one delivered.
-            </p>
-          </div>
-
-          {canManage && noTemplates && readyMadeCartTemplate && (
-            <Button variant="outline" onClick={() => setIsTemplateOpen(true)}>
-              Create ready-made reminder template
-            </Button>
-          )}
-          {waiting && (
-            <p className="text-sm text-amber-800">
-              Waiting for WhatsApp to approve your template. This usually takes
-              a few minutes.
-            </p>
-          )}
-
-          <ReminderSteps
-            key={JSON.stringify(steps)}
-            connectionId={connection.id}
-            steps={steps}
-            templates={templates}
-            canManage={canManage}
-          />
-
-          <div className="flex flex-wrap gap-1.5">
-            <StoreVariableChips variables={variables} />
-            <span className="inline-flex items-center gap-1 rounded-sm bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
-              <span className="font-medium text-foreground">Link button</span>
-              Brings back the cart
-            </span>
-          </div>
-        </div>
       )}
+
+      <p className="text-sm text-muted-foreground">
+        Shoppers who type their phone number at checkout and leave without
+        ordering get up to 3 WhatsApp reminders, each with a button that brings
+        back their cart. Reminders stop when they order, reply, or opt out.
+        Cart reminders are marketing messages. WhatsApp (Meta) charges its
+        marketing rate for each one delivered.
+      </p>
+
+      {canManage && noTemplates && readyMadeCartTemplate && (
+        <Button
+          variant="outline"
+          className="min-h-11 sm:min-h-9"
+          onClick={() => setIsTemplateOpen(true)}
+        >
+          Create ready-made reminder template
+        </Button>
+      )}
+      {waiting && (
+        <p className="text-sm text-amber-800">
+          Waiting for WhatsApp to approve your template. This usually takes a
+          few minutes.
+        </p>
+      )}
+
+      <ReminderSteps
+        key={JSON.stringify(steps)}
+        connectionId={connection.id}
+        steps={steps}
+        templates={templates}
+        templatesLoaded={templatesLoaded}
+        preview={preview}
+        canManage={canManage}
+      />
 
       <ConsentDialog
         open={isConsentOpen}
@@ -600,6 +603,6 @@ export function StoreCartReminders({
           variables={variables}
         />
       )}
-    </section>
+    </div>
   );
 }
