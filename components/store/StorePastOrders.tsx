@@ -1,5 +1,8 @@
 import type { StoreConnection } from "@/client-api/types/stores.type";
-import { StoreCartsTable, useStoreCartsPage } from "@/components/store/StoreCartLog";
+import {
+  StoreCartsTable,
+  useStoreCartsPage
+} from "@/components/store/StoreCartLog";
 import { StoreOrdersTable } from "@/components/store/StoreOrdersTable";
 import { formatDayMonth, storeHistoryKeptUntil } from "@/lib/storePage";
 

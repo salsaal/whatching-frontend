@@ -105,9 +105,7 @@ const { ConnectedStore } = await import("@/components/store/ConnectedStore");
 const { StoreConnectForm, StorePlanNotice } = await import(
   "@/components/store/StoreConnectScreens"
 );
-const { StorePastOrders } = await import(
-  "@/components/store/StorePastOrders"
-);
+const { StorePastOrders } = await import("@/components/store/StorePastOrders");
 const { useStore } = await import("@/hooks/useStore");
 const { formatDayMonth } = await import("@/lib/storePage");
 const { useOrganizationStore } = await import("@/stores/organizationStore");
@@ -256,35 +254,35 @@ beforeEach(() => {
 });
 
 const ordersPage = {
-    status: "success",
-    data: {
-      page: 1,
-      limit: 25,
-      total: 1,
-      orders: [
-        {
-          id: "o1",
-          orderNumber: "1201",
-          status: "processing",
-          isCod: true,
-          total: "1499.00",
-          currency: "INR",
-          customerName: "Asha Rao",
-          subscriberId: "s1",
-          placedAt: new Date().toISOString(),
-          cod: { state: "awaiting" },
-          messages: [
-            {
-              kind: "cod_confirmation",
-              status: "skipped",
-              reason: "No template is chosen for this message yet."
-            },
-            { kind: "status_out-for-delivery", status: "read" }
-          ]
-        }
-      ]
-    }
-  };
+  status: "success",
+  data: {
+    page: 1,
+    limit: 25,
+    total: 1,
+    orders: [
+      {
+        id: "o1",
+        orderNumber: "1201",
+        status: "processing",
+        isCod: true,
+        total: "1499.00",
+        currency: "INR",
+        customerName: "Asha Rao",
+        subscriberId: "s1",
+        placedAt: new Date().toISOString(),
+        cod: { state: "awaiting" },
+        messages: [
+          {
+            kind: "cod_confirmation",
+            status: "skipped",
+            reason: "No template is chosen for this message yet."
+          },
+          { kind: "status_out-for-delivery", status: "read" }
+        ]
+      }
+    ]
+  }
+};
 
 describe("Store screens", () => {
   it("shows the store card, this month's summary and the Overview", async () => {
@@ -300,7 +298,9 @@ describe("Store screens", () => {
     expect(await screen.findByText("Orders messaged")).toBeTruthy();
     expect(screen.getByText("21")).toBeTruthy();
     expect(screen.getByText("8 confirmed")).toBeTruthy();
-    expect(screen.getByText("2 cancelled · 1 no reply · 1 waiting")).toBeTruthy();
+    expect(
+      screen.getByText("2 cancelled · 1 no reply · 1 waiting")
+    ).toBeTruthy();
     expect(screen.getByText("₹897.00")).toBeTruthy();
     expect(screen.getByText("Link the plugin to start")).toBeTruthy();
     expect(
@@ -308,11 +308,15 @@ describe("Store screens", () => {
     ).toBeTruthy();
 
     // Tabs: no Cart reminders without the plugin field.
+    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
+      "Overview",
+      "Order messages",
+      "Activity"
+    ]);
     expect(
-      screen.getAllByRole("tab").map((tab) => tab.textContent)
-    ).toEqual(["Overview", "Order messages", "Activity"]);
-    expect(
-      screen.getByRole("tab", { name: "Overview" }).getAttribute("aria-selected")
+      screen
+        .getByRole("tab", { name: "Overview" })
+        .getAttribute("aria-selected")
     ).toBe("true");
 
     // What customers receive
@@ -330,14 +334,14 @@ describe("Store screens", () => {
 
     // Setup, which stays
     expect(screen.getByText("Orders reach Whatching")).toBeTruthy();
-    expect(
-      await screen.findByText("1 of 4 approved by WhatsApp")
-    ).toBeTruthy();
+    expect(await screen.findByText("1 of 4 approved by WhatsApp")).toBeTruthy();
     expect(
       screen.getByRole("button", { name: "Create ready-made templates" })
     ).toBeTruthy();
     // Two numbers and none chosen.
-    expect(screen.getByRole("button", { name: "Choose a number" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Choose a number" })
+    ).toBeTruthy();
     expect(
       screen.getByText(/charges for each order message and cart reminder/)
     ).toBeTruthy();
@@ -428,7 +432,9 @@ describe("Store screens", () => {
       await screen.findByRole("button", { name: "See Activity for why" })
     );
     expect(
-      screen.getByRole("tab", { name: "Activity" }).getAttribute("aria-selected")
+      screen
+        .getByRole("tab", { name: "Activity" })
+        .getAttribute("aria-selected")
     ).toBe("true");
     expect(
       screen
@@ -454,9 +460,9 @@ describe("Store screens", () => {
       })
     );
     expect(screen.getByText("Needs attention")).toBeTruthy();
-    expect(screen.getAllByText(/for the last 30 minutes/).length).toBeGreaterThan(
-      0
-    );
+    expect(
+      screen.getAllByText(/for the last 30 minutes/).length
+    ).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Reconnect" })).toBeTruthy();
   });
 

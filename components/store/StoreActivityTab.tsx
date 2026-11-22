@@ -47,8 +47,7 @@ export function StoreActivityTab({
                 onClick={() => onChange({ view: entry })}
                 className={cn(
                   "min-h-11 cursor-pointer rounded-md px-4 text-sm font-medium text-muted-foreground transition sm:min-h-9",
-                  view.view === entry &&
-                    "bg-white text-foreground shadow-xs"
+                  view.view === entry && "bg-white text-foreground shadow-xs"
                 )}
               >
                 {entry === "orders" ? "Orders" : "Carts"}

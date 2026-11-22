@@ -1488,7 +1488,9 @@ export default function TemplateCreateForm({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Edit a template your Store uses?</AlertDialogTitle>
+            <AlertDialogTitle>
+              Edit a template your Store uses?
+            </AlertDialogTitle>
             <AlertDialogDescription>
               This template is used by your Store ({storeUses.join(", ")}).
               After you edit it, WhatsApp reviews it again, and those messages

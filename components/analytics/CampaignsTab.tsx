@@ -194,9 +194,7 @@ function CampaignPerformanceDialog({
             </div>
 
             <div className="rounded-md bg-primary/5 p-3">
-              <p className="text-xs text-muted-foreground">
-                Cost per contact
-              </p>
+              <p className="text-xs text-muted-foreground">Cost per contact</p>
               <p className="mt-1 font-heading text-lg font-semibold text-primary">
                 {performance.costPerConversation != null
                   ? decimalFormat.format(performance.costPerConversation)

@@ -345,9 +345,7 @@ export const storeSummaryTiles = (
 /** "Recovered this month: 3 carts · ₹897.00". */
 export const recoveredThisMonth = (summary: StoreSummary) => {
   const amounts = summary.carts.recoveredTotals
-    .map((entry) =>
-      formatOrderTotal(entry.amount, entry.currency || undefined)
-    )
+    .map((entry) => formatOrderTotal(entry.amount, entry.currency || undefined))
     .join(" · ");
   return [
     `Recovered this month: ${plural(summary.carts.recoveredCount, "cart", "carts")}`,
@@ -421,7 +419,10 @@ export const storeSetupSteps = ({
     (rule) => rule.enabled !== false
   );
   const on = [...onFixed, ...onExtra];
-  const state = (entry: { templateName?: string | null; templateLanguage?: string | null }) =>
+  const state = (entry: {
+    templateName?: string | null;
+    templateLanguage?: string | null;
+  }) =>
     usability(
       findTemplate(templates, entry.templateName, entry.templateLanguage)
         ?.status

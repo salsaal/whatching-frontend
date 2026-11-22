@@ -138,8 +138,7 @@ export const STORE_ENDPOINTS = {
     `${STORES_BASE}/${connectionId}/templates`,
   STATUSES: (connectionId: string) => `${STORES_BASE}/${connectionId}/statuses`,
   ORDERS: (connectionId: string) => `${STORES_BASE}/${connectionId}/orders`,
-  SUMMARY: (connectionId: string) =>
-    `${STORES_BASE}/${connectionId}/summary`,
+  SUMMARY: (connectionId: string) => `${STORES_BASE}/${connectionId}/summary`,
   CHECK: (connectionId: string) => `${STORES_BASE}/${connectionId}/check`,
   PLUGIN_CODE: (connectionId: string) =>
     `${STORES_BASE}/${connectionId}/plugin-code`,

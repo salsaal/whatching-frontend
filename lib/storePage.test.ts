@@ -56,8 +56,18 @@ const connection = (extra: Partial<StoreConnection> = {}): StoreConnection => ({
     cartReminders: {
       enabled: true,
       steps: [
-        { enabled: true, delayMinutes: 60, templateName: "cart", templateLanguage: "en" },
-        { enabled: false, delayMinutes: 360, templateName: "cart", templateLanguage: "en" },
+        {
+          enabled: true,
+          delayMinutes: 60,
+          templateName: "cart",
+          templateLanguage: "en"
+        },
+        {
+          enabled: false,
+          delayMinutes: 360,
+          templateName: "cart",
+          templateLanguage: "en"
+        },
         { enabled: true, delayMinutes: 1440 }
       ]
     }
@@ -67,7 +77,12 @@ const connection = (extra: Partial<StoreConnection> = {}): StoreConnection => ({
 });
 
 const templates = [
-  { name: "confirmed", language: "en", status: "APPROVED", category: "UTILITY" },
+  {
+    name: "confirmed",
+    language: "en",
+    status: "APPROVED",
+    category: "UTILITY"
+  },
   { name: "cod", language: "en", status: "PENDING", category: "UTILITY" },
   { name: "old", language: "en", status: "REJECTED", category: "UTILITY" }
 ] as never[];
@@ -75,7 +90,13 @@ const templates = [
 const summary = (extra: Partial<StoreSummary> = {}): StoreSummary => ({
   month: "2026-11",
   ordersMessaged: 21,
-  cod: { waiting: 0, confirmed: 8, cancelRequested: 1, cancelled: 1, noReply: 1 },
+  cod: {
+    waiting: 0,
+    confirmed: 8,
+    cancelRequested: 1,
+    cancelled: 1,
+    noReply: 1
+  },
   carts: {
     remindersSent: 19,
     recoveredCount: 3,
@@ -110,7 +131,13 @@ describe("storeSummaryTiles", () => {
   it("adds waiting answers, the plugin hint and where Not sent leads", () => {
     const tiles = storeSummaryTiles(
       summary({
-        cod: { waiting: 2, confirmed: 0, cancelRequested: 0, cancelled: 0, noReply: 0 },
+        cod: {
+          waiting: 2,
+          confirmed: 0,
+          cancelRequested: 0,
+          cancelled: 0,
+          noReply: 0
+        },
         carts: { remindersSent: 0, recoveredCount: 1, recoveredTotals: [] },
         notSent: { orders: 1, cartReminders: 2 }
       }),
@@ -128,10 +155,9 @@ describe("storeSummaryTiles", () => {
     });
     // Only cart reminders: the Carts list shows why.
     expect(
-      storeSummaryTiles(
-        summary({ notSent: { orders: 0, cartReminders: 1 } }),
-        { pluginLinked: true }
-      )[3].opens
+      storeSummaryTiles(summary({ notSent: { orders: 0, cartReminders: 1 } }), {
+        pluginLinked: true
+      })[3].opens
     ).toEqual({ view: "carts" });
   });
 
@@ -216,7 +242,11 @@ describe("Overview", () => {
         settings: {
           ...connection().settings,
           messages: {
-            order_confirmed: { enabled: true, templateName: "cod", templateLanguage: "en" },
+            order_confirmed: {
+              enabled: true,
+              templateName: "cod",
+              templateLanguage: "en"
+            },
             cod_confirmation: { enabled: false },
             order_shipped: { enabled: false },
             order_cancelled: { enabled: false }
@@ -229,7 +259,9 @@ describe("Overview", () => {
       senderLabel: null,
       showCarts: true
     });
-    expect(steps.map((step) => [step.id, step.note, step.done, step.action])).toEqual([
+    expect(
+      steps.map((step) => [step.id, step.note, step.done, step.action])
+    ).toEqual([
       ["store", "We can't reach your store.", false, undefined],
       ["templates", "0 of 1 approved by WhatsApp", false, undefined],
       ["carts", "Install and link the plugin to turn them on", false, "plugin"]
@@ -245,13 +277,22 @@ describe("Overview", () => {
         settings: {
           ...connection().settings,
           messages: {
-            order_confirmed: { enabled: true, templateName: "confirmed", templateLanguage: "en" },
+            order_confirmed: {
+              enabled: true,
+              templateName: "confirmed",
+              templateLanguage: "en"
+            },
             cod_confirmation: { enabled: false },
             order_shipped: { enabled: false },
             order_cancelled: { enabled: false }
           },
           customStatusRules: [
-            { status: "packed", enabled: true, templateName: "gone", templateLanguage: "en" }
+            {
+              status: "packed",
+              enabled: true,
+              templateName: "gone",
+              templateLanguage: "en"
+            }
           ]
         }
       }),
@@ -320,7 +361,12 @@ describe("templates on the Store page", () => {
         storeName: "Heap Brick",
         currency: "USD"
       })
-    ).toEqual({ "1": "Zaki", "2": "Test Mug", "3": "Heap Brick", "4": "$299.00" });
+    ).toEqual({
+      "1": "Zaki",
+      "2": "Test Mug",
+      "3": "Heap Brick",
+      "4": "$299.00"
+    });
   });
 });
 
@@ -362,7 +408,10 @@ describe("a disconnected store", () => {
   });
 
   it("tells an owner's disconnect from a failed setup", () => {
-    const base = { status: "disconnected" as const, disconnectedAt: "2026-11-21T10:00:00Z" };
+    const base = {
+      status: "disconnected" as const,
+      disconnectedAt: "2026-11-21T10:00:00Z"
+    };
     expect(disconnectedByOwner(connection(base))).toBe(true);
     expect(
       disconnectedByOwner(
@@ -389,7 +438,11 @@ describe("storeTemplateUses", () => {
 
   it("only counts a live store, and reminders only while they're on", () => {
     expect(
-      storeTemplateUses(connection({ status: "disconnected" }), "confirmed", "en")
+      storeTemplateUses(
+        connection({ status: "disconnected" }),
+        "confirmed",
+        "en"
+      )
     ).toEqual([]);
     expect(storeTemplateUses(null, "confirmed", "en")).toEqual([]);
     const off = connection();
@@ -403,8 +456,12 @@ describe("storeTemplateUses", () => {
 
 describe("contact wording", () => {
   it("says when a contact came from the store", () => {
-    expect(storeOptInText("store_checkout")).toBe("Added from your store (order)");
-    expect(storeOptInText("store_cart")).toBe("Added from your store (checkout)");
+    expect(storeOptInText("store_checkout")).toBe(
+      "Added from your store (order)"
+    );
+    expect(storeOptInText("store_cart")).toBe(
+      "Added from your store (checkout)"
+    );
     expect(storeOptInText("manual")).toBeNull();
   });
 

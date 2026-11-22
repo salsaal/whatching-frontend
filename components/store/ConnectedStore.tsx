@@ -399,7 +399,11 @@ export function ConnectedStore({
           className="h-auto w-full justify-start gap-6 overflow-x-auto rounded-none border-b bg-transparent p-0 px-4 sm:px-5"
         >
           {tabs.map((entry) => (
-            <TabsTrigger key={entry.id} value={entry.id} className={TAB_TRIGGER}>
+            <TabsTrigger
+              key={entry.id}
+              value={entry.id}
+              className={TAB_TRIGGER}
+            >
               {entry.label}
             </TabsTrigger>
           ))}

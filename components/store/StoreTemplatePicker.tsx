@@ -165,18 +165,18 @@ export function StoreTemplatePicker({
                 </span>
               </SelectItem>
             ) : (
-            <SelectItem
-              key={`${template.name}::${template.language}`}
-              value={templateChoiceKey(template.name, template.language)}
-            >
-              <span className="truncate">{template.name}</span>
-              <span className="text-muted-foreground">
-                · {formatLanguage(template.language)}
-              </span>
-              {String(template.status).toUpperCase() !== "APPROVED" && (
-                <span className="text-amber-700">· In review</span>
-              )}
-            </SelectItem>
+              <SelectItem
+                key={`${template.name}::${template.language}`}
+                value={templateChoiceKey(template.name, template.language)}
+              >
+                <span className="truncate">{template.name}</span>
+                <span className="text-muted-foreground">
+                  · {formatLanguage(template.language)}
+                </span>
+                {String(template.status).toUpperCase() !== "APPROVED" && (
+                  <span className="text-amber-700">· In review</span>
+                )}
+              </SelectItem>
             )
           )}
         </SelectContent>

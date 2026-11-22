@@ -556,9 +556,9 @@ export function StoreCartRemindersTab({
       <p className="text-sm text-muted-foreground">
         Shoppers who type their phone number at checkout and leave without
         ordering get up to 3 WhatsApp reminders, each with a button that brings
-        back their cart. Reminders stop when they order, reply, or opt out.
-        Cart reminders are marketing messages. WhatsApp (Meta) charges its
-        marketing rate for each one delivered.
+        back their cart. Reminders stop when they order, reply, or opt out. Cart
+        reminders are marketing messages. WhatsApp (Meta) charges its marketing
+        rate for each one delivered.
       </p>
 
       {canManage && noTemplates && readyMadeCartTemplate && (

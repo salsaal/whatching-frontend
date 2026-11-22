@@ -176,7 +176,13 @@ const summary = (extra: Record<string, unknown> = {}) => ({
   data: {
     month: "2026-11",
     ordersMessaged: 0,
-    cod: { waiting: 0, confirmed: 0, cancelRequested: 0, cancelled: 0, noReply: 0 },
+    cod: {
+      waiting: 0,
+      confirmed: 0,
+      cancelRequested: 0,
+      cancelled: 0,
+      noReply: 0
+    },
     carts: { remindersSent: 0, recoveredCount: 0, recoveredTotals: [] },
     notSent: { orders: 0, cartReminders: 0 },
     ...extra
@@ -242,11 +248,13 @@ describe("Cart reminders on the Store page", () => {
     expect(
       screen.getByText("Install and link the plugin to turn them on")
     ).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Link the cart plugin" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Link the cart plugin" })
+    );
     expect(
-      screen.getByRole("tab", { name: "Cart reminders" }).getAttribute(
-        "aria-selected"
-      )
+      screen
+        .getByRole("tab", { name: "Cart reminders" })
+        .getAttribute("aria-selected")
     ).toBe("true");
     expect(screen.getByRole("button", { name: "Get code" })).toBeTruthy();
   });
@@ -264,9 +272,9 @@ describe("Cart reminders on the Store page", () => {
     expect(screen.getByText(/Plugins › Add New › Upload Plugin/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Get code" })).toBeTruthy();
     // Nothing to set up until the plugin is linked.
-    expect(
-      screen.queryByRole("switch", { name: "Send cart reminders" })
-    ).toBe(null);
+    expect(screen.queryByRole("switch", { name: "Send cart reminders" })).toBe(
+      null
+    );
     expect(screen.queryByText("Save reminders")).toBe(null);
   });
 

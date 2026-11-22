@@ -25,12 +25,7 @@ export function StorePreview({
     );
   }
   return (
-    <div
-      className={cn(
-        "flex h-full items-center bg-[#efeae2] p-4",
-        className
-      )}
-    >
+    <div className={cn("flex h-full items-center bg-[#efeae2] p-4", className)}>
       <p className="max-w-[320px] rounded-lg rounded-tl-none bg-white/70 px-3 py-2 text-[13px] leading-5 text-muted-foreground shadow-xs">
         Choose a template to see what customers will read.
       </p>

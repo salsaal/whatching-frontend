@@ -58,8 +58,8 @@ function SenderDialog({
         <DialogHeader>
           <DialogTitle>Choose the WhatsApp number to send from</DialogTitle>
           <DialogDescription>
-            Order messages and cart reminders go out from this number, using
-            its templates.
+            Order messages and cart reminders go out from this number, using its
+            templates.
           </DialogDescription>
         </DialogHeader>
         <Select
@@ -71,7 +71,10 @@ function SenderDialog({
             if (!problem) onOpenChange(false);
           }}
         >
-          <SelectTrigger className="w-full bg-white" aria-label="Sending number">
+          <SelectTrigger
+            className="w-full bg-white"
+            aria-label="Sending number"
+          >
             <SelectValue placeholder="Choose a number" />
           </SelectTrigger>
           <SelectContent>

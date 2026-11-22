@@ -87,9 +87,7 @@ function OrderMessages({
           <li key={`${message.kind}-${index}`} className="text-sm">
             <span>{storePageMessageTitle(message.kind, customRules)}</span>
             {" · "}
-            <span
-              className={cn("font-medium", toneTextClass[status.tone])}
-            >
+            <span className={cn("font-medium", toneTextClass[status.tone])}>
               {status.label}
             </span>
             {note && (

@@ -182,7 +182,10 @@ function FixedMessageCard({
   const [isSaving, setIsSaving] = useState(false);
   const title = STORE_PAGE_MESSAGE_TITLES[kind];
 
-  const run = async (payload: Parameters<typeof save>[0], clearError = true) => {
+  const run = async (
+    payload: Parameters<typeof save>[0],
+    clearError = true
+  ) => {
     setIsSaving(true);
     const problem = await save(payload);
     setIsSaving(false);
@@ -365,7 +368,11 @@ function AddStatusCard({
                 await save({
                   customStatusRules: [
                     ...rules,
-                    { status: status.slug, statusLabel: status.name, enabled: true }
+                    {
+                      status: status.slug,
+                      statusLabel: status.name,
+                      enabled: true
+                    }
                   ].map(cleanRule)
                 })
               );
@@ -379,7 +386,9 @@ function AddStatusCard({
               <Plus className="size-4" />
               <SelectValue
                 placeholder={
-                  addable.length ? "Add status message" : "No other statuses to add"
+                  addable.length
+                    ? "Add status message"
+                    : "No other statuses to add"
                 }
               />
             </SelectTrigger>
@@ -520,7 +529,10 @@ export function StoreOrderMessagesTab({
 }: {
   connection: StoreConnection;
   templateVariables: Record<string, StoreTemplateVariable[]>;
-  templates: { options: StoreTemplateChoice[]; allTemplates: StoreTemplateChoice[] };
+  templates: {
+    options: StoreTemplateChoice[];
+    allTemplates: StoreTemplateChoice[];
+  };
   templatesLoaded: boolean;
   statuses: StoreOrderStatus[];
   statusesError?: string | null;

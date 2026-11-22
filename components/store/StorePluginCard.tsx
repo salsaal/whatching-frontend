@@ -34,10 +34,7 @@ type IssuedCode = {
  * a new link from the plugin clears it with "Plugin linked." It lives in
  * the card, so it outlasts the switch from "not linked" to "linked".
  */
-export function usePluginCode(
-  connectionId: string,
-  plugin: StorePluginInfo
-) {
+export function usePluginCode(connectionId: string, plugin: StorePluginInfo) {
   const queryClient = useQueryClient();
   const api = useStoreApi();
   const [issued, setIssued] = useState<IssuedCode | null>(null);
@@ -210,7 +207,11 @@ export function StorePluginInstallCard({
           <StepNumber n={1} />
           <div className="min-w-0 flex-1">
             <p className="font-medium">Download the plugin.</p>
-            <Button asChild variant="outline" className="mt-2 min-h-11 sm:min-h-9">
+            <Button
+              asChild
+              variant="outline"
+              className="mt-2 min-h-11 sm:min-h-9"
+            >
               <a href={STORE_PLUGIN_DOWNLOAD_URL} download>
                 <Download className="size-4" />
                 Download plugin (.zip)
