@@ -193,9 +193,13 @@ Preview is intentionally not shown for control blocks such as the follower check
 - Plans are selected on `/plans`; paid checkout runs on `/checkout` with base price, 18% GST, total amount, and backend-required India billing profile fields before opening Razorpay. GSTIN is optional and the free-trial flow does not request billing details.
 - `/congratulations` shows the post-checkout confirmation state, syncs backend subscription status, and links back to Overview and Billing.
 - Billing settings show current plan status, next deduction date and amount for active subscriptions, remaining access for cancelled subscriptions, scheduled plan changes, pending Razorpay authorization links, and billing history.
+- Under the plan details, a note that WhatsApp (Meta) charges for messages separately from the Whatching plan, with each number's 1,000 free customer replies a month and a link to Analytics.
 - Agents page uses team/membership endpoints.
 - Knowledge page creates text and FAQ sources and uploads titled TXT/PDF/DOCX file sources. Sources can be viewed, re-ingested, or deleted; editing is not exposed because the backend has no update route.
 
 ## Analytics
 
-Backend has `/api/v1/organizations/analytics` and an `analyticsService`. Needs verification: no dedicated top-level frontend analytics page was found in the current page inventory, so analytics may currently be backend-only or surfaced inside another page.
+`/analytics` (`pages/analytics.tsx`), backed by `/api/v1/organizations/analytics`. Agents see performance only; owners and admins also see WhatsApp (Meta) costs.
+
+- Free customer replies (owners and admins; spec: the backend's `docs/FREE_REPLIES_FRONTEND_SPEC.md`): `FreeRepliesCard` sits at the top of the costs area, above the spend card. `GET /analytics/free-replies` gives each number's count of WhatsApp's 1,000 free replies a month; one row per number with a bar (grey, amber from 800, red when used up or once a reply was charged), "{n} free replies left" or "All free replies used · {n} charged replies so far", and the small print with when it was updated (`lib/freeReplies.ts`). Before the first 6-hourly refresh (`lastUpdatedAt` null) the rows are replaced by "We'll show your free replies here within a few hours."; with no numbers, or on an error, the card is hidden.
+- Meta charges per message, so the cost wording says messages, not conversations: "Charged messages", "Messages in this period", "Charged share", "{x}% charged", "{n} charged · {m} free", "Daily message volume". Inbox wording ("Conversations", "Conversation status") is unchanged, and so is the campaign "Cost per conversation" (ad spend per contact the ad brought in, not a Meta message charge). API field names are unchanged.

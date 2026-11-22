@@ -38,7 +38,7 @@ export function CategorySpendCard({
 
       {breakdown.length === 0 ? (
         <div className="rounded-sm bg-muted/50 p-6 text-center text-sm text-muted-foreground">
-          No conversation data for this range.
+          No message data for this range.
         </div>
       ) : (
         <div className="space-y-5">

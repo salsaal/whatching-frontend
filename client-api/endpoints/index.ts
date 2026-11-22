@@ -192,6 +192,7 @@ export const ANALYTICS_ENDPOINTS = {
   CAMPAIGN_PERFORMANCE: (campaignSourceId: string) =>
     `${ORGANIZATIONS_BASE}/analytics/campaigns/${campaignSourceId}/performance`,
   CONVERSATION_COSTS: `${ORGANIZATIONS_BASE}/analytics/conversation-costs`,
+  FREE_REPLIES: `${ORGANIZATIONS_BASE}/analytics/free-replies`,
   TEMPLATE_ANALYTICS: `${ORGANIZATIONS_BASE}/analytics/templates`
 };
 

@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
+import Link from "next/link";
 import { toast } from "sonner";
 
 import {
@@ -630,6 +631,18 @@ export default function BillingSettingsPage() {
             )}
           </div>
         </section>
+
+        <p className="text-sm text-muted-foreground">
+          WhatsApp (Meta) charges for messages separately from your Whatching
+          plan. Each number gets 1,000 free customer replies a month; see{" "}
+          <Link
+            href="/analytics"
+            className="font-medium text-primary underline-offset-4 hover:underline"
+          >
+            Analytics
+          </Link>{" "}
+          for how many you&apos;ve used.
+        </p>
 
         <section className="rounded-lg bg-white p-5 shadow-xs">
           <div className="mb-4 flex items-center gap-2">

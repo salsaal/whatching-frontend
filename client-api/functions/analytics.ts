@@ -5,6 +5,7 @@ import {
   ConversationCostGroupBy,
   ConversationCostResponse,
   DashboardAnalyticsResponse,
+  FreeRepliesResponse,
   TemplateAnalyticsResponse,
   TemplateInsightsEnableResponse,
   TemplateInsightsStatusResponse
@@ -39,6 +40,14 @@ export const getConversationCostAnalytics = async ({
   const res = await api.get<ConversationCostResponse>(
     ANALYTICS_ENDPOINTS.CONVERSATION_COSTS,
     { params: { range, groupBy } }
+  );
+  return res.data;
+};
+
+/** Free customer replies used this month, per number. Owners and admins. */
+export const getFreeReplies = async (): Promise<FreeRepliesResponse> => {
+  const res = await api.get<FreeRepliesResponse>(
+    ANALYTICS_ENDPOINTS.FREE_REPLIES
   );
   return res.data;
 };

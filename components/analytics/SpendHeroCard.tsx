@@ -76,7 +76,7 @@ export function SpendHeroCard({
   const billable = costs.billable || { conversationCount: 0, cost: 0 };
   const freeTier = costs.freeTier || { conversationCount: 0, cost: 0 };
   const rawDaily = costs.daily || EMPTY_DAILY;
-  // Meta only reports days that had conversations; quiet days are zeros.
+  // Meta only reports days that had messages; quiet days are zeros.
   const daily = useMemo(
     () =>
       fillDailyGaps(rawDaily, costs.range?.start, costs.range?.end, (date) => ({
@@ -125,7 +125,7 @@ export function SpendHeroCard({
       <div className="flex flex-wrap items-start justify-between gap-6">
         <div>
           <p className="text-sm text-muted-foreground">
-            Conversations in this period
+            Messages in this period
           </p>
           <div className="mt-1 flex items-center gap-3">
             <p className="font-heading text-4xl font-semibold">
@@ -141,21 +141,20 @@ export function SpendHeroCard({
           {previousPeriod.conversationCount > 0 && (
             <p className="mt-2 text-sm text-muted-foreground">
               Prior period{" "}
-              {numberFormat.format(previousPeriod.conversationCount)}{" "}
-              conversations
+              {numberFormat.format(previousPeriod.conversationCount)} messages
             </p>
           )}
         </div>
 
         <div>
-          <p className="text-sm text-muted-foreground">Billable share</p>
+          <p className="text-sm text-muted-foreground">Charged share</p>
           <div className="mt-1 flex items-center gap-3">
             <p className="font-heading text-4xl font-semibold">
-              {billableShare}% billable
+              {billableShare}% charged
             </p>
           </div>
           <p className="mt-2 text-sm text-muted-foreground">
-            {numberFormat.format(billable.conversationCount)} billable ·{" "}
+            {numberFormat.format(billable.conversationCount)} charged ·{" "}
             {numberFormat.format(freeTier.conversationCount)} free
           </p>
         </div>
@@ -190,7 +189,7 @@ export function SpendHeroCard({
             />
             <Bar
               dataKey="conversationCount"
-              name="Daily conversation volume"
+              name="Daily message volume"
               fill={categorical.brand}
               fillOpacity={0.55}
               radius={[2, 2, 0, 0]}
@@ -202,7 +201,7 @@ export function SpendHeroCard({
 
       <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
         <span>{chartData[0] ? formatDateShort(chartData[0].date) : ""}</span>
-        <span>Daily conversation volume</span>
+        <span>Daily message volume</span>
         <span>
           {chartData.length
             ? formatDateShort(chartData[chartData.length - 1].date)

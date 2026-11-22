@@ -174,6 +174,37 @@ export interface ConversationCostResponse {
   };
 }
 
+/**
+ * WhatsApp's 1,000 free customer replies per number per month. `ok` below
+ * 800 used; `nearly_used` from 800; `used_up` at 1,000 or once any reply
+ * was charged.
+ */
+export type FreeReplyState = "ok" | "nearly_used" | "used_up";
+
+export interface FreeReplyNumber {
+  phoneNumberId: string;
+  displayPhoneNumber: string | null;
+  verifiedName: string | null;
+  freeRepliesUsed: number;
+  freeRepliesLeft: number;
+  chargedReplies: number;
+  state: FreeReplyState;
+}
+
+export interface FreeRepliesResponse {
+  status: string;
+  data: {
+    /** "2026-11" */
+    month: string;
+    /** "2026-12-01", the day the allowance starts again. */
+    resetsOn: string;
+    freeRepliesPerMonth: number;
+    /** Null until the first refresh (every 6 hours). */
+    lastUpdatedAt: string | null;
+    numbers: FreeReplyNumber[];
+  };
+}
+
 export interface TemplateAnalyticsClick {
   type: string;
   buttonContent?: string;

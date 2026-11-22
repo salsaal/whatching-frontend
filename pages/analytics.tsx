@@ -43,6 +43,7 @@ import {
   AnalyticsTrend
 } from "@/client-api/types/analytics.type";
 import { CategorySpendCard } from "@/components/analytics/CategorySpendCard";
+import { FreeRepliesCard } from "@/components/analytics/FreeRepliesCard";
 import { ChartTooltip } from "@/components/analytics/ChartTooltip";
 import { HealthStrip } from "@/components/analytics/HealthStrip";
 import { PartToWholeCard } from "@/components/analytics/PartToWholeCard";
@@ -237,7 +238,7 @@ function AnalyticsPageContent() {
           )
         },
         {
-          label: "Billable conversations",
+          label: "Charged messages",
           value: numberFormat.format(costs?.billable?.conversationCount || 0),
           sparkline: costs?.daily?.map((row) => row.conversationCount)
         },
@@ -278,7 +279,7 @@ function AnalyticsPageContent() {
             </h1>
             <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
               {isOwnerOrAdmin
-                ? "Conversations Meta counted, how many were billable, and how your messages did. More breakdowns are further down."
+                ? "Messages Meta counted, how many were charged, and how your messages did. More breakdowns are further down."
                 : "Messages, contacts, broadcasts, and connection health in one view."}
             </p>
           </div>
@@ -363,6 +364,8 @@ function AnalyticsPageContent() {
               </section>
             )}
 
+            <FreeRepliesCard />
+
             {isLoadingCosts || !costs ? (
               <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
                 <Skeleton className="h-96 rounded-lg" />
@@ -374,9 +377,9 @@ function AnalyticsPageContent() {
                   <div className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
                     <AlertCircle className="mt-0.5 size-4 shrink-0" />
                     <p>
-                      Meta&apos;s conversation figures haven&apos;t arrived yet,
-                      so the numbers below show no data rather than a real zero.
-                      They come in once a day; check back tomorrow.
+                      Meta&apos;s message figures haven&apos;t arrived yet, so
+                      the numbers below show no data rather than a real zero.
+                      They come in every few hours; check back later.
                     </p>
                   </div>
                 )}

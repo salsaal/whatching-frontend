@@ -2,6 +2,12 @@
 
 This document reflects the frontend and verified sibling-backend contracts on 2026-08-27.
 
+## 2026-11-22 — Free customer replies and per-message wording
+
+- Built from the backend's `docs/FREE_REPLIES_FRONTEND_SPEC.md` (backend live on production, main dbedcaa): the Analytics free replies card, the Meta-charge wording from conversations to messages, and the Billing note (see `docs/FEATURES.md`).
+- Left as "Cost per conversation" on purpose, though the spec listed it: on campaign performance it is ad spend divided by the contacts the ad brought in, not a Meta message charge. "Cost per contact" would describe it; waiting on a decision.
+- Beyond the spec's table, the same rule changed "Billable share" to "Charged share", the category card's empty text to "No message data for this range.", and the "figures haven't arrived" note to messages and "every few hours" (the backend now refreshes Meta's figures every 6 hours).
+
 ## 2026-11-21 — Cart reminders and the WordPress plugin
 
 - Built on the Store page for WooCommerce (see `docs/FEATURES.md`), shown when the backend sends `connection.plugin`. Live: the backend is on production (main f86e54d) and the frontend release added the plugin zip (1.0.1) at `public/downloads/whatching-cart-recovery.zip`.
