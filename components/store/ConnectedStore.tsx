@@ -27,7 +27,7 @@ import { StoreOrderMessagesTab } from "@/components/store/StoreOrderMessagesTab"
 import { useStoreOrdersPage } from "@/components/store/StoreOrdersTable";
 import { StoreOverviewTab } from "@/components/store/StoreOverviewTab";
 import { StoreSummaryRow } from "@/components/store/StoreSummaryRow";
-import { StoreTemplatesDialog } from "@/components/store/StoreTemplatesDialog";
+import { StoreReadyMadeDialog } from "@/components/store/StoreReadyMadeDialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -381,13 +381,13 @@ export function ConnectedStore({
             className="border-t px-4 py-3 sm:px-5"
           />
         )}
-      </section>
 
-      <StoreSummaryRow
-        connectionId={connection.id}
-        pluginLinked={connection.plugin?.connected === true}
-        onOpenActivity={setView}
-      />
+        <StoreSummaryRow
+          connectionId={connection.id}
+          pluginLinked={connection.plugin?.connected === true}
+          onOpenActivity={setView}
+        />
+      </section>
 
       <Tabs
         value={tab}
@@ -472,13 +472,14 @@ export function ConnectedStore({
         action={endAction}
         onOpenChange={(open) => !open && setEndAction(null)}
       />
-      <StoreTemplatesDialog
+      <StoreReadyMadeDialog
         open={isTemplatesOpen}
         onOpenChange={setIsTemplatesOpen}
-        connectionId={connection.id}
-        platform={connection.platform}
+        connection={connection}
         readyMadeTemplates={data.readyMadeTemplates}
         templateVariables={data.templateVariables}
+        templates={allTemplates}
+        currency={currency}
       />
     </div>
   );

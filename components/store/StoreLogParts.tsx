@@ -1,6 +1,11 @@
-import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  type LucideIcon
+} from "lucide-react";
 import { useRouter } from "next/router";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { toast } from "sonner";
 
 import { getSubscriberById } from "@/client-api/functions/subscribers";
@@ -98,6 +103,24 @@ export function StoreLogPagination({
           <ChevronRight className="size-4" />
         </Button>
       </div>
+    </div>
+  );
+}
+
+/** An empty list: an icon in a soft circle above the explanation. */
+export function StoreEmptyState({
+  icon: Icon,
+  children
+}: {
+  icon: LucideIcon;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed bg-white px-6 py-10 text-center">
+      <span className="flex size-11 items-center justify-center rounded-full bg-primary/10 text-primary">
+        <Icon className="size-5" />
+      </span>
+      <p className="max-w-sm text-sm text-muted-foreground">{children}</p>
     </div>
   );
 }

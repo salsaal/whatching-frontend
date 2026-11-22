@@ -54,7 +54,7 @@ export const STORE_TEMPLATE_LANGUAGES = [
   "id"
 ];
 
-const outcomeText = (result: StoreTemplateResult) => {
+export const outcomeText = (result: StoreTemplateResult) => {
   if (result.outcome === "failed") {
     return result.message || "WhatsApp didn't accept this template.";
   }

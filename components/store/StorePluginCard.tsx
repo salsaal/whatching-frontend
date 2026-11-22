@@ -10,6 +10,7 @@ import type {
 } from "@/client-api/types/stores.type";
 import { useStoreApi } from "@/components/store/StoreApiContext";
 import { Button } from "@/components/ui/button";
+import { CartReminderIllustration } from "@/components/store/StoreIllustrations";
 import { badgeToneClass } from "@/lib/statusPresentation";
 import { storeErrorMessage } from "@/lib/store";
 import {
@@ -174,11 +175,29 @@ function PluginCodeFlow({
   );
 }
 
-function StepNumber({ n }: { n: number }) {
+/** One step of the install timeline, with the line down to the next. */
+function Step({
+  n,
+  last = false,
+  children
+}: {
+  n: number;
+  last?: boolean;
+  children: ReactNode;
+}) {
   return (
-    <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-      {n}
-    </span>
+    <li className="relative flex gap-4 pb-6 last:pb-0">
+      {!last && (
+        <span
+          className="absolute top-8 bottom-1 left-[13px] w-px bg-border"
+          aria-hidden="true"
+        />
+      )}
+      <span className="relative flex size-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
+        {n}
+      </span>
+      <div className="min-w-0 flex-1 pt-0.5">{children}</div>
+    </li>
   );
 }
 
@@ -191,53 +210,53 @@ export function StorePluginInstallCard({
   canManage: boolean;
 }) {
   return (
-    <section className="rounded-lg border bg-white p-5 sm:p-6">
-      <div className="flex flex-wrap items-center gap-2">
-        <Plug className="size-5 text-primary" />
-        <h3 className="font-heading text-lg font-semibold">
-          Cart reminders plugin
-        </h3>
+    <section className="overflow-hidden rounded-lg border bg-white shadow-xs">
+      <div className="flex flex-col gap-5 border-b bg-primary/[0.04] p-5 sm:flex-row sm:items-center sm:p-6">
+        <CartReminderIllustration className="h-28 w-auto shrink-0 self-start sm:h-32" />
+        <div className="min-w-0">
+          <p className="flex items-center gap-1.5 text-sm font-medium text-primary">
+            <Plug className="size-4" />
+            Free WordPress plugin
+          </p>
+          <h3 className="mt-1 font-heading text-xl font-semibold">
+            Cart reminders plugin
+          </h3>
+          <p className="mt-1.5 max-w-xl text-sm text-muted-foreground">
+            Send WhatsApp reminders to shoppers who leave checkout. Install our
+            free WordPress plugin, then link it with a code.
+          </p>
+        </div>
       </div>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Send WhatsApp reminders to shoppers who leave checkout. Install our free
-        WordPress plugin, then link it with a code.
-      </p>
-      <ol className="mt-5 space-y-5">
-        <li className="flex gap-3">
-          <StepNumber n={1} />
-          <div className="min-w-0 flex-1">
-            <p className="font-medium">Download the plugin.</p>
-            <Button
-              asChild
-              variant="outline"
-              className="mt-2 min-h-11 sm:min-h-9"
-            >
-              <a href={STORE_PLUGIN_DOWNLOAD_URL} download>
-                <Download className="size-4" />
-                Download plugin (.zip)
-              </a>
-            </Button>
-          </div>
-        </li>
-        <li className="flex gap-3">
-          <StepNumber n={2} />
-          <p className="min-w-0 flex-1 text-sm">
+      <ol className="p-5 sm:p-6">
+        <Step n={1}>
+          <p className="font-medium">Download the plugin.</p>
+          <Button
+            asChild
+            variant="outline"
+            className="mt-2 min-h-11 sm:min-h-9"
+          >
+            <a href={STORE_PLUGIN_DOWNLOAD_URL} download>
+              <Download className="size-4" />
+              Download plugin (.zip)
+            </a>
+          </Button>
+        </Step>
+        <Step n={2}>
+          <p className="font-medium">Install it in WordPress.</p>
+          <p className="mt-0.5 text-sm text-muted-foreground">
             In WordPress, go to Plugins › Add New › Upload Plugin, choose the
             file, then click Activate.
           </p>
-        </li>
-        <li className="flex gap-3">
-          <StepNumber n={3} />
-          <div className="min-w-0 flex-1">
-            <p className="mb-2 font-medium">Get a code.</p>
-            <PluginCodeFlow
-              flow={flow}
-              canManage={canManage}
-              firstLabel="Get code"
-              firstVariant="default"
-            />
-          </div>
-        </li>
+        </Step>
+        <Step n={3} last>
+          <p className="mb-2 font-medium">Get a code.</p>
+          <PluginCodeFlow
+            flow={flow}
+            canManage={canManage}
+            firstLabel="Get code"
+            firstVariant="default"
+          />
+        </Step>
       </ol>
     </section>
   );

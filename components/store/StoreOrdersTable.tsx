@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
+import { CheckCircle2, Clock, Loader2, ShoppingBag } from "lucide-react";
 import { useState } from "react";
 
 import { getStoreOrders } from "@/client-api/functions/stores";
@@ -12,6 +12,7 @@ import type {
 import { QueryErrorState } from "@/components/shared/QueryErrorState";
 import {
   StoreContactLink,
+  StoreEmptyState,
   StoreLogPagination
 } from "@/components/store/StoreLogParts";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -155,9 +156,17 @@ export function StoreOrdersTable({
   }
   if (!orders.length) {
     return (
-      <p className="rounded-lg border p-8 text-center text-sm text-muted-foreground">
+      <StoreEmptyState
+        icon={
+          show === "not_sent"
+            ? CheckCircle2
+            : show === "cod_waiting"
+              ? Clock
+              : ShoppingBag
+        }
+      >
         {STORE_ORDERS_EMPTY[show]}
-      </p>
+      </StoreEmptyState>
     );
   }
   return (

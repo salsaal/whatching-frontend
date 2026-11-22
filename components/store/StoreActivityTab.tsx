@@ -2,7 +2,10 @@ import type {
   StoreConnection,
   StoreOrderStatus
 } from "@/client-api/types/stores.type";
+import { Plug } from "lucide-react";
+
 import { StoreCartsTable } from "@/components/store/StoreCartLog";
+import { StoreEmptyState } from "@/components/store/StoreLogParts";
 import { StoreOrdersTable } from "@/components/store/StoreOrdersTable";
 import { useStoreSummary } from "@/components/store/StoreSummaryRow";
 import type { StoreView } from "@/hooks/useStoreView";
@@ -111,9 +114,9 @@ export function StoreActivityTab({
             <StoreCartsTable connectionId={connection.id} />
           </div>
         ) : (
-          <p className="rounded-lg border p-8 text-center text-sm text-muted-foreground">
+          <StoreEmptyState icon={Plug}>
             Link the cart plugin to see carts here.
-          </p>
+          </StoreEmptyState>
         )
       ) : (
         <StoreOrdersTable

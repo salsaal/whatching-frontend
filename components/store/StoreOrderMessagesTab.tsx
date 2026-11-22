@@ -1,4 +1,4 @@
-import { Plus, Trash2 } from "lucide-react";
+import { Banknote, type LucideIcon, Plus, Tag, Trash2 } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
 import type {
@@ -17,6 +17,7 @@ import {
 } from "@/components/store/StoreMessagesSection";
 import { StorePreview } from "@/components/store/StorePreview";
 import { StoreTemplatePicker } from "@/components/store/StoreTemplatePicker";
+import { storeMessageIcon } from "@/components/store/storeIcons";
 import { useStoreSettings } from "@/components/store/useStoreSettings";
 import { Button } from "@/components/ui/button";
 import {
@@ -52,6 +53,7 @@ type Choice = { name: string; language: string } | null;
  */
 export function StoreMessageCard({
   id,
+  icon: Icon,
   title,
   when,
   enabled,
@@ -69,6 +71,7 @@ export function StoreMessageCard({
   disabled
 }: {
   id: string;
+  icon?: LucideIcon;
   title: string;
   when?: string;
   enabled: boolean;
@@ -97,10 +100,25 @@ export function StoreMessageCard({
       : undefined;
 
   return (
-    <article className="flex flex-col overflow-hidden rounded-lg border bg-white md:flex-row">
+    <article className="flex flex-col overflow-hidden rounded-lg border bg-white shadow-xs md:flex-row">
       <div className="flex min-w-0 flex-1 flex-col gap-3 p-4 sm:p-5">
-        <div className="flex items-start justify-between gap-3">
-          <h3 className="font-heading text-base font-semibold">{title}</h3>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            {Icon && (
+              <span
+                className={cn(
+                  "flex size-9 shrink-0 items-center justify-center rounded-lg",
+                  enabled
+                    ? "bg-primary/10 text-primary"
+                    : "bg-muted text-muted-foreground"
+                )}
+                aria-hidden="true"
+              >
+                <Icon className="size-4" />
+              </span>
+            )}
+            <h3 className="font-heading text-base font-semibold">{title}</h3>
+          </div>
           <div className="flex shrink-0 items-center gap-1">
             {headerAction}
             <Switch
@@ -148,8 +166,17 @@ export function StoreMessageCard({
           </p>
         )}
       </div>
-      <div className="min-h-40 border-t md:w-[46%] md:shrink-0 md:border-t-0 md:border-l">
-        <StorePreview components={template?.components} values={preview} />
+      <div className="relative min-h-40 border-t md:w-[46%] md:shrink-0 md:border-t-0 md:border-l">
+        <StorePreview
+          components={template?.components}
+          values={preview}
+          className={cn(!enabled && "opacity-50 grayscale")}
+        />
+        {!enabled && (
+          <span className="absolute top-3 right-3 rounded-full bg-white/90 px-2.5 py-0.5 text-xs font-medium text-muted-foreground shadow-xs">
+            Off: not sent
+          </span>
+        )}
       </div>
     </article>
   );
@@ -196,6 +223,7 @@ function FixedMessageCard({
   return (
     <StoreMessageCard
       id={`store-template-${kind}`}
+      icon={storeMessageIcon(kind)}
       title={title}
       when={ORDER_MESSAGE_WHEN[kind]}
       enabled={setting.enabled !== false}
@@ -272,6 +300,7 @@ function ExtraStatusCards({
           <StoreMessageCard
             key={rule.status}
             id={`store-template-status-${rule.status}`}
+            icon={Tag}
             title={label}
             when={`Sent when the order moves to ${label}.`}
             enabled={rule.enabled !== false}
@@ -319,7 +348,7 @@ function ExtraStatusCards({
   );
 }
 
-/** "Message for another order status": pick a status to add a card for. */
+/** "Message for other order statuses": pick a status to add a card for. */
 function AddStatusCard({
   connection,
   statuses,
@@ -345,16 +374,25 @@ function AddStatusCard({
   const full = rules.length >= MAX_CUSTOM_STATUS_RULES;
 
   return (
-    <div className="rounded-lg border border-dashed bg-white p-4 sm:p-5">
+    <div className="rounded-lg border border-dashed bg-white/60 p-4 sm:p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h3 className="font-heading text-base font-semibold">
-            Message for another order status
-          </h3>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            For example &ldquo;Out for delivery&rdquo;. Up to{" "}
-            {MAX_CUSTOM_STATUS_RULES}.
-          </p>
+        <div className="flex gap-3">
+          <span
+            className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"
+            aria-hidden="true"
+          >
+            <Plus className="size-4" />
+          </span>
+          <div>
+            <h3 className="font-heading text-base font-semibold">
+              Message for other order statuses
+            </h3>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              Send a message when an order moves to another status in your
+              store, like Refunded or On hold, or one added by a shipping
+              plugin. Up to {MAX_CUSTOM_STATUS_RULES}.
+            </p>
+          </div>
         </div>
         {canManage && !full && (
           <Select
@@ -438,8 +476,18 @@ function CodCard({
   };
 
   return (
-    <section className="rounded-lg border bg-white p-4 sm:p-5">
-      <h3 className="font-heading text-base font-semibold">Cash on delivery</h3>
+    <section className="rounded-lg border bg-white p-4 shadow-xs sm:p-5">
+      <div className="flex items-center gap-3">
+        <span
+          className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"
+          aria-hidden="true"
+        >
+          <Banknote className="size-4" />
+        </span>
+        <h3 className="font-heading text-base font-semibold">
+          Cash on delivery
+        </h3>
+      </div>
       <div className="mt-3 flex items-start justify-between gap-4">
         <div className="min-w-0 text-sm">
           <p className="font-medium">

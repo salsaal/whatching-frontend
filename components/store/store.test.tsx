@@ -27,6 +27,7 @@ const getStoreOrders = vi.fn();
 const getStoreStatuses = vi.fn();
 const getStoreSummary = vi.fn();
 const getStoreCarts = vi.fn();
+const createStoreTemplates = vi.fn();
 // The Store page keeps its tab and filter in the URL.
 const routerQuery: Record<string, string> = {};
 const routerReplace = vi.fn();
@@ -39,7 +40,7 @@ vi.mock("@/client-api/functions/stores", () => ({
   getStoreCarts: (args: unknown) => getStoreCarts(args),
   checkStoreConnection: vi.fn(),
   connectWooCommerce: vi.fn(),
-  createStoreTemplates: vi.fn(),
+  createStoreTemplates: (args: unknown) => createStoreTemplates(args),
   disconnectStore: vi.fn(),
   updateStoreSettings: vi.fn()
 }));
@@ -159,6 +160,11 @@ const storeData = (
   connection: storeConnection,
   templateVariables: {
     order_confirmed: [{ variable: "{{1}}", label: "Customer’s first name" }],
+    cod_confirmation: [
+      { variable: "{{1}}", label: "Customer’s first name" },
+      { variable: "{{2}}", label: "Order number" },
+      { variable: "{{3}}", label: "Store name" }
+    ],
     custom_status: [{ variable: "{{4}}", label: "Order status" }]
   },
   readyMadeTemplates: [
@@ -167,6 +173,12 @@ const storeData = (
       name: "store_order_confirmed",
       body: "Hi {{1}}",
       buttons: []
+    },
+    {
+      kind: "cod_confirmation",
+      name: "store_cod_confirmation",
+      body: "Hi {{1}}, you placed order #{{2}} with {{3}}.",
+      buttons: ["Confirm order", "Cancel order"]
     }
   ]
 });
@@ -304,7 +316,7 @@ describe("Store screens", () => {
     expect(screen.getByText("₹897.00")).toBeTruthy();
     expect(screen.getByText("Link the plugin to start")).toBeTruthy();
     expect(
-      screen.getByRole("button", { name: "See Activity for why" })
+      screen.getByRole("button", { name: /See Activity for why/ })
     ).toBeTruthy();
 
     // Tabs: no Cart reminders without the plugin field.
@@ -386,7 +398,12 @@ describe("Store screens", () => {
     ).toBeTruthy();
 
     expect(screen.getByText("Send when an order is marked")).toBeTruthy();
-    expect(screen.getByText("Message for another order status")).toBeTruthy();
+    expect(screen.getByText("Message for other order statuses")).toBeTruthy();
+    expect(
+      screen.getByText(
+        /like Refunded or On hold, or one added by a shipping plugin/
+      )
+    ).toBeTruthy();
     expect(
       screen.getByRole("switch", {
         name: "Cancel the order when the customer taps Cancel"
@@ -396,6 +413,63 @@ describe("Store screens", () => {
       screen.getByText(/Cash-on-delivery payment methods/).textContent
     ).toBe("Cash-on-delivery payment methods: Cash on delivery · Change");
     expect(screen.getByText(/Customers get tags you can use/)).toBeTruthy();
+  });
+
+  it("offers ready-made templates for the messages without one", async () => {
+    createStoreTemplates.mockResolvedValue({
+      status: "success",
+      data: {
+        results: [
+          { kind: "cod_confirmation", outcome: "created", status: "PENDING" }
+        ]
+      }
+    });
+    renderStore(connection("connected"), { tab: "messages" });
+    // Wait for the templates, so the dialog knows which are set up.
+    await screen.findByText("Approved by WhatsApp");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Ready-made templates" })
+    );
+
+    expect(await screen.findByText("Already set up")).toBeTruthy();
+    expect(screen.getByText("No approved template")).toBeTruthy();
+    expect(
+      screen
+        .getByRole("checkbox", { name: "Create “Order confirmed”" })
+        .getAttribute("aria-checked")
+    ).toBe("false");
+    expect(
+      screen
+        .getByRole("checkbox", { name: "Create “Cash on delivery check”" })
+        .getAttribute("aria-checked")
+    ).toBe("true");
+    // What customers see, with its buttons.
+    expect(
+      screen.getByText("Hi Zaki, you placed order #1042 with Asha's Shop.")
+    ).toBeTruthy();
+    expect(screen.getByText("Confirm order")).toBeTruthy();
+
+    const text = screen.getByLabelText(
+      "Cash on delivery check message"
+    ) as HTMLTextAreaElement;
+    fireEvent.click(screen.getByRole("button", { name: "Order number" }));
+    expect(text.value.match(/\{\{2\}\}/g)).toHaveLength(2);
+
+    fireEvent.click(screen.getByRole("button", { name: "Create 1 template" }));
+    await waitFor(() =>
+      expect(createStoreTemplates).toHaveBeenCalledWith({
+        connectionId: "c1",
+        payload: {
+          language: "en",
+          kinds: ["cod_confirmation"],
+          bodyOverrides: { cod_confirmation: text.value.trim() }
+        }
+      })
+    );
+    expect(
+      await screen.findByText(/Created and selected. Waiting for WhatsApp/)
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Done" })).toBeTruthy();
   });
 
   it("lists orders in Activity, with filters", async () => {
@@ -429,7 +503,7 @@ describe("Store screens", () => {
   it("opens Activity's Not sent orders from the summary", async () => {
     renderStore(connection("connected"));
     fireEvent.click(
-      await screen.findByRole("button", { name: "See Activity for why" })
+      await screen.findByRole("button", { name: /See Activity for why/ })
     );
     expect(
       screen

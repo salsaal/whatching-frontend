@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
+import { Loader2, ShoppingCart } from "lucide-react";
 import { useState } from "react";
 
 import { getStoreCarts } from "@/client-api/functions/stores";
@@ -7,6 +7,7 @@ import type { StoreCart } from "@/client-api/types/stores.type";
 import { QueryErrorState } from "@/components/shared/QueryErrorState";
 import {
   StoreContactLink,
+  StoreEmptyState,
   StoreLogPagination
 } from "@/components/store/StoreLogParts";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -115,10 +116,10 @@ export function StoreCartsTable({
   }
   if (!carts.length) {
     return hideWhenEmpty ? null : (
-      <p className="rounded-lg border p-8 text-center text-sm text-muted-foreground">
+      <StoreEmptyState icon={ShoppingCart}>
         No carts yet. When a shopper types their phone number at checkout and
         leaves, it shows up here.
-      </p>
+      </StoreEmptyState>
     );
   }
   return (

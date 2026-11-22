@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, ExternalLink, Loader2 } from "lucide-react";
+import { CheckCircle2, Loader2, ShoppingCart } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { createCartTemplate } from "@/client-api/functions/stores";
@@ -13,12 +13,12 @@ import type {
 } from "@/client-api/types/stores.type";
 import { useStoreApi } from "@/components/store/StoreApiContext";
 import { StoreMessageCard } from "@/components/store/StoreOrderMessagesTab";
+import { StoreTemplateEditor } from "@/components/store/StoreTemplateEditor";
 import {
   StorePluginInstallCard,
   StorePluginLinkedCard,
   usePluginCode
 } from "@/components/store/StorePluginCard";
-import { StoreVariableChips } from "@/components/store/StoreTemplatePicker";
 import { STORE_TEMPLATE_LANGUAGES } from "@/components/store/StoreTemplatesDialog";
 import { useStoreSettings } from "@/components/store/useStoreSettings";
 import { Button } from "@/components/ui/button";
@@ -41,7 +41,6 @@ import {
   SelectValue
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
 import { useLeaveWarning } from "@/hooks/useLeaveWarning";
 import { formatLanguage } from "@/lib/displayFormat";
 import { storeErrorMessage } from "@/lib/store";
@@ -149,13 +148,17 @@ function CartTemplateDialog({
   onOpenChange,
   connectionId,
   readyMade,
-  variables
+  variables,
+  storeName,
+  currency
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   connectionId: string;
   readyMade: ReadyMadeCartTemplate;
   variables: StoreTemplateVariable[];
+  storeName: string;
+  currency?: string;
 }) {
   const queryClient = useQueryClient();
   const api = useStoreApi();
@@ -196,91 +199,120 @@ function CartTemplateDialog({
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && close()}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
-        <DialogHeader>
-          <DialogTitle>Create ready-made reminder template</DialogTitle>
+      <DialogContent className="flex max-h-[92vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl">
+        <DialogHeader className="border-b bg-white px-5 py-4 text-left sm:px-6">
+          <DialogTitle className="font-heading text-lg">
+            Create ready-made reminder template
+          </DialogTitle>
           <DialogDescription>
             We&apos;ll add this cart reminder template to your WhatsApp account
-            and use it for your reminders. WhatsApp reviews it before it can be
-            sent.
+            and use it for your reminders.
           </DialogDescription>
         </DialogHeader>
 
-        {result ? (
-          <p className="flex gap-2 text-sm">
-            <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-primary" />
-            {createdText(result)}
-          </p>
-        ) : (
-          <div className="space-y-4">
-            <div className="max-w-xs space-y-1.5">
-              <Label htmlFor="cart-template-language">Language</Label>
-              <Select value={language} onValueChange={setLanguage}>
-                <SelectTrigger id="cart-template-language" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {STORE_TEMPLATE_LANGUAGES.map((code) => (
-                    <SelectItem key={code} value={code}>
-                      {formatLanguage(code)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Write the message below in this language.
-              </p>
-            </div>
-            <div className="space-y-2 rounded-md border p-3">
-              <Textarea
-                value={text}
-                rows={4}
-                maxLength={1024}
-                onChange={(event) => setText(event.target.value)}
-                aria-label="Cart reminder message"
-              />
-              <div className="flex items-center justify-center gap-1.5 rounded-md border bg-muted/40 py-2 text-sm font-medium text-sky-700">
-                <ExternalLink className="size-3.5" />
-                {readyMade.linkButton}
-              </div>
-              <StoreVariableChips variables={variables} />
-            </div>
-            {error && (
-              <p className="text-sm text-destructive" role="alert">
-                {error}
-              </p>
-            )}
-          </div>
-        )}
-
-        <DialogFooter>
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-muted/30 px-5 py-5 sm:px-6">
           {result ? (
-            <Button onClick={close}>Done</Button>
+            <p className="flex gap-3 rounded-lg border bg-white p-4 text-sm">
+              <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-primary" />
+              {createdText(result)}
+            </p>
           ) : (
             <>
-              <Button variant="outline" onClick={close} disabled={isPending}>
-                Cancel
-              </Button>
-              <Button
-                disabled={isPending || text.trim().length < 10}
-                onClick={() => {
-                  setError("");
-                  const body = text.trim();
-                  create({
-                    connectionId,
-                    payload: {
-                      language,
-                      ...(body !== readyMade.body ? { body } : {})
+              <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
+                <Label htmlFor="cart-template-language" className="shrink-0">
+                  Language
+                </Label>
+                <Select value={language} onValueChange={setLanguage}>
+                  <SelectTrigger
+                    id="cart-template-language"
+                    className="w-full bg-white sm:w-56"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {STORE_TEMPLATE_LANGUAGES.map((code) => (
+                      <SelectItem key={code} value={code}>
+                        {formatLanguage(code)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Write the message in this language.
+                </p>
+              </div>
+              <div className="rounded-lg border bg-white p-4">
+                <StoreTemplateEditor
+                  id="cart-template-text"
+                  label="Cart reminder message"
+                  value={text}
+                  onChange={setText}
+                  variables={variables}
+                  previewValues={storePreviewValues(
+                    "cart_reminder",
+                    variables,
+                    {
+                      storeName,
+                      currency
                     }
-                  });
-                }}
-              >
-                {isPending && <Loader2 className="size-4 animate-spin" />}
-                Create template
-              </Button>
+                  )}
+                  buttons={[
+                    {
+                      type: "URL",
+                      text: readyMade.linkButton,
+                      url: "https://example.com/{{1}}"
+                    }
+                  ]}
+                />
+                <p className="mt-3 text-xs text-muted-foreground">
+                  The &ldquo;{readyMade.linkButton}&rdquo; button brings the
+                  shopper back to their cart.
+                </p>
+              </div>
+              {error && (
+                <p className="text-sm text-destructive" role="alert">
+                  {error}
+                </p>
+              )}
             </>
           )}
-        </DialogFooter>
+        </div>
+
+        <div className="flex flex-col-reverse gap-3 border-t bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <p className="text-xs text-muted-foreground">
+            {result
+              ? ""
+              : "WhatsApp reviews it before it can be sent, usually within a few minutes."}
+          </p>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row">
+            {result ? (
+              <Button onClick={close}>Done</Button>
+            ) : (
+              <>
+                <Button variant="outline" onClick={close} disabled={isPending}>
+                  Cancel
+                </Button>
+                <Button
+                  disabled={isPending || text.trim().length < 10}
+                  onClick={() => {
+                    setError("");
+                    const body = text.trim();
+                    create({
+                      connectionId,
+                      payload: {
+                        language,
+                        ...(body !== readyMade.body ? { body } : {})
+                      }
+                    });
+                  }}
+                >
+                  {isPending && <Loader2 className="size-4 animate-spin" />}
+                  Create template
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );
@@ -368,6 +400,7 @@ function ReminderSteps({
           <StoreMessageCard
             key={label}
             id={`cart-template-${index}`}
+            icon={ShoppingCart}
             title={label}
             enabled={draft.enabled}
             switchLabel={`Send ${label.toLowerCase()}`}
@@ -601,6 +634,8 @@ export function StoreCartRemindersTab({
           connectionId={connection.id}
           readyMade={readyMadeCartTemplate}
           variables={variables}
+          storeName={connection.storeName}
+          currency={currency}
         />
       )}
     </div>
