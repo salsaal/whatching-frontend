@@ -331,9 +331,11 @@ function ReadyMadeBody({
             disabled={isPending || !selected.length || tooShort}
           >
             {isPending && <Loader2 className="size-4 animate-spin" />}
-            {selected.length === 1
-              ? "Create 1 template"
-              : `Create ${selected.length} templates`}
+            {selected.length === 0
+              ? "Create templates"
+              : selected.length === 1
+                ? "Create 1 template"
+                : `Create ${selected.length} templates`}
           </Button>
         </div>
       </div>
