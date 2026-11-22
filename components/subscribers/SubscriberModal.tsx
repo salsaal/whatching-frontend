@@ -221,8 +221,6 @@ export default function SubscriberModal({
                     ? broadcastRestrictionText(
                         subscriber.broadcastEligibilityReason
                       )
-                      ? `Auto-restricted: ${broadcastRestrictionText(subscriber.broadcastEligibilityReason)}`
-                      : "Currently restricted from broadcasts."
                     : "Currently eligible for broadcasts."}
                 </p>
               </div>

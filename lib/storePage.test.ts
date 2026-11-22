@@ -465,11 +465,38 @@ describe("contact wording", () => {
     expect(storeOptInText("manual")).toBeNull();
   });
 
-  it("words known restriction reasons and hides the rest", () => {
-    expect(broadcastRestrictionText("awaiting_plan_capacity")).toBe(
-      "Waiting for room in your plan's contact limit"
-    );
-    expect(broadcastRestrictionText("opted_out")).toBeNull();
-    expect(broadcastRestrictionText(undefined)).toBeNull();
+  it("words every restriction reason, and falls back for the rest", () => {
+    expect(
+      [
+        "opted_out",
+        "not_whatsapp_reachable",
+        "manual_exclusion",
+        "archived",
+        "plan_subscriber_capacity",
+        "plan_subscriber_limit",
+        "awaiting_plan_capacity",
+        "less_recent_than_plan_pool"
+      ].map(broadcastRestrictionText)
+    ).toEqual([
+      "Opted out of marketing messages.",
+      "Can't be reached on WhatsApp.",
+      "You excluded this contact from broadcasts.",
+      "Archived.",
+      "Waiting for room in your plan's contact limit.",
+      "Waiting for room in your plan's contact limit.",
+      "Waiting for room in your plan's contact limit.",
+      "Over your plan's contact limit. Your most recently active contacts are kept first."
+    ]);
+    // A reason to include a contact, an unknown code, or none.
+    for (const reason of [
+      "recent_engagement",
+      "toString",
+      "something_new",
+      undefined
+    ]) {
+      expect(broadcastRestrictionText(reason)).toBe(
+        "Currently restricted from broadcasts."
+      );
+    }
   });
 });

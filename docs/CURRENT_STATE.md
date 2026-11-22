@@ -16,7 +16,7 @@ This document reflects the frontend and verified sibling-backend contracts on 20
 
 ## 2026-11-21 — Cart reminders and the WordPress plugin
 
-- Built on the Store page for WooCommerce (see `docs/FEATURES.md`), shown when the backend sends `connection.plugin`. Live: the backend is on production (main f86e54d) and the frontend release added the plugin zip (1.0.1) at `public/downloads/whatching-cart-recovery.zip`.
+- Built on the Store page for WooCommerce (see `docs/FEATURES.md`), shown when the backend sends `connection.plugin`. Live: the backend is on production (main f86e54d) and the frontend release added the plugin zip at `public/downloads/whatching-cart-recovery.zip` (now 1.0.2, renamed "Whatching Cart Recovery" for WordPress.org, without a Plugin URI; identical to the backend's `woocommerce-plugin/` on main).
 - The plugin checks in every 15 minutes on its own (1.0.1), so the 24-hour quiet warning means the plugin is off or the site can't reach Whatching.
 - Add the "Or install it from WordPress.org" link once the plugin is listed there.
 - Shopify work is paused (waiting on Shopify's billing answer); `/shopify` stays as it is.
