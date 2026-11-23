@@ -389,8 +389,8 @@ function AddStatusCard({
             </h3>
             <p className="mt-0.5 text-sm text-muted-foreground">
               Send a message when an order moves to another status in your
-              store, like Refunded or On hold, or one added by a shipping
-              plugin. Up to {MAX_CUSTOM_STATUS_RULES}.
+              store, like Refunded, or one added by a shipping plugin. Up to{" "}
+              {MAX_CUSTOM_STATUS_RULES}.
             </p>
           </div>
         </div>

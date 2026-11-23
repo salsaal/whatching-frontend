@@ -401,7 +401,7 @@ describe("Store screens", () => {
     expect(screen.getByText("Message for other order statuses")).toBeTruthy();
     expect(
       screen.getByText(
-        /like Refunded or On hold, or one added by a shipping plugin/
+        /like Refunded, or one added by a shipping plugin\. Up to 10\./
       )
     ).toBeTruthy();
     expect(
