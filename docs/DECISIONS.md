@@ -97,6 +97,10 @@ The current UI direction is to use skeleton loading states instead of plain "Loa
 
 Routes use `protect`, `setOrgContext`, `restrictTo`, and `requirePermission`. Frontend should not assume all authenticated users can mutate every module. Backend currently has role/permission checks around templates, flows, conversations, contacts, media, team, integrations, and WhatsApp numbers.
 
+## A Failed Membership Request Is Not "No Access"
+
+`useCurrentMembership()` answers every permission check in the UI. A network failure, timeout or 5xx on `GET /organizations/me/membership` says nothing about access, so the hook retries it (three times, then every 15 s) and keeps `isLoading` true until it answers. Gated pages show their skeleton meanwhile instead of the No-access panel or a redirect, and menu items appear once it loads. Only a real answer (including a 401, 403 or 404) counts as the member's access.
+
 ## Lint Command Mutates
 
 `npm run lint` runs `next lint --fix`. Use `npx tsc --noEmit` for a non-mutating frontend type check. Run lint only when file modifications from auto-fix are acceptable.
