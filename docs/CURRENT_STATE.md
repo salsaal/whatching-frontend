@@ -5,7 +5,7 @@ This document reflects the frontend and verified sibling-backend contracts on 20
 ## 2026-11-23 — Drip campaigns and offer preferences
 
 - Built from the backend's `docs/DRIP_FRONTEND_SPEC.md` (backend main d414f4e): the Drip campaigns pages, the Stop offers switch on contacts, the ready-made "Stop promotions" button for marketing templates, and the drip link when a template can't be deleted (see `docs/FEATURES.md`). The inbox already shows the `subscriber_stopped_offers` note like other system notes.
-- Backend gap, flagged and worked around: drips drop text-header values (see `docs/DECISIONS.md`), so templates with a header variable aren't offered for drips.
+- The backend is live on production. A header gap found while building (drips dropped text-header values) was fixed in backend 0939576, so templates with a header variable are offered for drips (see `docs/DECISIONS.md`).
 - Choices: the menu item reads "Drip campaigns"; the once-a-day offer note shows only when a step is an offer; Add people has no consent tick (the endpoint takes none).
 
 ## 2026-11-22 — Store redesign

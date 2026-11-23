@@ -139,23 +139,12 @@ describe("templates a drip can use", () => {
     expect(isDripTemplate(template(), "waba-2")).toBe(false);
   });
 
-  it("leaves out a variable in a text header (its value isn't kept)", () => {
+  it("takes a template with a variable in a text header", () => {
     expect(
       isDripTemplate(
         template({
           components: [
             { type: "HEADER", format: "TEXT", text: "Hi {{1}}" },
-            { type: "BODY", text: "Hello" }
-          ]
-        }),
-        "waba-1"
-      )
-    ).toBe(false);
-    expect(
-      isDripTemplate(
-        template({
-          components: [
-            { type: "HEADER", format: "TEXT", text: "Our sale" },
             { type: "BODY", text: "Hello" }
           ]
         }),

@@ -240,16 +240,72 @@ describe("DripBuilder", () => {
     );
   });
 
-  it("doesn't offer templates with a variable in a text header", async () => {
+  it("sends a text header's value like a broadcast does", async () => {
+    createDrip.mockResolvedValue(savedDrip());
     wrap(<DripBuilder onSaved={vi.fn()} />);
-    fireEvent.click(
-      screen.getAllByRole("button", { name: /Choose a template/ })[0]
-    );
-    const dialog = await screen.findByRole("dialog");
-    await within(dialog).findByRole("option", { name: /welcome_offer/ });
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Header drip" }
+    });
+    const [first, second] = screen.getAllByRole("button", {
+      name: /Choose a template/
+    });
+    await chooseTemplate(first, "header_variable");
+    await chooseTemplate(second, "order_tips");
+
+    // An empty header value stops the save.
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    expect(screen.getByText("Message 1: Fill in every value.")).toBeTruthy();
+    expect(createDrip).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByPlaceholderText("Type the text"), {
+      target: { value: "Priya" }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(createDrip).toHaveBeenCalledTimes(1));
+    expect(createDrip.mock.calls[0][0].steps[0]).toEqual({
+      templateId: "meta-3",
+      components: [
+        {
+          type: "header",
+          parameters: [
+            { type: "text", value: { source: "literal", text: "Priya" } }
+          ]
+        }
+      ],
+      delayMinutes: 0
+    });
+  });
+
+  it("reads a saved text header's value back", async () => {
+    const draft = savedDrip({
+      steps: [
+        {
+          step: 1,
+          templateId: "meta-3",
+          templateName: "header_variable",
+          templateLanguage: "en_US",
+          templateCategory: "MARKETING",
+          hasStopButton: false,
+          components: [
+            {
+              type: "header",
+              parameters: [
+                { type: "text", value: { source: "literal", text: "Priya" } }
+              ]
+            }
+          ],
+          delayMinutes: 0
+        }
+      ]
+    });
+    wrap(<DripBuilder drip={draft} onSaved={vi.fn()} />);
     expect(
-      within(dialog).queryByRole("option", { name: /header_variable/ })
-    ).toBeNull();
+      (
+        (await screen.findByPlaceholderText(
+          "Type the text"
+        )) as HTMLInputElement
+      ).value
+    ).toBe("Priya");
   });
 
   it("keeps a started drip's messages and number, and lets one be added", async () => {

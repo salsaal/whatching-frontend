@@ -69,7 +69,7 @@ This file lists functionality visible in the current frontend and contracts pres
 - `/drips/new` and a draft's `/drips/[dripId]` show the builder (`components/drips/DripBuilder.tsx`): name, sending number, a timeline of 2 to 5 messages with the wait before each (message 1: right away or after a wait; later ones 1 hour to 60 days after the previous), the broadcast variable rows, a live preview of the selected message, sending hours with a time zone, and "Stop when they reply". "Next: choose who joins" saves and opens the start dialog.
 - The start dialog (`DripAudienceDialog`) uses the broadcast audience picker ("People from an ad" for ad contacts), a live count from the preview endpoint (lines that are 0 are hidden), the required consent tick, and Start now or Schedule. The same dialog without consent or timing adds people to a running or paused drip.
 - A started drip has Results (counts, who's waiting and why, each message's numbers with empty columns hidden, why people left), People (In progress, Finished, Left early with a reason filter; Remove for people in progress) and Messages & settings (the builder: messages can be changed or added, not removed; the number is fixed). Pause, Resume, Add people and Archive (confirmed) are in the header; archived drips are read-only.
-- The template picker offers approved, non-login-code templates from the number's account, without a variable in a text header (see `docs/DECISIONS.md`). An offer step without a Stop promotions button shows a warning.
+- The template picker offers approved, non-login-code templates from the number's account; text-header values are filled in like a broadcast's (see `docs/DECISIONS.md`). An offer step without a Stop promotions button shows a warning.
 
 ## WhatsApp Flow Builder
 

@@ -60,21 +60,15 @@ export const hasStopPromotionsButton = (components: TemplateComponent[] = []) =>
   );
 
 /**
- * Templates a drip step can use: approved, not a login code, from the
- * number's WhatsApp account, and without a variable in a text header (the
- * server doesn't keep header values for drips yet, so starting would fail).
+ * Templates a drip step can use: approved, not a login code, and from the
+ * number's WhatsApp account. Text-header values go in the step's components
+ * like a broadcast's; an image, video or document header comes from the
+ * template's saved file.
  */
-export const isDripTemplate = (template: MessageTemplate, wabaId?: string) => {
-  if (template.status.toUpperCase() !== "APPROVED") return false;
-  if (template.category?.toUpperCase() === "AUTHENTICATION") return false;
-  if (wabaId && template.wabaId && template.wabaId !== wabaId) return false;
-  const header = template.components.find(
-    (component) => component.type === "HEADER"
-  );
-  return !(
-    header?.format === "TEXT" && /\{\{[^}]+\}\}/.test(header.text || "")
-  );
-};
+export const isDripTemplate = (template: MessageTemplate, wabaId?: string) =>
+  template.status.toUpperCase() === "APPROVED" &&
+  template.category?.toUpperCase() !== "AUTHENTICATION" &&
+  !(wabaId && template.wabaId && template.wabaId !== wabaId);
 
 // ---- Waits ----------------------------------------------------------------
 

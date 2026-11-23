@@ -101,9 +101,9 @@ Routes use `protect`, `setOrgContext`, `restrictTo`, and `requirePermission`. Fr
 
 `useCurrentMembership()` answers every permission check in the UI. A network failure, timeout or 5xx on `GET /organizations/me/membership` says nothing about access, so the hook retries it (three times, then every 15 s) and keeps `isLoading` true until it answers. Gated pages show their skeleton meanwhile instead of the No-access panel or a redirect, and menu items appear once it loads. Only a real answer (including a 401, 403 or 404) counts as the member's access.
 
-## Drip Steps Skip Text-Header Variables
+## Drip Steps Carry Text-Header Values, Not Header Files
 
-The backend strips header components when it serializes a drip and when it starts one (it re-adds media headers from the template's default file). A template with a variable in a text header would lose that value and fail to start, so the drip template picker leaves those templates out (`isDripTemplate`). Offer them again once the backend keeps text header values.
+A drip step's `components` are the broadcast composer's (`buildBroadcastTemplateComponents`), so a text header's value goes as `{ type: "header", parameters: [{ type: "text", ... }] }` and comes back in `GET` (backend 0939576). An image, video or document header is never sent: the backend adds it from the template's saved file and leaves it out of responses. A template without that file gets the backend's "needs an image for its header" message, shown as written.
 
 ## Drip Edits Send Steps Only When They Changed
 
