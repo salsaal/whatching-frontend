@@ -4,9 +4,9 @@ import {
   BulkDeleteSubscribersResponse,
   ImportSubscribersPayload,
   ImportSubscribersResponse,
-  SubscriberPayload,
   SubscriberResponse,
-  SubscribersResponse
+  SubscribersResponse,
+  UpdateSubscriberPayload
 } from "../types/subscribers.type";
 import {
   CreateTagPayload,
@@ -56,7 +56,7 @@ export const updateSubscriber = async ({
   payload
 }: {
   subscriberId: string;
-  payload: Partial<SubscriberPayload>;
+  payload: UpdateSubscriberPayload;
 }): Promise<SubscriberResponse> => {
   const res = await api.patch<SubscriberResponse>(
     SUBSCRIBER_ENDPOINTS.UPDATE(subscriberId),

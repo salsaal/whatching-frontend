@@ -44,6 +44,7 @@ This file lists functionality visible in the current frontend and contracts pres
 - Supported template formats include text, image, video, document, location, limited time offer, and carousel.
 - Supported button types include URL, phone number, quick reply, copy code, and catalog.
 - Template preview exists for headers, body, footer, buttons, media, and carousel cards.
+- New English marketing templates (not carousel or limited-time offer) start with a "Stop promotions" quick reply, which can be removed and isn't re-added (`syncStopPromotionsButton`). Its label is fixed because the server matches it by text.
 - Quick reply buttons can be mapped to active WhatsApp canvas trigger keys.
 - Templates with missing/stale quick reply routes are surfaced as Action Required in the UI.
 - A local-only quick reply route update endpoint exists so routing can be changed without resubmitting the Meta template.
@@ -59,6 +60,16 @@ This file lists functionality visible in the current frontend and contracts pres
 - Broadcast statuses include draft, scheduled, processing/in progress, completed, failed, and canceled.
 - Quick reply route validation is applied before creating/sending broadcasts.
 - The specific-subscriber picker scrolls inside the create form while the create/cancel actions remain fixed.
+- The audience picker is `components/broadcasts/AudiencePicker.tsx` (data in `useAudienceSources`), shared with drips.
+- A template's "Stop promotions" quick reply is never routed to a flow (wizard and inbox): a tap stops offers by itself.
+
+## Drip Campaigns
+
+- `/drips` lists drips (All, Drafts, Running, Paused, Archived) with In progress, Finished and Left early counts; drafts can be deleted. With no drips it explains how a drip works in three steps. Drips need a paid plan; without one the page says so and links to Plans.
+- `/drips/new` and a draft's `/drips/[dripId]` show the builder (`components/drips/DripBuilder.tsx`): name, sending number, a timeline of 2 to 5 messages with the wait before each (message 1: right away or after a wait; later ones 1 hour to 60 days after the previous), the broadcast variable rows, a live preview of the selected message, sending hours with a time zone, and "Stop when they reply". "Next: choose who joins" saves and opens the start dialog.
+- The start dialog (`DripAudienceDialog`) uses the broadcast audience picker ("People from an ad" for ad contacts), a live count from the preview endpoint (lines that are 0 are hidden), the required consent tick, and Start now or Schedule. The same dialog without consent or timing adds people to a running or paused drip.
+- A started drip has Results (counts, who's waiting and why, each message's numbers with empty columns hidden, why people left), People (In progress, Finished, Left early with a reason filter; Remove for people in progress) and Messages & settings (the builder: messages can be changed or added, not removed; the number is fixed). Pause, Resume, Add people and Archive (confirmed) are in the header; archived drips are read-only.
+- The template picker offers approved, non-login-code templates from the number's account, without a variable in a text header (see `docs/DECISIONS.md`). An offer step without a Stop promotions button shows a warning.
 
 ## WhatsApp Flow Builder
 
@@ -115,6 +126,7 @@ Supported WhatsApp action types:
 - Subscriber API supports listing, detail, update, import, bulk delete, and tag management.
 - Subscriber model includes phone number/WA ID, Instagram ID/username/profile picture, tags, opt-in state, metadata, and interaction timestamps.
 - Infinite-scroll contact pages deduplicate subscriber IDs across overlapping/refetched pages.
+- "Stop offers for this contact" (`OffersStoppedControl`) in the contact dialog and the inbox's contact panel: a "Stopped offers" badge with the reason, and a switch (`PATCH` subscriber `offersStopped`). Order updates and replies still go.
 
 ## Media
 

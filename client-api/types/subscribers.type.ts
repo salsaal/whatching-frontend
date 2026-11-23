@@ -1,3 +1,9 @@
+export type OffersStoppedReason =
+  | "stop_button"
+  | "whatsapp_setting"
+  | "meta_error"
+  | "manual";
+
 export interface Subscriber {
   _id: string;
   orgId: string;
@@ -12,6 +18,9 @@ export interface Subscriber {
   broadcastEligibilityReason?: string;
   broadcastEligibilityMode?: "auto" | "excluded";
   isOptedIn: boolean;
+  /** Offers (marketing messages) are stopped; order updates still go. */
+  offersStopped?: boolean;
+  offersStoppedReason?: OffersStoppedReason | null;
   lastInteraction?: string;
   lastInboundAt?: string;
   lastOutboundAt?: string;
@@ -72,6 +81,10 @@ export interface SubscriberResponse {
     subscriber: Subscriber;
     conversation?: ConversationSummary;
   };
+}
+
+export interface UpdateSubscriberPayload extends Partial<SubscriberPayload> {
+  offersStopped?: boolean;
 }
 
 export interface SubscriberPayload {

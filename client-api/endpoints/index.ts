@@ -316,3 +316,21 @@ export const INSTAGRAM_ENDPOINTS = {
     `${INSTAGRAM_BASE}/comment-rules/${ruleId}/disable`,
   AUTOMATION_LOGS: `${INSTAGRAM_BASE}/automation-logs`
 };
+
+const DRIPS_BASE = `${ORGANIZATIONS_BASE}/drips`;
+
+export const DRIP_ENDPOINTS = {
+  LIST: DRIPS_BASE,
+  CREATE: DRIPS_BASE,
+  BY_ID: (dripId: string) => `${DRIPS_BASE}/${dripId}`,
+  AUDIENCE_PREVIEW: (dripId: string) =>
+    `${DRIPS_BASE}/${dripId}/audience/preview`,
+  START: (dripId: string) => `${DRIPS_BASE}/${dripId}/start`,
+  CONTACTS: (dripId: string) => `${DRIPS_BASE}/${dripId}/contacts`,
+  CONTACT: (dripId: string, contactRowId: string) =>
+    `${DRIPS_BASE}/${dripId}/contacts/${contactRowId}`,
+  PAUSE: (dripId: string) => `${DRIPS_BASE}/${dripId}/pause`,
+  RESUME: (dripId: string) => `${DRIPS_BASE}/${dripId}/resume`,
+  ARCHIVE: (dripId: string) => `${DRIPS_BASE}/${dripId}/archive`,
+  REPORT: (dripId: string) => `${DRIPS_BASE}/${dripId}/report`
+};

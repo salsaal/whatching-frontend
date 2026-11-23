@@ -7,6 +7,8 @@ import {
   buttonsFromTemplate,
   composeTemplateComponents,
   inferTemplateType,
+  suitsStopPromotionsButton,
+  syncStopPromotionsButton,
   TemplateEditorState
 } from "./templateDraft";
 
@@ -188,5 +190,64 @@ describe("bodyWarnings", () => {
       ])
     );
     expect(bodyWarnings("Hi {{1}}, thanks for your order today.")).toEqual([]);
+  });
+});
+
+describe("Stop promotions button", () => {
+  const stop = { type: "QUICK_REPLY" as const, text: "Stop promotions" };
+  const shop = { type: "QUICK_REPLY" as const, text: "Shop now" };
+  const site = {
+    type: "URL" as const,
+    text: "Visit",
+    url: "https://shop.example"
+  };
+
+  it("suits new English marketing templates only", () => {
+    const suits = (
+      category: string,
+      language: string,
+      templateType: "TEXT" | "CAROUSEL" | "LIMITED_TIME_OFFER" = "TEXT"
+    ) => suitsStopPromotionsButton({ category, language, templateType });
+    expect(suits("MARKETING", "en_US")).toBe(true);
+    expect(suits("MARKETING", "en")).toBe(true);
+    expect(suits("UTILITY", "en_US")).toBe(false);
+    expect(suits("MARKETING", "hi")).toBe(false);
+    expect(suits("MARKETING", "en_US", "CAROUSEL")).toBe(false);
+    expect(suits("MARKETING", "en_US", "LIMITED_TIME_OFFER")).toBe(false);
+  });
+
+  it("adds it after the other quick replies, before call-to-actions", () => {
+    expect(
+      syncStopPromotionsButton([shop, site], {
+        suits: true,
+        dismissed: false
+      })
+    ).toEqual([shop, stop, site]);
+  });
+
+  it("isn't added twice, after the user removed it, or when full", () => {
+    const withStop = [stop];
+    expect(
+      syncStopPromotionsButton(withStop, { suits: true, dismissed: false })
+    ).toBe(withStop);
+    expect(
+      syncStopPromotionsButton([], { suits: true, dismissed: true })
+    ).toEqual([]);
+    const full = Array.from({ length: 10 }, (_, index) => ({
+      type: "QUICK_REPLY" as const,
+      text: `Option ${index}`
+    }));
+    expect(
+      syncStopPromotionsButton(full, { suits: true, dismissed: false })
+    ).toBe(full);
+  });
+
+  it("goes when the template stops suiting it", () => {
+    expect(
+      syncStopPromotionsButton([shop, stop, site], {
+        suits: false,
+        dismissed: false
+      })
+    ).toEqual([shop, site]);
   });
 });

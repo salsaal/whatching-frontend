@@ -70,6 +70,7 @@ import {
 import { StoreUseBadge } from "@/components/templates/StoreUseBadge";
 import { WhatsAppPreview } from "@/components/whatsapp/WhatsAppPreview";
 import { formatFileSize, formatRelative } from "@/lib/displayFormat";
+import { STOP_PROMOTIONS_LABEL } from "@/lib/drips";
 import { templateCategoryPresentation } from "@/lib/statusPresentation";
 import { cn } from "@/lib/utils";
 import { useOrganizationStore } from "@/stores/organizationStore";
@@ -96,6 +97,8 @@ import {
   MAX_HEADER_TEXT,
   MEDIA_HEADERS,
   sanitizeTemplateName,
+  suitsStopPromotionsButton,
+  syncStopPromotionsButton,
   variableKeys
 } from "./editor/templateDraft";
 import {
@@ -726,6 +729,33 @@ export default function TemplateCreateForm({
     }
 
     mutate(payload);
+  };
+
+  // ---------- "Stop promotions" button ----------
+  // New templates only: see syncStopPromotionsButton.
+  const [isStopButtonDismissed, setIsStopButtonDismissed] = useState(false);
+  const suitsStopButton =
+    !source && suitsStopPromotionsButton({ category, language, templateType });
+  useEffect(() => {
+    if (source) return;
+    setButtons((current) =>
+      syncStopPromotionsButton(current, {
+        suits: suitsStopButton,
+        dismissed: isStopButtonDismissed
+      })
+    );
+  }, [isStopButtonDismissed, source, suitsStopButton]);
+  const changeButtons = (next: ButtonDraft[]) => {
+    const hadStop = buttons.some(
+      (button) => button.text === STOP_PROMOTIONS_LABEL
+    );
+    if (
+      hadStop &&
+      !next.some((button) => button.text === STOP_PROMOTIONS_LABEL)
+    ) {
+      setIsStopButtonDismissed(true);
+    }
+    setButtons(next);
   };
 
   // ---------- header / format changes ----------
@@ -1386,7 +1416,7 @@ export default function TemplateCreateForm({
           >
             <ButtonsEditor
               buttons={buttons}
-              onChange={setButtons}
+              onChange={changeButtons}
               isCarousel={format === "carousel"}
               disabled={!canEditFields}
             />

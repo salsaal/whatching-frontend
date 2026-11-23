@@ -19,28 +19,12 @@ import {
 } from "@/components/ui/select";
 import { SettingsBackLink } from "@/components/settings/SettingsBackLink";
 import AppLayout from "@/layouts/AppLayout";
-import { formatTimezoneOption } from "@/lib/displayFormat";
+import { timezoneOptions } from "@/lib/timezones";
 import { useCurrentMembership } from "@/hooks/useCurrentMembership";
 import { useOrganizationStore } from "@/stores/organizationStore";
 
 const NAME_MIN = 2;
 const NAME_MAX = 80;
-
-const curatedTimezones = [
-  "Asia/Kolkata",
-  "Asia/Dubai",
-  "Asia/Singapore",
-  "Asia/Karachi",
-  "Asia/Dhaka",
-  "Asia/Kathmandu",
-  "Asia/Colombo",
-  "Europe/London",
-  "Europe/Berlin",
-  "America/New_York",
-  "America/Los_Angeles",
-  "Australia/Sydney",
-  "UTC"
-];
 
 export default function GeneralSettingsPage() {
   const activeOrganization = useOrganizationStore(
@@ -72,23 +56,12 @@ export default function GeneralSettingsPage() {
         ? `Keep it to ${NAME_MAX} characters.`
         : "";
 
-  const timezones = useMemo(() => {
-    let zones = curatedTimezones;
-    try {
-      const supported = Intl.supportedValuesOf("timeZone");
-      if (supported.length) zones = supported;
-    } catch {
-      // Older browsers: the curated list.
-    }
-    // The saved zone may be an older name ("Asia/Calcutta") the list
-    // doesn't include; keep it selectable.
-    const saved = activeOrganization?.timezone;
-    if (saved && !zones.includes(saved)) zones = [saved, ...zones];
-    return zones.map((zone) => ({
-      value: zone,
-      label: formatTimezoneOption(zone)
-    }));
-  }, [activeOrganization?.timezone]);
+  // The saved zone may be an older name ("Asia/Calcutta") the list
+  // doesn't include; keep it selectable.
+  const timezones = useMemo(
+    () => timezoneOptions(activeOrganization?.timezone),
+    [activeOrganization?.timezone]
+  );
 
   const { mutate: saveSettings, isPending: isSaving } = useMutation({
     mutationFn: updateOrganizationSettings,

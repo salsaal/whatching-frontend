@@ -2,6 +2,12 @@
 
 This document reflects the frontend and verified sibling-backend contracts on 2026-08-27.
 
+## 2026-11-23 — Drip campaigns and offer preferences
+
+- Built from the backend's `docs/DRIP_FRONTEND_SPEC.md` (backend main d414f4e): the Drip campaigns pages, the Stop offers switch on contacts, the ready-made "Stop promotions" button for marketing templates, and the drip link when a template can't be deleted (see `docs/FEATURES.md`). The inbox already shows the `subscriber_stopped_offers` note like other system notes.
+- Backend gap, flagged and worked around: drips drop text-header values (see `docs/DECISIONS.md`), so templates with a header variable aren't offered for drips.
+- Choices: the menu item reads "Drip campaigns"; the once-a-day offer note shows only when a step is an offer; Add people has no consent tick (the endpoint takes none).
+
 ## 2026-11-22 — Store redesign
 
 - Built from the backend's `docs/STORE_REDESIGN_FRONTEND_SPEC.md` (backend main 970b47e): the tabbed Store page, summary row, previews, lasting setup checklist, Activity filters, a disconnected store's past orders, and the Store in the Templates tab, inbox and Contacts (see `docs/FEATURES.md`). It replaces the earlier Store UX spec. Shopify screens are unchanged.

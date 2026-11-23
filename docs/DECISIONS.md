@@ -101,6 +101,14 @@ Routes use `protect`, `setOrgContext`, `restrictTo`, and `requirePermission`. Fr
 
 `useCurrentMembership()` answers every permission check in the UI. A network failure, timeout or 5xx on `GET /organizations/me/membership` says nothing about access, so the hook retries it (three times, then every 15 s) and keeps `isLoading` true until it answers. Gated pages show their skeleton meanwhile instead of the No-access panel or a redirect, and menu items appear once it loads. Only a real answer (including a 401, 403 or 404) counts as the member's access.
 
+## Drip Steps Skip Text-Header Variables
+
+The backend strips header components when it serializes a drip and when it starts one (it re-adds media headers from the template's default file). A template with a variable in a text header would lose that value and fail to start, so the drip template picker leaves those templates out (`isDripTemplate`). Offer them again once the backend keeps text header values.
+
+## Drip Edits Send Steps Only When They Changed
+
+The builder sends `steps` in `PATCH /organizations/drips/:id` only after a message was changed, added or removed. Changing just the name, sending hours or "Stop when they reply" then works even if a template has since lost approval, and doesn't re-check every step. Change responses carry no people counts (they read 0), so `rememberDrip` keeps the counts already shown.
+
 ## Lint Command Mutates
 
 `npm run lint` runs `next lint --fix`. Use `npx tsc --noEmit` for a non-mutating frontend type check. Run lint only when file modifications from auto-fix are acceptable.

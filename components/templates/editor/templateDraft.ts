@@ -9,6 +9,7 @@ import {
   TemplateCreationType,
   TemplateHeaderFormat
 } from "@/client-api/types/templates.type";
+import { isStopPromotionsLabel, STOP_PROMOTIONS_LABEL } from "@/lib/drips";
 
 export type HeaderChoice = "NONE" | TemplateHeaderFormat;
 export type EditorSection = "basics" | "content" | "buttons" | "review";
@@ -427,3 +428,54 @@ export const bodyWarnings = (bodyText: string): string[] => {
   }
   return warnings;
 };
+
+// ---------- "Stop promotions" button ----------
+
+/**
+ * New English marketing templates start with a "Stop promotions" quick
+ * reply, so people can stop offers in one tap instead of blocking or
+ * reporting. Added once (not again after the user removes it, or when the
+ * buttons are full) and taken away when the template stops suiting it.
+ */
+export const syncStopPromotionsButton = (
+  buttons: ButtonDraft[],
+  { suits, dismissed }: { suits: boolean; dismissed: boolean }
+): ButtonDraft[] => {
+  const hasStop = buttons.some(
+    (button) =>
+      button.type === "QUICK_REPLY" && isStopPromotionsLabel(button.text)
+  );
+  if (suits) {
+    if (dismissed || hasStop || buttons.length >= MAX_TOTAL_BUTTONS) {
+      return buttons;
+    }
+    const quickReplies = buttons.filter(
+      (button) => button.type === "QUICK_REPLY"
+    );
+    return [
+      ...quickReplies,
+      { type: "QUICK_REPLY", text: STOP_PROMOTIONS_LABEL },
+      ...buttons.filter((button) => button.type !== "QUICK_REPLY")
+    ];
+  }
+  const next = buttons.filter(
+    (button) =>
+      !(button.type === "QUICK_REPLY" && button.text === STOP_PROMOTIONS_LABEL)
+  );
+  return next.length === buttons.length ? buttons : next;
+};
+
+/** Whether a new template suits the ready-made "Stop promotions" button. */
+export const suitsStopPromotionsButton = ({
+  category,
+  language,
+  templateType
+}: {
+  category: string;
+  language: string;
+  templateType: TemplateCreationType;
+}) =>
+  category.toUpperCase() === "MARKETING" &&
+  /^en/i.test(language) &&
+  templateType !== "CAROUSEL" &&
+  templateType !== "LIMITED_TIME_OFFER";

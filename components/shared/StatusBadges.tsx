@@ -1,3 +1,5 @@
+import type { DripStatus } from "@/client-api/types/drips.type";
+import { dripStatusPresentation } from "@/lib/drips";
 import {
   badgeToneClass,
   broadcastStatusPresentation,
@@ -75,6 +77,21 @@ export function BroadcastStatusBadge({
   return (
     <Badge
       presentation={broadcastStatusPresentation(status, scheduledAt)}
+      className={className}
+    />
+  );
+}
+
+export function DripStatusBadge({
+  status,
+  className
+}: {
+  status?: DripStatus | null;
+  className?: string;
+}) {
+  return (
+    <Badge
+      presentation={dripStatusPresentation(status)}
       className={className}
     />
   );

@@ -30,6 +30,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { OffersStoppedControl } from "@/components/subscribers/OffersStoppedControl";
 
 interface SubscriberModalProps {
   open: boolean;
@@ -235,6 +236,16 @@ export default function SubscriberModal({
                 }
               />
             </div>
+          )}
+
+          {subscriber && (subscriber.phoneNumber || subscriber.waId) && (
+            <OffersStoppedControl
+              subscriberId={subscriber._id}
+              initial={{
+                offersStopped: subscriber.offersStopped,
+                offersStoppedReason: subscriber.offersStoppedReason
+              }}
+            />
           )}
 
           {subscriber &&

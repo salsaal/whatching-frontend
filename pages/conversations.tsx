@@ -151,6 +151,8 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { ContactAvatar } from "@/components/inbox/ContactAvatar";
+import { OffersStoppedControl } from "@/components/subscribers/OffersStoppedControl";
+import { isStopPromotionsLabel } from "@/lib/drips";
 import { QueryErrorState } from "@/components/shared/QueryErrorState";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
@@ -334,9 +336,15 @@ const extractTemplateVariables = (
 
 const getTemplateQuickReplyButtons = (template: MessageTemplate | null) => {
   const buttonComponent = getTemplateComponent(template, "BUTTONS");
-  return (buttonComponent?.buttons || [])
-    .map((button, index) => ({ button, index }))
-    .filter(({ button }) => button.type === "QUICK_REPLY");
+  return (
+    (buttonComponent?.buttons || [])
+      .map((button, index) => ({ button, index }))
+      // "Stop promotions" stops offers by itself; it never starts a flow.
+      .filter(
+        ({ button }) =>
+          button.type === "QUICK_REPLY" && !isStopPromotionsLabel(button.text)
+      )
+  );
 };
 
 const getTemplateMediaHeader = (
@@ -2820,6 +2828,14 @@ function ConversationsPageContent() {
                 </Badge>
               ))}
             </div>
+            {contextData?.data.subscriber?._id &&
+              !isInstagramConversation &&
+              can("contacts:manage") && (
+                <OffersStoppedControl
+                  key={contextData.data.subscriber._id}
+                  subscriberId={contextData.data.subscriber._id}
+                />
+              )}
           </div>
         </div>
 

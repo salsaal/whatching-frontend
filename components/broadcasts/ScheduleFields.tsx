@@ -87,12 +87,15 @@ export function ScheduleFields({
   value,
   onChange,
   timezone,
-  disabled
+  disabled,
+  nowLabel = "Send now"
 }: {
   value: ScheduleValue;
   onChange: (next: ScheduleValue) => void;
   timezone: string;
   disabled?: boolean;
+  /** Label of the first option ("Start now" for drips). */
+  nowLabel?: string;
 }) {
   const isToday =
     value.date && value.date.toDateString() === new Date().toDateString();
@@ -108,7 +111,7 @@ export function ScheduleFields({
       >
         {(
           [
-            ["now", "Send now", Send],
+            ["now", nowLabel, Send],
             ["schedule", "Schedule", CalendarIcon]
           ] as const
         ).map(([mode, label, Icon]) => (

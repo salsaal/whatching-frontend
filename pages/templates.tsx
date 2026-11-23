@@ -182,6 +182,7 @@ function TemplatesPageContent() {
     message: string;
     broadcastHref: string;
     storeHref?: string;
+    dripHref?: string;
   } | null>(null);
   // "Used by Store": the store's turned-on messages that send a template.
   const storeConnection = useStore().data?.data.connection;
@@ -327,6 +328,7 @@ function TemplatesPageContent() {
           details?: {
             broadcastId?: string;
             storeMessages?: string[];
+            dripId?: string;
           } | null;
         }>,
         template
@@ -340,6 +342,18 @@ function TemplatesPageContent() {
           error.response.data?.details?.storeMessages?.length
         ) {
           setDeleteError({ message, broadcastHref: "", storeHref: "/store" });
+          return;
+        }
+        // 409 from a drip that still sends it: link to that drip.
+        if (
+          error.response?.status === 409 &&
+          error.response.data?.details?.dripId
+        ) {
+          setDeleteError({
+            message,
+            broadcastHref: "",
+            dripHref: `/drips/${error.response.data.details.dripId}`
+          });
           return;
         }
         // 409: a scheduled or running broadcast still uses it. Explain in
@@ -721,6 +735,14 @@ function TemplatesPageContent() {
                   className="font-medium underline"
                 >
                   Open broadcast
+                </Link>
+              )}
+              {deleteError.dripHref && (
+                <Link
+                  href={deleteError.dripHref}
+                  className="font-medium underline"
+                >
+                  Open drip
                 </Link>
               )}
               {deleteError.storeHref && (

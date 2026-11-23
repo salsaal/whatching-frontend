@@ -1,0 +1,175 @@
+// Drip campaigns: a contact gets 2 to 5 approved templates in order, with a
+// wait between each. Plain-language helpers shared by the drip pages.
+
+import type {
+  DripStatus,
+  DripWaitingReason
+} from "@/client-api/types/drips.type";
+import type {
+  MessageTemplate,
+  TemplateComponent
+} from "@/client-api/types/templates.type";
+import type { StatusPresentation } from "@/lib/statusPresentation";
+
+export const DRIP_MIN_STEPS = 2;
+export const DRIP_MAX_STEPS = 5;
+export const DRIP_MIN_WAIT_MINUTES = 60;
+export const DRIP_MAX_WAIT_DAYS = 60;
+export const DRIP_MAX_WAIT_MINUTES = DRIP_MAX_WAIT_DAYS * 24 * 60;
+export const DEFAULT_SEND_HOURS = { startHour: 10, endHour: 20 };
+
+/** The quick reply that stops offers in one tap. Matched by its label. */
+export const STOP_PROMOTIONS_LABEL = "Stop promotions";
+
+// The labels the server treats as a stop tap (case and punctuation ignored).
+const STOP_LABELS = new Set([
+  "stop promotions",
+  "stop promotion",
+  "stop promos",
+  "stop promo",
+  "stop offers",
+  "stop marketing",
+  "unsubscribe",
+  "unsubscribe from promos",
+  "unsubscribe from promotions",
+  "unsubscribe from offers"
+]);
+
+const normalizeLabel = (value: unknown) =>
+  String(value || "")
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+export const isStopPromotionsLabel = (value: unknown) =>
+  STOP_LABELS.has(normalizeLabel(value));
+
+export const isOfferCategory = (category?: string | null) =>
+  String(category || "").toUpperCase() === "MARKETING";
+
+export const hasStopPromotionsButton = (components: TemplateComponent[] = []) =>
+  components.some(
+    (component) =>
+      component.type === "BUTTONS" &&
+      (component.buttons || []).some(
+        (button) =>
+          button.type === "QUICK_REPLY" && isStopPromotionsLabel(button.text)
+      )
+  );
+
+/**
+ * Templates a drip step can use: approved, not a login code, from the
+ * number's WhatsApp account, and without a variable in a text header (the
+ * server doesn't keep header values for drips yet, so starting would fail).
+ */
+export const isDripTemplate = (template: MessageTemplate, wabaId?: string) => {
+  if (template.status.toUpperCase() !== "APPROVED") return false;
+  if (template.category?.toUpperCase() === "AUTHENTICATION") return false;
+  if (wabaId && template.wabaId && template.wabaId !== wabaId) return false;
+  const header = template.components.find(
+    (component) => component.type === "HEADER"
+  );
+  return !(
+    header?.format === "TEXT" && /\{\{[^}]+\}\}/.test(header.text || "")
+  );
+};
+
+// ---- Waits ----------------------------------------------------------------
+
+export type WaitUnit = "hours" | "days";
+
+export interface WaitValue {
+  /** Step 1 only: send as soon as the contact joins. */
+  immediate: boolean;
+  /** As typed, so the field can be cleared while editing. */
+  amount: string;
+  unit: WaitUnit;
+}
+
+export const waitFromMinutes = (minutes: number): WaitValue => {
+  if (minutes <= 0) return { immediate: true, amount: "1", unit: "days" };
+  if (minutes % 1440 === 0) {
+    return { immediate: false, amount: String(minutes / 1440), unit: "days" };
+  }
+  return {
+    immediate: false,
+    amount: String(Math.max(1, Math.round(minutes / 60))),
+    unit: "hours"
+  };
+};
+
+/** Minutes, or null when the amount isn't a whole number of at least 1. */
+export const waitToMinutes = (wait: WaitValue): number | null => {
+  if (wait.immediate) return 0;
+  const amount = Number(wait.amount);
+  if (!Number.isInteger(amount) || amount < 1) return null;
+  return amount * (wait.unit === "days" ? 1440 : 60);
+};
+
+/** Why this wait can't be saved, or "". */
+export const waitProblem = (wait: WaitValue, isFirst: boolean) => {
+  const minutes = waitToMinutes(wait);
+  if (minutes === null) return "Enter a whole number.";
+  if (!isFirst && minutes < DRIP_MIN_WAIT_MINUTES) {
+    return "Wait at least 1 hour.";
+  }
+  if (minutes > DRIP_MAX_WAIT_MINUTES) {
+    return `Wait at most ${DRIP_MAX_WAIT_DAYS} days.`;
+  }
+  return "";
+};
+
+const plural = (count: number, word: string) =>
+  `${count} ${word}${count === 1 ? "" : "s"}`;
+
+/** "right away", "3 hours", "2 days". */
+export const describeWait = (minutes: number) => {
+  if (minutes <= 0) return "right away";
+  if (minutes % 1440 === 0) return plural(minutes / 1440, "day");
+  if (minutes % 60 === 0) return plural(minutes / 60, "hour");
+  return plural(minutes, "minute");
+};
+
+// ---- Sending hours ---------------------------------------------------------
+
+/** "10:00", "20:00"; 24 is the end of the day. */
+export const hourLabel = (hour: number) =>
+  hour === 24 ? "Midnight" : `${String(hour).padStart(2, "0")}:00`;
+
+export const sendHoursProblem = (startHour: number, endHour: number) =>
+  endHour - startHour < 2
+    ? "Sending hours must be at least 2 hours long, within one day."
+    : "";
+
+// ---- Status and progress ---------------------------------------------------
+
+export const dripStatusPresentation = (
+  status?: DripStatus | null
+): StatusPresentation => {
+  switch (status) {
+    case "draft":
+      return { label: "Draft", tone: "grey" };
+    case "active":
+      return { label: "Running", tone: "green", live: true };
+    case "paused":
+      return { label: "Paused", tone: "orange" };
+    case "archived":
+      return { label: "Archived", tone: "grey-outline" };
+    default:
+      return { label: "Unknown", tone: "grey" };
+  }
+};
+
+export const DRIP_WAITING_TEXT: Record<DripWaitingReason, string> = {
+  sending_hours: "Waiting for sending hours",
+  once_a_day: "Waiting, one offer a day",
+  daily_limit: "Waiting, daily WhatsApp sending limit reached",
+  whatsapp_limit_retry: "Trying once more after a day"
+};
+
+/** The server's message as written, or the fallback. */
+export const dripErrorMessage = (error: unknown, fallback: string) =>
+  (error as { response?: { data?: { message?: string } } } | null)?.response
+    ?.data?.message || fallback;

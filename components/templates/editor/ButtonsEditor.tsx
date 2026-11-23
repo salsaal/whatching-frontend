@@ -5,6 +5,7 @@ import { TemplateButtonType } from "@/client-api/types/templates.type";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { groupTemplateButtons } from "@/components/templates/templateUtils";
+import { isStopPromotionsLabel, STOP_PROMOTIONS_LABEL } from "@/lib/drips";
 import { cn } from "@/lib/utils";
 import {
   ButtonDraft,
@@ -140,6 +141,9 @@ export function ButtonsEditor({
               const Icon = meta.icon;
               const hasUrlVar =
                 button.type === "URL" && /{{\s*1\s*}}/.test(button.url || "");
+              const isStopButton =
+                button.type === "QUICK_REPLY" &&
+                isStopPromotionsLabel(button.text);
               return (
                 <div
                   key={index}
@@ -191,6 +195,8 @@ export function ButtonsEditor({
                               update(index, { text: event.target.value })
                             }
                             disabled={disabled}
+                            // Recognised by its exact label.
+                            readOnly={button.text === STOP_PROMOTIONS_LABEL}
                             maxLength={MAX_BUTTON_LABEL}
                             placeholder="Button label"
                             aria-label="Button label"
@@ -226,7 +232,9 @@ export function ButtonsEditor({
                         )}
                         {button.type === "QUICK_REPLY" && (
                           <p className="self-center text-xs text-muted-foreground">
-                            The flow block it starts is picked when sending.
+                            {isStopButton
+                              ? "Lets people opt out in one tap, which means fewer blocks and reports and protects your number's quality."
+                              : "The flow block it starts is picked when sending."}
                           </p>
                         )}
                       </div>
