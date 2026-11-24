@@ -23,14 +23,32 @@ Element.prototype.scrollIntoView ??= () => undefined;
 
 const createDrip = vi.fn();
 const updateDrip = vi.fn();
+const startDrip = vi.fn();
+const previewDripAudience = vi.fn();
+const listDripContacts = vi.fn();
+const listContactDrips = vi.fn();
+const removeDripContact = vi.fn();
 const updateSubscriber = vi.fn();
 
 vi.mock("@/client-api/functions/drips", () => ({
   createDrip: (payload: unknown) => createDrip(payload),
-  updateDrip: (args: unknown) => updateDrip(args)
+  updateDrip: (args: unknown) => updateDrip(args),
+  startDrip: (args: unknown) => startDrip(args),
+  addDripContacts: vi.fn(),
+  previewDripAudience: (args: unknown) => previewDripAudience(args),
+  listDripContacts: (id: string, params: unknown) =>
+    listDripContacts(id, params),
+  listContactDrips: (id: string) => listContactDrips(id),
+  removeDripContact: (args: unknown) => removeDripContact(args)
 }));
 vi.mock("@/client-api/functions/subscribers", () => ({
   getSubscriberById: vi.fn(),
+  getAllSubscribers: vi.fn(),
+  getTags: () =>
+    Promise.resolve({
+      status: "success",
+      data: { tags: [{ name: "Lead" }, { name: "Purchased" }] }
+    }),
   updateSubscriber: (args: unknown) => updateSubscriber(args)
 }));
 
@@ -113,7 +131,11 @@ vi.mock("@/stores/organizationStore", () => ({
 
 const { DripBuilder } = await import("@/components/drips/DripBuilder");
 const { DripResults } = await import("@/components/drips/DripResults");
-const { previewLines } = await import("@/components/drips/DripAudienceDialog");
+const { DripAudienceDialog, previewLines } = await import(
+  "@/components/drips/DripAudienceDialog"
+);
+const { DripPeople } = await import("@/components/drips/DripPeople");
+const { ContactDrips } = await import("@/components/drips/ContactDrips");
 const { OffersStoppedControl } = await import(
   "@/components/subscribers/OffersStoppedControl"
 );
@@ -137,6 +159,9 @@ const savedDrip = (overrides: Partial<Drip> = {}): Drip => ({
   phoneNumberId: "pn-1",
   steps: [],
   sendWindow: { startHour: 10, endHour: 20, timezone: "Asia/Kolkata" },
+  trigger: { type: "manual", tag: null },
+  stopTags: [],
+  onReply: "stop",
   stopOnReply: true,
   activatedAt: null,
   createdAt: "",
@@ -158,6 +183,11 @@ afterEach(cleanup);
 beforeEach(() => {
   createDrip.mockReset();
   updateDrip.mockReset();
+  startDrip.mockReset();
+  previewDripAudience.mockReset();
+  listDripContacts.mockReset();
+  listContactDrips.mockReset();
+  removeDripContact.mockReset();
   updateSubscriber.mockReset();
 });
 
@@ -233,7 +263,9 @@ describe("DripBuilder", () => {
         { templateId: "meta-2", components: [], delayMinutes: 2880 }
       ],
       sendWindow: { startHour: 10, endHour: 20, timezone: "Asia/Kolkata" },
-      stopOnReply: true
+      trigger: { type: "manual" },
+      stopTags: [],
+      onReply: "stop"
     });
     await waitFor(() =>
       expect(onSaved).toHaveBeenCalledWith(savedDrip(), "next")
@@ -365,6 +397,8 @@ describe("DripBuilder", () => {
     await waitFor(() => expect(updateDrip).toHaveBeenCalledTimes(1));
     const { payload } = updateDrip.mock.calls[0][0];
     expect(payload.phoneNumberId).toBeUndefined();
+    // How people join can't change after the start.
+    expect(payload.trigger).toBeUndefined();
     // The empty new message isn't sent; the saved ones are.
     expect(
       payload.steps.map((step: { delayMinutes: number }) => step.delayMinutes)
@@ -506,5 +540,302 @@ describe("OffersStoppedControl", () => {
         .getByRole("switch", { name: "Stop offers for this contact" })
         .getAttribute("aria-checked")
     ).toBe("true");
+  });
+});
+
+describe("automatic drips", () => {
+  const tagDrip = (overrides: Partial<Drip> = {}) =>
+    savedDrip({
+      trigger: { type: "tag_added", tag: "Lead" },
+      onReply: "pause",
+      stopOnReply: false,
+      ...overrides
+    });
+  const replySelect = () =>
+    screen.getByRole("combobox", { name: "When they reply" });
+
+  it("defaults the reply setting from Starts when, until it's picked", async () => {
+    wrap(<DripBuilder onSaved={vi.fn()} />);
+    expect(replySelect().textContent).toContain("Stop the drip");
+
+    fireEvent.click(
+      screen.getByRole("radio", { name: /A contact gets a tag/ })
+    );
+    expect(replySelect().textContent).toContain(
+      "Pause while they're chatting (recommended)"
+    );
+    expect(screen.getByText("Tag")).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Lead nurture" }
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: /Next: start the drip/ })
+    );
+    expect(
+      screen.getAllByText("Choose the tag that starts the drip.").length
+    ).toBeGreaterThan(0);
+    expect(createDrip).not.toHaveBeenCalled();
+  });
+
+  it("saves a tag drip's trigger, goal and reply setting", async () => {
+    const draft = tagDrip({ stopTags: ["Purchased"] });
+    updateDrip.mockResolvedValue(draft);
+    wrap(<DripBuilder drip={draft} onSaved={vi.fn()} />);
+
+    expect(screen.getByText("Someone gets the tag “Lead”")).toBeTruthy();
+    expect(replySelect().textContent).toContain("Pause while");
+
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(updateDrip).toHaveBeenCalledTimes(1));
+    expect(updateDrip.mock.calls[0][0].payload).toMatchObject({
+      trigger: { type: "tag_added", tag: "Lead" },
+      stopTags: ["Purchased"],
+      onReply: "pause"
+    });
+    expect(updateDrip.mock.calls[0][0].payload.stopOnReply).toBeUndefined();
+  });
+
+  it("shows how a started tag drip starts, without changing it", () => {
+    wrap(
+      <DripBuilder
+        drip={tagDrip({
+          status: "active",
+          activatedAt: "2026-11-24T10:00:00.000Z"
+        })}
+        onSaved={vi.fn()}
+      />
+    );
+    expect(
+      screen.getByText("This can't change after the drip has started.")
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("radio", { name: /A contact gets a tag/ })
+    ).toBeNull();
+  });
+
+  it("starts a tag drip with no audience, offering those who have the tag", async () => {
+    previewDripAudience.mockResolvedValue({
+      matched: 3,
+      willJoin: 3,
+      stoppedOffers: 0,
+      usNumbers: 0,
+      cantMessage: 0,
+      warnings: []
+    });
+    startDrip.mockResolvedValue({
+      drip: tagDrip({ status: "active" }),
+      startAt: "2026-11-24T10:00:00.000Z"
+    });
+    wrap(
+      <DripAudienceDialog
+        drip={tagDrip()}
+        mode="start"
+        open
+        onOpenChange={vi.fn()}
+      />
+    );
+
+    const existing = await screen.findByText(
+      "3 contacts already have this tag. Add them now too?"
+    );
+    expect(previewDripAudience).toHaveBeenCalledWith({
+      dripId: "drip-1",
+      audience: { mode: "tags", tags: ["Lead"], tagMatch: "any" }
+    });
+    expect(screen.queryByText("All contacts")).toBeNull();
+    expect(screen.queryByText("Start now")).toBeNull();
+
+    const start = screen.getByRole("button", { name: "Start drip" });
+    expect(start.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(existing);
+    fireEvent.click(
+      screen.getByText(
+        "These contacts agreed to get messages from us on WhatsApp"
+      )
+    );
+    fireEvent.click(start);
+    await waitFor(() =>
+      expect(startDrip).toHaveBeenCalledWith({
+        dripId: "drip-1",
+        payload: { consentConfirmed: true, includeExisting: true }
+      })
+    );
+  });
+
+  it("hides the offer when nobody has the tag yet", async () => {
+    previewDripAudience.mockResolvedValue({
+      matched: 0,
+      willJoin: 0,
+      stoppedOffers: 0,
+      usNumbers: 0,
+      cantMessage: 0,
+      warnings: []
+    });
+    wrap(
+      <DripAudienceDialog
+        drip={tagDrip()}
+        mode="start"
+        open
+        onOpenChange={vi.fn()}
+      />
+    );
+    await waitFor(() => expect(previewDripAudience).toHaveBeenCalled());
+    expect(screen.queryByText(/already have this tag/)).toBeNull();
+    expect(screen.queryByText(/already has this tag/)).toBeNull();
+  });
+
+  it("reports how people joined and the goal", () => {
+    wrap(
+      <DripResults
+        report={{
+          drip: tagDrip({
+            status: "active",
+            stopTags: ["Purchased"],
+            contacts: { active: 4, completed: 1, stopped: 3, total: 8 }
+          }),
+          stopReasons: [
+            {
+              reason: "goal_reached",
+              text: "Reached the goal (got a goal tag).",
+              count: 2
+            }
+          ],
+          waiting: { chatting: 1 },
+          joined: { total: 8, byHand: 3, byTag: 5 },
+          goal: { reached: 2, rate: 25 },
+          steps: []
+        }}
+        onShowPeople={vi.fn()}
+      />
+    );
+    expect(screen.getByText("5 by tag, 3 added by you")).toBeTruthy();
+    expect(screen.getByText("Goal reached")).toBeTruthy();
+    expect(screen.getByText("25% of everyone who joined")).toBeTruthy();
+    expect(screen.getByText(/Waiting, they're chatting/)).toBeTruthy();
+    expect(screen.getByText("Reached the goal (got a goal tag).")).toBeTruthy();
+  });
+
+  it("leaves Goal reached out when the drip has no goal tags", () => {
+    wrap(
+      <DripResults
+        report={{
+          drip: savedDrip({ status: "active" }),
+          stopReasons: [],
+          waiting: {},
+          joined: { total: 4, byHand: 4, byTag: 0 },
+          goal: { reached: 0, rate: 0 },
+          steps: []
+        }}
+        onShowPeople={vi.fn()}
+      />
+    );
+    expect(screen.queryByText("Goal reached")).toBeNull();
+    expect(screen.getByText("Everyone who has joined so far")).toBeTruthy();
+  });
+
+  it("marks people who joined again", async () => {
+    listDripContacts.mockResolvedValue({
+      contacts: [
+        {
+          id: "row-1",
+          contact: { id: "c1", name: "Priya", phone: "+91 98765 43210" },
+          status: "active",
+          round: 2,
+          joinedBy: "tag",
+          nextStep: 1,
+          nextRunAt: null,
+          waitingReason: null,
+          stepsSent: 0,
+          stopReason: null,
+          stopReasonText: null,
+          enrolledAt: "2026-11-24T10:00:00.000Z",
+          lastSentAt: null,
+          completedAt: null,
+          stoppedAt: null
+        }
+      ],
+      pagination: { page: 1, limit: 50, total: 1, pages: 1 }
+    });
+    wrap(
+      <DripPeople
+        drip={tagDrip({ status: "active" })}
+        status="active"
+        stopReason=""
+        stopReasons={[]}
+        onFilterChange={vi.fn()}
+      />
+    );
+    expect(await screen.findByText("Joined again")).toBeTruthy();
+  });
+});
+
+describe("ContactDrips", () => {
+  const row = (overrides: Record<string, unknown>) => ({
+    id: "row",
+    drip: { id: "drip-1", name: "Welcome series", status: "active", steps: 3 },
+    status: "active",
+    round: 1,
+    nextStep: 2,
+    nextRunAt: null,
+    waitingReason: null,
+    stepsSent: 1,
+    stopReasonText: null,
+    enrolledAt: "2026-11-20T10:00:00.000Z",
+    endedAt: null,
+    ...overrides
+  });
+
+  it("lists drips in progress with Remove, then the last ones left", async () => {
+    listContactDrips.mockResolvedValue([
+      row({ id: "a" }),
+      row({
+        id: "b",
+        drip: { id: "drip-2", name: "Old offer", status: "archived", steps: 2 },
+        status: "completed",
+        endedAt: "2026-11-10T10:00:00.000Z"
+      }),
+      row({
+        id: "c",
+        drip: {
+          id: "drip-3",
+          name: "Lead nurture",
+          status: "active",
+          steps: 2
+        },
+        status: "stopped",
+        stopReasonText: "Replied on WhatsApp.",
+        endedAt: "2026-11-22T10:00:00.000Z"
+      })
+    ]);
+    removeDripContact.mockResolvedValue(undefined);
+    wrap(<ContactDrips subscriberId="sub-1" />);
+
+    expect(await screen.findByText("Drips")).toBeTruthy();
+    expect(screen.getByText(/in progress/)).toBeTruthy();
+    const items = screen
+      .getAllByRole("listitem")
+      .map((item) => item.textContent);
+    // The most recent ending first, whatever its kind.
+    expect(items[1]).toContain(
+      "Lead nurture: left early: Replied on WhatsApp."
+    );
+    expect(items[2]).toContain("Old offer: finished");
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Remove" }));
+    await waitFor(() =>
+      expect(removeDripContact).toHaveBeenCalledWith({
+        dripId: "drip-1",
+        contactRowId: "a"
+      })
+    );
+  });
+
+  it("shows nothing when the contact has no drips", async () => {
+    listContactDrips.mockResolvedValue([]);
+    const { container } = wrap(<ContactDrips subscriberId="sub-1" />);
+    await waitFor(() => expect(listContactDrips).toHaveBeenCalled());
+    expect(container.textContent).toBe("");
   });
 });

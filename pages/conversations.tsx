@@ -151,6 +151,7 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { ContactAvatar } from "@/components/inbox/ContactAvatar";
+import { ContactDrips } from "@/components/drips/ContactDrips";
 import { OffersStoppedControl } from "@/components/subscribers/OffersStoppedControl";
 import { isStopPromotionsLabel } from "@/lib/drips";
 import { QueryErrorState } from "@/components/shared/QueryErrorState";
@@ -2838,6 +2839,15 @@ function ConversationsPageContent() {
               )}
           </div>
         </div>
+
+        {contextData?.data.subscriber?._id &&
+          !isInstagramConversation &&
+          can("broadcasts:manage") && (
+            <ContactDrips
+              key={contextData.data.subscriber._id}
+              subscriberId={contextData.data.subscriber._id}
+            />
+          )}
 
         <Separator className="my-4" />
 

@@ -6,7 +6,17 @@ export type DripWaitingReason =
   | "sending_hours"
   | "once_a_day"
   | "daily_limit"
-  | "whatsapp_limit_retry";
+  | "whatsapp_limit_retry"
+  | "chatting";
+
+/** How people join: added by the business, or when a contact gets a tag. */
+export interface DripTrigger {
+  type: "manual" | "tag_added";
+  tag?: string | null;
+}
+
+/** What a reply does: stop the drip, pause while chatting, or carry on. */
+export type DripOnReply = "stop" | "pause" | "continue";
 
 export type DripComponent = Record<string, unknown>;
 
@@ -46,6 +56,11 @@ export interface Drip {
   phoneNumberId: string | null;
   steps: DripStep[];
   sendWindow: DripSendWindow;
+  trigger: DripTrigger;
+  /** Getting one of these tags ends the drip as "goal reached". */
+  stopTags: string[];
+  onReply: DripOnReply;
+  /** Older field; read onReply. */
   stopOnReply: boolean;
   consentConfirmedAt?: string | null;
   activatedAt: string | null;
@@ -66,7 +81,9 @@ export interface DripPayload {
   phoneNumberId?: string;
   steps?: DripStepInput[];
   sendWindow?: Partial<DripSendWindow>;
-  stopOnReply?: boolean;
+  trigger?: DripTrigger;
+  stopTags?: string[];
+  onReply?: DripOnReply;
 }
 
 export type DripAudience = Pick<
@@ -84,7 +101,10 @@ export interface DripAudiencePreview {
 }
 
 export interface StartDripPayload {
-  audience: DripAudience;
+  /** Not sent for a tag drip. */
+  audience?: DripAudience;
+  /** Tag drips: also add the contacts who already have the tag. */
+  includeExisting?: boolean;
   consentConfirmed: true;
   scheduledAt?: string;
   scheduledLocal?: string;
@@ -115,6 +135,9 @@ export interface DripReport {
   drip: Drip;
   stopReasons: DripStopReasonCount[];
   waiting: Partial<Record<DripWaitingReason, number>>;
+  /** Each time through counts. */
+  joined?: { total: number; byHand: number; byTag: number };
+  goal?: { reached: number; rate: number };
   steps: DripStepReport[];
 }
 
@@ -124,6 +147,9 @@ export interface DripContactRow {
   id: string;
   contact: { id: string; name: string | null; phone: string | null } | null;
   status: DripContactStatus;
+  /** 2 or more: joined this drip again (tag drips). */
+  round: number;
+  joinedBy?: "tag" | "hand";
   nextStep: number | null;
   nextRunAt: string | null;
   waitingReason: DripWaitingReason | null;
@@ -146,4 +172,19 @@ export interface DripContactsParams {
 export interface DripContactsPage {
   contacts: DripContactRow[];
   pagination: { page: number; limit: number; total: number; pages: number };
+}
+
+/** A drip one contact is in, or was recently (the inbox contact panel). */
+export interface ContactDripRow {
+  id: string;
+  drip: { id: string; name: string; status: DripStatus; steps: number };
+  status: DripContactStatus;
+  round: number;
+  nextStep: number | null;
+  nextRunAt: string | null;
+  waitingReason: DripWaitingReason | null;
+  stepsSent: number;
+  stopReasonText: string | null;
+  enrolledAt: string;
+  endedAt: string | null;
 }

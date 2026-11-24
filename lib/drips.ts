@@ -2,7 +2,9 @@
 // wait between each. Plain-language helpers shared by the drip pages.
 
 import type {
+  DripOnReply,
   DripStatus,
+  DripTrigger,
   DripWaitingReason
 } from "@/client-api/types/drips.type";
 import type {
@@ -160,8 +162,27 @@ export const DRIP_WAITING_TEXT: Record<DripWaitingReason, string> = {
   sending_hours: "Waiting for sending hours",
   once_a_day: "Waiting, one offer a day",
   daily_limit: "Waiting, daily WhatsApp sending limit reached",
-  whatsapp_limit_retry: "Trying once more after a day"
+  whatsapp_limit_retry: "Trying once more after a day",
+  chatting: "Waiting, they're chatting"
 };
+
+// ---- Automatic drips ---------------------------------------------------------
+
+export const MAX_GOAL_TAGS = 10;
+
+export const ON_REPLY_OPTIONS: Array<{ value: DripOnReply; label: string }> = [
+  { value: "pause", label: "Pause while they're chatting (recommended)" },
+  { value: "stop", label: "Stop the drip" },
+  { value: "continue", label: "Keep going" }
+];
+
+/** Until someone picks: pause for tag drips, stop for drips you fill. */
+export const defaultOnReply = (
+  triggerType: DripTrigger["type"]
+): DripOnReply => (triggerType === "tag_added" ? "pause" : "stop");
+
+export const isTagDrip = (drip?: { trigger?: DripTrigger | null } | null) =>
+  drip?.trigger?.type === "tag_added" && Boolean(drip.trigger.tag);
 
 /** The server's message as written, or the fallback. */
 export const dripErrorMessage = (error: unknown, fallback: string) =>

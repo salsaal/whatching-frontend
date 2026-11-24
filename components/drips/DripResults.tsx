@@ -1,4 +1,4 @@
-import { CheckCircle2, Clock, LogOut, Users } from "lucide-react";
+import { CheckCircle2, Clock, LogOut, Target, Users } from "lucide-react";
 
 import {
   DripContactStatus,
@@ -11,7 +11,7 @@ import {
   formatPercent,
   humanizeTemplateName
 } from "@/lib/displayFormat";
-import { DRIP_WAITING_TEXT } from "@/lib/drips";
+import { DRIP_WAITING_TEXT, isTagDrip } from "@/lib/drips";
 import { cn } from "@/lib/utils";
 
 type Column = {
@@ -86,6 +86,13 @@ export function DripResults({
   onShowPeople: (status: DripContactStatus, stopReason?: string) => void;
 }) {
   const totals = report.drip.contacts;
+  const joined = report.joined;
+  // How people joined matters once a tag can add them.
+  const joinedSub =
+    joined && (isTagDrip(report.drip) || joined.byTag > 0)
+      ? `${formatCount(joined.byTag)} by tag, ${formatCount(joined.byHand)} added by you`
+      : "Everyone who has joined so far";
+  const showGoal = (report.drip.stopTags?.length || 0) > 0 && report.goal;
   const waiting = (
     Object.entries(report.waiting || {}) as Array<[DripWaitingReason, number]>
   ).filter(([reason, count]) => count > 0 && DRIP_WAITING_TEXT[reason]);
@@ -100,11 +107,16 @@ export function DripResults({
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div
+        className={cn(
+          "grid gap-3 sm:grid-cols-2",
+          showGoal ? "xl:grid-cols-5" : "xl:grid-cols-4"
+        )}
+      >
         <Tile
           label="Joined"
-          value={totals.total}
-          sub="Everyone who has joined so far"
+          value={joined?.total ?? totals.total}
+          sub={joinedSub}
           icon={Users}
         />
         <Tile
@@ -124,10 +136,19 @@ export function DripResults({
         <Tile
           label="Left early"
           value={totals.stopped}
-          sub="Replied, stopped offers or were removed"
+          sub="Left before the last message"
           icon={LogOut}
           onClick={() => onShowPeople("stopped")}
         />
+        {showGoal && report.goal && (
+          <Tile
+            label="Goal reached"
+            value={report.goal.reached}
+            sub={`${report.goal.rate}% of everyone who joined`}
+            icon={Target}
+            onClick={() => onShowPeople("stopped", "goal_reached")}
+          />
+        )}
       </div>
 
       {waiting.length > 0 && (

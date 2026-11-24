@@ -143,6 +143,8 @@ function ContactsPageContent() {
   const [selectedTagFilters, setSelectedTagFilters] = useState<string[]>([]);
   const [editingTag, setEditingTag] = useState<Tag | null>(null);
   const [deleteTagTarget, setDeleteTagTarget] = useState<Tag | null>(null);
+  // Shown in the dialog, e.g. a drip still uses the tag (409).
+  const [deleteTagError, setDeleteTagError] = useState("");
   const [deleteSubscriberTarget, setDeleteSubscriberTarget] =
     useState<Subscriber | null>(null);
   const [isTagsModalOpen, setIsTagsModalOpen] = useState(false);
@@ -436,10 +438,18 @@ function ContactsPageContent() {
 
   const { mutate: removeTag, isPending: isDeletingTag } = useMutation({
     mutationFn: (tag: Tag) => deleteTag(tag.name),
-    onSuccess: () => {
+    meta: { showToast: false },
+    onSuccess: (_, tag) => {
+      if (editingTag?.id === tag.id) resetTagForm();
       setDeleteTagTarget(null);
+      setDeleteTagError("");
       refetchTags();
-    }
+    },
+    onError: (error: AxiosError<{ message?: string }>) =>
+      setDeleteTagError(
+        error.response?.data?.message ||
+          "The tag couldn't be deleted. Please try again."
+      )
   });
 
   const { mutate: deleteSelectedSubscribers, isPending: isDeletingSelected } =
@@ -1046,7 +1056,11 @@ function ContactsPageContent() {
 
       <AlertDialog
         open={Boolean(deleteTagTarget)}
-        onOpenChange={(open) => !open && setDeleteTagTarget(null)}
+        onOpenChange={(open) => {
+          if (open) return;
+          setDeleteTagTarget(null);
+          setDeleteTagError("");
+        }}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -1056,15 +1070,25 @@ function ContactsPageContent() {
               organisation tag list.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {deleteTagError && (
+            <p
+              role="alert"
+              className="rounded-md bg-destructive/10 p-3 text-sm text-destructive"
+            >
+              {deleteTagError}
+            </p>
+          )}
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-white hover:bg-destructive/90"
               disabled={isDeletingTag}
-              onClick={() => {
+              onClick={(event) => {
+                // Stays open until the tag is gone, to show any refusal.
+                event.preventDefault();
                 if (!deleteTagTarget) return;
+                setDeleteTagError("");
                 removeTag(deleteTagTarget);
-                if (editingTag?.id === deleteTagTarget.id) resetTagForm();
               }}
             >
               {isDeletingTag ? (

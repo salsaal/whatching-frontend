@@ -8,6 +8,7 @@ import {
   Flag,
   Info,
   Plus,
+  Tag,
   Trash2,
   UserPlus
 } from "lucide-react";
@@ -16,11 +17,14 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { createDrip, updateDrip } from "@/client-api/functions/drips";
+import { getTags } from "@/client-api/functions/subscribers";
 import { getAllTemplates } from "@/client-api/functions/templates";
 import {
   Drip,
   DripComponent,
-  DripPayload
+  DripOnReply,
+  DripPayload,
+  DripTrigger
 } from "@/client-api/types/drips.type";
 import { MessageTemplate } from "@/client-api/types/templates.type";
 import { useOrgTimezone } from "@/components/broadcasts/BroadcastActions";
@@ -47,7 +51,7 @@ import {
   SelectTrigger,
   SelectValue
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
+import MultiSelect from "@/components/ui/multi-select";
 import { isPaymentBlocked } from "@/components/whatsapp/PaymentBlockedCallout";
 import { WhatsAppPreview } from "@/components/whatsapp/WhatsAppPreview";
 import {
@@ -58,6 +62,7 @@ import { useCurrentMembership } from "@/hooks/useCurrentMembership";
 import { humanizeTemplateName } from "@/lib/displayFormat";
 import {
   DEFAULT_SEND_HOURS,
+  defaultOnReply,
   DRIP_MAX_STEPS,
   DRIP_MIN_STEPS,
   dripErrorMessage,
@@ -65,6 +70,8 @@ import {
   hourLabel,
   isDripTemplate,
   isOfferCategory,
+  MAX_GOAL_TAGS,
+  ON_REPLY_OPTIONS,
   sendHoursProblem,
   waitFromMinutes,
   waitProblem,
@@ -131,16 +138,44 @@ const mappingsFor = (template: MessageTemplate, saved?: DripComponent[]) => {
   );
 };
 
+const TRIGGER_CHOICES: Array<{
+  value: DripTrigger["type"];
+  label: string;
+  help: string;
+  icon: React.ElementType;
+}> = [
+  {
+    value: "manual",
+    label: "I add people",
+    help: "You choose who joins when you start it, and can add more later.",
+    icon: UserPlus
+  },
+  {
+    value: "tag_added",
+    label: "A contact gets a tag",
+    help: "Anyone who gets the tag joins on their own.",
+    icon: Tag
+  }
+];
+
+const ON_REPLY_HELP: Record<DripOnReply, string> = {
+  pause:
+    "The next message waits until a day after their last message, so the drip never talks over a chat.",
+  stop: "Someone who replies leaves the drip, so you can talk to them in Conversations.",
+  continue: "Messages carry on as planned."
+};
+
 const START_HOURS = Array.from({ length: 23 }, (_, hour) => hour);
 const END_HOURS = Array.from({ length: 23 }, (_, index) => index + 2);
 
 export type DripSaveIntent = "save" | "next";
 
 /**
- * Create or edit a drip: name and number, the messages with the wait before
- * each, sending hours and "Stop when they reply". After a drip has started,
- * messages can be changed or added but not removed, and the number is
- * fixed. Archived drips are shown read-only.
+ * Create or edit a drip: how people join, name and number, the messages
+ * with the wait before each, sending hours, a goal and what a reply does.
+ * After a drip has started, messages can be changed or added but not
+ * removed, and how people join and the number are fixed. Archived drips are
+ * shown read-only.
  */
 export function DripBuilder({
   drip,
@@ -173,7 +208,18 @@ export function DripBuilder({
   const [timezone, setTimezone] = useState(
     drip?.sendWindow?.timezone || orgTimezone
   );
-  const [stopOnReply, setStopOnReply] = useState(drip?.stopOnReply ?? true);
+  const savedTriggerType = drip?.trigger?.type || "manual";
+  const [triggerType, setTriggerType] =
+    useState<DripTrigger["type"]>(savedTriggerType);
+  const [triggerTag, setTriggerTag] = useState(drip?.trigger?.tag || "");
+  const [stopTags, setStopTags] = useState<string[]>(drip?.stopTags || []);
+  const [onReply, setOnReply] = useState<DripOnReply>(
+    drip?.onReply || defaultOnReply(savedTriggerType)
+  );
+  // "When they reply" follows "Starts when" until someone picks it.
+  const [onReplyPicked, setOnReplyPicked] = useState(
+    Boolean(drip?.onReply) && drip?.onReply !== defaultOnReply(savedTriggerType)
+  );
   const [focusedKey, setFocusedKey] = useState(steps[0]?.key || "");
   const [pickingKey, setPickingKey] = useState<string | null>(null);
   const [mobilePreviewKey, setMobilePreviewKey] = useState<string | null>(null);
@@ -216,6 +262,29 @@ export function DripBuilder({
     [templates]
   );
   const templatesReady = Boolean(templatesData) || !can("templates:view");
+
+  // ---------- tags (starting tag and goal) ----------
+  const { data: tagsData } = useQuery({
+    queryKey: ["subscriber-tags"],
+    queryFn: getTags
+  });
+  const tagNames = useMemo(() => {
+    const names = (tagsData?.data.tags || []).map((tag) => tag.name);
+    // A saved tag stays selectable even if the list no longer has it.
+    const saved = [triggerTag, ...stopTags].filter(
+      (tag) => tag && !names.includes(tag)
+    );
+    return [...saved, ...names];
+  }, [stopTags, tagsData?.data.tags, triggerTag]);
+  const changeTrigger = (type: DripTrigger["type"]) => {
+    setTriggerType(type);
+    if (!onReplyPicked) setOnReply(defaultOnReply(type));
+  };
+  const changeTriggerTag = (tag: string) => {
+    setTriggerTag(tag);
+    setStopTags((current) => current.filter((item) => item !== tag));
+  };
+  const isTagTrigger = triggerType === "tag_added";
 
   // Saved steps get their values once their templates are known.
   useEffect(() => {
@@ -291,6 +360,8 @@ export function DripBuilder({
 
   const problemFor = (intent: DripSaveIntent) => {
     if (!name.trim()) return "Give the drip a name.";
+    if (!hasStarted && isTagTrigger && !triggerTag)
+      return "Choose the tag that starts the drip.";
     if (!hasStarted && (!senderId || (sender && isPaymentBlocked(sender))))
       return "Choose a WhatsApp number.";
     if (stepsChanged) {
@@ -333,7 +404,16 @@ export function DripBuilder({
         ...(hasStarted ? {} : { phoneNumberId: senderId }),
         ...(stepsChanged ? { steps: buildSteps() } : {}),
         sendWindow: { startHour, endHour, timezone },
-        stopOnReply
+        // How people join can't change once the drip has started.
+        ...(hasStarted
+          ? {}
+          : {
+              trigger: isTagTrigger
+                ? { type: "tag_added" as const, tag: triggerTag }
+                : { type: "manual" as const }
+            }),
+        stopTags,
+        onReply
       };
       const saved = drip
         ? await updateDrip({ dripId: drip.id, payload })
@@ -401,6 +481,103 @@ export function DripBuilder({
     <div className="space-y-5 pb-4">
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
         <fieldset disabled={isArchived} className="min-w-0 space-y-5">
+          {/* ---------- starts when ---------- */}
+          <section className="space-y-4 rounded-lg bg-white p-5 shadow-xs">
+            <h2 className="font-heading text-lg font-semibold">Starts when</h2>
+            {hasStarted ? (
+              <div className="space-y-1">
+                <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
+                  {isTagTrigger ? (
+                    <>
+                      <Tag className="size-4 text-primary" />A contact gets the
+                      tag
+                      <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs text-primary">
+                        {triggerTag}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <UserPlus className="size-4 text-primary" />I add people
+                    </>
+                  )}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  This can&apos;t change after the drip has started.
+                </p>
+              </div>
+            ) : (
+              <>
+                <div
+                  role="radiogroup"
+                  aria-label="Starts when"
+                  className="grid gap-2 sm:grid-cols-2"
+                >
+                  {TRIGGER_CHOICES.map((choice) => {
+                    const selected = triggerType === choice.value;
+                    return (
+                      <button
+                        key={choice.value}
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        onClick={() => changeTrigger(choice.value)}
+                        className={cn(
+                          "flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-left transition",
+                          selected
+                            ? "border-primary bg-primary/5 ring-1 ring-primary"
+                            : "hover:border-primary/40"
+                        )}
+                      >
+                        <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                          <choice.icon className="size-4" />
+                        </span>
+                        <span>
+                          <span className="block text-sm font-medium">
+                            {choice.label}
+                          </span>
+                          <span className="block text-xs text-muted-foreground">
+                            {choice.help}
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {isTagTrigger && (
+                  <div className="space-y-2 sm:max-w-sm">
+                    <Label>Tag</Label>
+                    <Combobox
+                      value={triggerTag}
+                      onChange={(value) => value && changeTriggerTag(value)}
+                      options={tagNames.map((tag) => ({
+                        label: tag,
+                        value: tag
+                      }))}
+                      placeholder="Choose a tag"
+                    />
+                    {!tagNames.length && (
+                      <p className="text-xs text-muted-foreground">
+                        No tags yet. Create one in{" "}
+                        <Link
+                          href="/contacts"
+                          className="font-medium text-primary hover:underline"
+                        >
+                          Contacts
+                        </Link>
+                        .
+                      </p>
+                    )}
+                    {showProblems && !triggerTag && (
+                      <p className="text-xs text-destructive">
+                        Choose the tag that starts the drip.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+          </section>
+
           {/* ---------- basics ---------- */}
           <section className="grid gap-4 rounded-lg bg-white p-5 shadow-xs sm:grid-cols-2">
             <div className="space-y-2">
@@ -463,10 +640,16 @@ export function DripBuilder({
             <ol aria-label="Messages in this drip">
               <li className="flex items-center gap-3">
                 <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                  <UserPlus className="size-4" />
+                  {isTagTrigger ? (
+                    <Tag className="size-4" />
+                  ) : (
+                    <UserPlus className="size-4" />
+                  )}
                 </span>
                 <span className="text-sm font-medium">
-                  Someone joins the drip
+                  {isTagTrigger && triggerTag
+                    ? `Someone gets the tag “${triggerTag}”`
+                    : "Someone joins the drip"}
                 </span>
               </li>
               {steps.map((step, index) => {
@@ -767,22 +950,50 @@ export function DripBuilder({
                 />
               </div>
             </div>
-            <div className="border-t pt-5">
-              <label className="flex items-start justify-between gap-4">
-                <span>
-                  <span className="block text-sm font-medium">
-                    Stop when they reply
-                  </span>
-                  <span className="block text-xs text-muted-foreground">
-                    Someone who replies leaves the drip and gets no more
-                    messages from it, so you can talk to them in Conversations.
-                  </span>
-                </span>
-                <Switch
-                  checked={stopOnReply}
-                  onCheckedChange={setStopOnReply}
+            <div className="space-y-5 border-t pt-5">
+              <div className="space-y-2 sm:max-w-md">
+                <Label>Goal: stop when they get the tag</Label>
+                <MultiSelect
+                  options={tagNames
+                    .filter((tag) => tag !== (isTagTrigger ? triggerTag : ""))
+                    .map((tag) => ({ label: tag, value: tag }))}
+                  value={stopTags}
+                  onChange={(next) => setStopTags(next.slice(0, MAX_GOAL_TAGS))}
+                  placeholder="No goal (optional)"
+                  disabled={isArchived}
                 />
-              </label>
+                <p className="text-xs text-muted-foreground">
+                  People who get one of these tags leave the drip. Good for
+                  “Purchased”.
+                </p>
+              </div>
+              <div className="space-y-2 sm:max-w-md">
+                <Label>When they reply</Label>
+                <Select
+                  value={onReply}
+                  onValueChange={(value) => {
+                    setOnReply(value as DripOnReply);
+                    setOnReplyPicked(true);
+                  }}
+                >
+                  <SelectTrigger
+                    className="w-full bg-white"
+                    aria-label="When they reply"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ON_REPLY_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {ON_REPLY_HELP[onReply]}
+                </p>
+              </div>
             </div>
           </section>
         </fieldset>
@@ -819,7 +1030,9 @@ export function DripBuilder({
             >
               {footerProblem ||
                 (isDraft
-                  ? "Nothing is sent until you choose who joins and start the drip."
+                  ? isTagTrigger
+                    ? "Nothing is sent until you start the drip."
+                    : "Nothing is sent until you choose who joins and start the drip."
                   : "Changes apply to the next messages people get.")}
             </p>
             <div className="flex flex-col-reverse gap-2 sm:flex-row">
@@ -833,7 +1046,9 @@ export function DripBuilder({
                     Save draft
                   </Button>
                   <Button isLoading={isSaving} onClick={() => attempt("next")}>
-                    Next: choose who joins
+                    {isTagTrigger
+                      ? "Next: start the drip"
+                      : "Next: choose who joins"}
                     <ArrowRight className="size-4" />
                   </Button>
                 </>

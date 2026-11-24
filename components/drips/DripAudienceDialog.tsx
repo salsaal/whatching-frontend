@@ -33,7 +33,7 @@ import {
   DialogTitle
 } from "@/components/ui/dialog";
 import { formatCount, formatWhen } from "@/lib/displayFormat";
-import { describeWait, dripErrorMessage } from "@/lib/drips";
+import { describeWait, dripErrorMessage, isTagDrip } from "@/lib/drips";
 import { hasAudienceSelection, warningText } from "@/lib/broadcastAudience";
 
 const people = (count: number) =>
@@ -50,24 +50,35 @@ export const previewLines = (preview: DripAudiencePreview) =>
       `${people(preview.cantMessage)} can't be messaged (they opted out, have no WhatsApp number, or are outside your plan's contact limit).`
   ].filter(Boolean) as string[];
 
-/**
- * Who joins a drip: the broadcast audience picker with a live count, then
- * (to start) the consent tick and Start now or Schedule. "add" puts more
- * people into a drip that has already started.
- */
-export function DripAudienceDialog({
-  drip,
-  mode,
-  open,
-  onOpenChange,
-  onDone
-}: {
+type DialogProps = {
   drip: Drip;
   mode: "start" | "add";
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onDone?: (drip: Drip) => void;
-}) {
+};
+
+/**
+ * Who joins a drip: the broadcast audience picker with a live count, then
+ * (to start) the consent tick and Start now or Schedule. "add" puts more
+ * people into a drip that has already started. A drip that starts from a
+ * tag has no audience to choose: see StartTagDripDialog.
+ */
+export function DripAudienceDialog(props: DialogProps) {
+  return props.mode === "start" && isTagDrip(props.drip) ? (
+    <StartTagDripDialog {...props} />
+  ) : (
+    <AudienceDialog {...props} />
+  );
+}
+
+function AudienceDialog({
+  drip,
+  mode,
+  open,
+  onOpenChange,
+  onDone
+}: DialogProps) {
   const queryClient = useQueryClient();
   const [audience, setAudience] = useState<BroadcastAudience>(EMPTY_AUDIENCE);
   const [consent, setConsent] = useState(false);
@@ -167,7 +178,7 @@ export function DripAudienceDialog({
           <DialogDescription>
             {mode === "start"
               ? `Everyone who joins gets message 1 ${firstWait ? `${describeWait(firstWait)} after joining` : "right away"}, then the rest in order.`
-              : "New people start from message 1. Anyone already in this drip is skipped, as nobody goes through a drip twice."}
+              : "New people start from message 1. Anyone who is or has been in this drip is skipped."}
           </DialogDescription>
         </DialogHeader>
 
@@ -304,6 +315,129 @@ export function DripAudienceDialog({
             </Button>
           </div>
         </footer>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * Starting a drip that people join by getting a tag: no audience and no
+ * scheduling. Optionally adds the contacts who already have the tag.
+ */
+function StartTagDripDialog({ drip, open, onOpenChange, onDone }: DialogProps) {
+  const queryClient = useQueryClient();
+  const tag = drip.trigger.tag || "";
+  const [includeExisting, setIncludeExisting] = useState(false);
+  const [consent, setConsent] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!open) return;
+    setIncludeExisting(false);
+    setConsent(false);
+    setError("");
+  }, [open]);
+
+  const { data: preview } = useQuery({
+    queryKey: ["drip-audience-preview", drip.id, "tag", tag],
+    queryFn: () =>
+      previewDripAudience({
+        dripId: drip.id,
+        audience: { mode: "tags", tags: [tag], tagMatch: "any" }
+      }),
+    enabled: open && Boolean(tag)
+  });
+  const existing = preview?.willJoin ?? 0;
+
+  const { mutate: submit, isPending } = useMutation({
+    mutationFn: () =>
+      startDrip({
+        dripId: drip.id,
+        payload: {
+          consentConfirmed: true,
+          includeExisting: includeExisting && existing > 0
+        }
+      }),
+    meta: { showToast: false },
+    onSuccess: ({ drip: saved }) => {
+      rememberDrip(queryClient, saved);
+      queryClient.invalidateQueries({ queryKey: ["drip-contacts", saved.id] });
+      toast.success(
+        includeExisting && existing > 0
+          ? `Drip started. People with the tag “${tag}” are joining now, and anyone who gets it later joins too.`
+          : `Drip started. Anyone who gets the tag “${tag}” joins from now on.`
+      );
+      onOpenChange(false);
+      onDone?.(saved);
+    },
+    onError: (failure) =>
+      setError(dripErrorMessage(failure, "That didn't work. Please try again."))
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Start this drip</DialogTitle>
+          <DialogDescription>
+            From now on, anyone who gets the tag “{tag}” joins on their own,
+            whether you add it, an import does, a tagging rule or your store.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          {existing > 0 && (
+            <label className="flex cursor-pointer items-start gap-3 rounded-lg border bg-white p-4 text-sm">
+              <Checkbox
+                checked={includeExisting}
+                onCheckedChange={(value) => setIncludeExisting(value === true)}
+                className="mt-0.5"
+              />
+              <span>
+                {formatCount(existing)}{" "}
+                {existing === 1
+                  ? "contact already has this tag. Add them now too?"
+                  : "contacts already have this tag. Add them now too?"}
+              </span>
+            </label>
+          )}
+          <label className="flex cursor-pointer items-start gap-3 rounded-lg border bg-white p-4 text-sm">
+            <Checkbox
+              checked={consent}
+              onCheckedChange={(value) => setConsent(value === true)}
+              className="mt-0.5"
+            />
+            <span>
+              These contacts agreed to get messages from us on WhatsApp
+            </span>
+          </label>
+          {error && (
+            <p
+              role="alert"
+              className="rounded-md bg-destructive/10 p-3 text-sm text-destructive"
+            >
+              {error}
+            </p>
+          )}
+        </div>
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <Button
+            variant="ghost"
+            disabled={isPending}
+            onClick={() => onOpenChange(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            disabled={!consent}
+            isLoading={isPending}
+            onClick={() => {
+              setError("");
+              submit();
+            }}
+          >
+            Start drip
+          </Button>
+        </div>
       </DialogContent>
     </Dialog>
   );

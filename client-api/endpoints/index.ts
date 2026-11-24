@@ -332,5 +332,6 @@ export const DRIP_ENDPOINTS = {
   PAUSE: (dripId: string) => `${DRIPS_BASE}/${dripId}/pause`,
   RESUME: (dripId: string) => `${DRIPS_BASE}/${dripId}/resume`,
   ARCHIVE: (dripId: string) => `${DRIPS_BASE}/${dripId}/archive`,
-  REPORT: (dripId: string) => `${DRIPS_BASE}/${dripId}/report`
+  REPORT: (dripId: string) => `${DRIPS_BASE}/${dripId}/report`,
+  FOR_CONTACT: (subscriberId: string) => `${DRIPS_BASE}/contact/${subscriberId}`
 };

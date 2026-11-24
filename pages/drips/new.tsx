@@ -29,8 +29,8 @@ function NewDripContent() {
         <section className="rounded-lg bg-white p-5 shadow-xs">
           <h1 className="font-heading text-2xl font-semibold">New drip</h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Set up the messages and the wait before each one. Next, you choose
-            who joins and when it starts.
+            Choose how people join, then the messages and the wait before each
+            one. Nothing is sent until you start it.
           </p>
         </section>
         {hasPlan ? (

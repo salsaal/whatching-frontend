@@ -109,6 +109,10 @@ A drip step's `components` are the broadcast composer's (`buildBroadcastTemplate
 
 The builder sends `steps` in `PATCH /organizations/drips/:id` only after a message was changed, added or removed. Changing just the name, sending hours or "Stop when they reply" then works even if a template has since lost approval, and doesn't re-check every step. Change responses carry no people counts (they read 0), so `rememberDrip` keeps the counts already shown.
 
+## Drip "When They Reply" Follows "Starts When" Until Picked
+
+A new drip's reply setting is "Pause while they're chatting" for "A contact gets a tag" and "Stop the drip" for "I add people", and switches with "Starts when" until the person picks one. A saved drip counts as picked when its `onReply` differs from its trigger's default. The builder always sends `onReply` (never `stopOnReply`) and sends `trigger` only before the start, since the server refuses changes after it.
+
 ## Lint Command Mutates
 
 `npm run lint` runs `next lint --fix`. Use `npx tsc --noEmit` for a non-mutating frontend type check. Run lint only when file modifications from auto-fix are acceptable.

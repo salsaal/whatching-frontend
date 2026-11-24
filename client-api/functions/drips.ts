@@ -2,6 +2,7 @@ import api from "../axiosInstance";
 import { DRIP_ENDPOINTS } from "../endpoints";
 import { ApiResponse } from "../types/api";
 import {
+  ContactDripRow,
   Drip,
   DripAudience,
   DripAudiencePreview,
@@ -133,4 +134,12 @@ export const getDripReport = async (dripId: string) => {
     DRIP_ENDPOINTS.REPORT(dripId)
   );
   return dataOf(res.data).report;
+};
+
+/** The drips a contact is in now, then the ones they recently left. */
+export const listContactDrips = async (subscriberId: string) => {
+  const res = await api.get<ApiResponse<{ drips: ContactDripRow[] }>>(
+    DRIP_ENDPOINTS.FOR_CONTACT(subscriberId)
+  );
+  return dataOf(res.data).drips;
 };

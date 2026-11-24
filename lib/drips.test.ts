@@ -2,11 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import type { MessageTemplate } from "@/client-api/types/templates.type";
 import {
+  defaultOnReply,
   describeWait,
+  DRIP_WAITING_TEXT,
   dripStatusPresentation,
   hasStopPromotionsButton,
   isDripTemplate,
   isStopPromotionsLabel,
+  isTagDrip,
   sendHoursProblem,
   waitFromMinutes,
   waitProblem,
@@ -170,5 +173,27 @@ describe("drip settings and status", () => {
     expect(dripStatusPresentation("draft").label).toBe("Draft");
     expect(dripStatusPresentation("paused").label).toBe("Paused");
     expect(dripStatusPresentation("archived").label).toBe("Archived");
+  });
+});
+
+describe("automatic drips", () => {
+  it("pauses on a reply for tag drips and stops for drips you fill", () => {
+    expect(defaultOnReply("tag_added")).toBe("pause");
+    expect(defaultOnReply("manual")).toBe("stop");
+  });
+
+  it("knows a tag drip by its trigger and tag", () => {
+    expect(isTagDrip({ trigger: { type: "tag_added", tag: "Lead" } })).toBe(
+      true
+    );
+    expect(isTagDrip({ trigger: { type: "tag_added", tag: null } })).toBe(
+      false
+    );
+    expect(isTagDrip({ trigger: { type: "manual", tag: null } })).toBe(false);
+    expect(isTagDrip(null)).toBe(false);
+  });
+
+  it("says why someone is waiting while they chat", () => {
+    expect(DRIP_WAITING_TEXT.chatting).toBe("Waiting, they're chatting");
   });
 });

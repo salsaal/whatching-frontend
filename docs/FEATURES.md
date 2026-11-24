@@ -70,6 +70,8 @@ This file lists functionality visible in the current frontend and contracts pres
 - The start dialog (`DripAudienceDialog`) uses the broadcast audience picker ("People from an ad" for ad contacts), a live count from the preview endpoint (lines that are 0 are hidden), the required consent tick, and Start now or Schedule. The same dialog without consent or timing adds people to a running or paused drip.
 - A started drip has Results (counts, who's waiting and why, each message's numbers with empty columns hidden, why people left), People (In progress, Finished, Left early with a reason filter; Remove for people in progress) and Messages & settings (the builder: messages can be changed or added, not removed; the number is fixed). Pause, Resume, Add people and Archive (confirmed) are in the header; archived drips are read-only.
 - The template picker offers approved, non-login-code templates from the number's account; text-header values are filled in like a broadcast's (see `docs/DECISIONS.md`). An offer step without a Stop promotions button shows a warning.
+- Automatic drips (spec section j, kept deliberately small): the builder starts with "Starts when" ("I add people" or "A contact gets a tag" with an existing tag), and ends with "Goal: stop when they get the tag" (up to 10 tags, never the starting tag) and "When they reply" (pause while chatting, stop, keep going). After the start, "Starts when" is read-only. A tag drip's start dialog has no audience or scheduling: only "N contacts already have this tag. Add them now too?" (hidden at 0) and the consent tick.
+- Results show how people joined ("5 by tag, 3 added by you", for tag drips) and "Goal reached" when the drip has goal tags; People marks "Joined again"; the inbox contact panel has a "Drips" block (in progress with Remove, then the last 3 finished or left, newest first).
 
 ## WhatsApp Flow Builder
 
@@ -126,6 +128,7 @@ Supported WhatsApp action types:
 - Subscriber API supports listing, detail, update, import, bulk delete, and tag management.
 - Subscriber model includes phone number/WA ID, Instagram ID/username/profile picture, tags, opt-in state, metadata, and interaction timestamps.
 - Infinite-scroll contact pages deduplicate subscriber IDs across overlapping/refetched pages.
+- Deleting a tag a drip uses is refused (409); the delete dialog stays open and shows the server's message.
 - "Stop offers for this contact" (`OffersStoppedControl`) in the contact dialog and the inbox's contact panel: a "Stopped offers" badge with the reason, and a switch (`PATCH` subscriber `offersStopped`). Order updates and replies still go.
 
 ## Media

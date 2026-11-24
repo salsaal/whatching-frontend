@@ -209,8 +209,13 @@ export function DripPeople({
               className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:gap-4"
             >
               <div className="min-w-0 sm:w-56">
-                <p className="truncate text-sm font-medium">
-                  {contactLabel(row)}
+                <p className="flex min-w-0 items-center gap-2 text-sm font-medium">
+                  <span className="truncate">{contactLabel(row)}</span>
+                  {row.round > 1 && (
+                    <span className="shrink-0 rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-800">
+                      Joined again
+                    </span>
+                  )}
                 </p>
                 {row.contact?.name && row.contact.phone && (
                   <p className="truncate text-xs text-muted-foreground">

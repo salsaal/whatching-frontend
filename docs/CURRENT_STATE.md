@@ -2,6 +2,12 @@
 
 This document reflects the frontend and verified sibling-backend contracts on 2026-08-27.
 
+## 2026-11-24 — Automatic drips (start from a tag)
+
+- Built from section (j) of the backend's `docs/DRIP_FRONTEND_SPEC.md` (backend main e5a7001), kept as small as the spec asks: three builder controls, the tag start dialog, the Joined and Goal reached lines, "Joined again", the inbox Drips block, and the tag delete refusal (see `docs/FEATURES.md`). `drip_joined` and `drip_left` inbox notes already show like other system notes.
+- Choices: the "Joined" breakdown shows only for tag drips (or when someone joined by tag), so drips you fill keep one plain number; "When they reply" has a one-line explanation of the chosen option.
+- Backend detail, handled here: `GET /drips/contact/:id` orders ended rows by status name, so the Drips block re-sorts them by end date.
+
 ## 2026-11-23 — Drip campaigns and offer preferences
 
 - Built from the backend's `docs/DRIP_FRONTEND_SPEC.md` (backend main d414f4e): the Drip campaigns pages, the Stop offers switch on contacts, the ready-made "Stop promotions" button for marketing templates, and the drip link when a template can't be deleted (see `docs/FEATURES.md`). The inbox already shows the `subscriber_stopped_offers` note like other system notes.

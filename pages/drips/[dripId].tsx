@@ -200,7 +200,7 @@ function DripDetailContent() {
                   </div>
                   <p className="text-sm text-muted-foreground">
                     {isDraft
-                      ? "Not started yet. Nothing is sent until you choose who joins."
+                      ? "Not started yet. Nothing is sent until you start it."
                       : [
                           `${current.steps.length} messages`,
                           senderLabel && `from ${senderLabel}`,
