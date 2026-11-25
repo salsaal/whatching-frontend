@@ -9,7 +9,9 @@ import {
   hasStopPromotionsButton,
   isDripTemplate,
   isStopPromotionsLabel,
+  isAutomaticDrip,
   isTagDrip,
+  joinedBreakdown,
   sendHoursProblem,
   waitFromMinutes,
   waitProblem,
@@ -195,5 +197,35 @@ describe("automatic drips", () => {
 
   it("says why someone is waiting while they chat", () => {
     expect(DRIP_WAITING_TEXT.chatting).toBe("Waiting, they're chatting");
+  });
+});
+
+describe("more ways to start", () => {
+  it("pauses on a reply for every automatic start", () => {
+    expect(defaultOnReply("ad_lead")).toBe("pause");
+    expect(defaultOnReply("first_message")).toBe("pause");
+    expect(defaultOnReply("order_placed")).toBe("pause");
+  });
+
+  it("treats everything but 'I add people' as automatic", () => {
+    expect(isAutomaticDrip({ trigger: { type: "ad_lead" } })).toBe(true);
+    expect(isAutomaticDrip({ trigger: { type: "order_placed" } })).toBe(true);
+    expect(isAutomaticDrip({ trigger: { type: "manual" } })).toBe(false);
+    expect(isAutomaticDrip({})).toBe(false);
+  });
+
+  it("words how people joined, leaving out 'added by you' at 0", () => {
+    const tag = { trigger: { type: "tag_added" as const, tag: "Lead" } };
+    const ad = { trigger: { type: "ad_lead" as const } };
+    expect(joinedBreakdown(tag, { byHand: 3, byTag: 5 })).toBe(
+      "5 by tag, 3 added by you"
+    );
+    expect(joinedBreakdown(tag, { byHand: 0, byTag: 5 })).toBe("5 by tag");
+    expect(joinedBreakdown(ad, { byHand: 2, byTag: 0, automatic: 1200 })).toBe(
+      "1,200 automatically, 2 added by you"
+    );
+    expect(
+      joinedBreakdown({ trigger: { type: "manual" } }, { byHand: 4, byTag: 0 })
+    ).toBe("");
   });
 });

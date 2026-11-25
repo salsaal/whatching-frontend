@@ -120,6 +120,22 @@ vi.mock("@/components/whatsapp/WhatsAppNumberSwitcher", () => ({
 vi.mock("@/hooks/useCurrentMembership", () => ({
   useCurrentMembership: () => ({ can: () => true, isLoading: false })
 }));
+// The store's status ("connected" turns on the order choices), and the ads.
+const store: { status?: string } = {};
+vi.mock("@/hooks/useStore", () => ({
+  useStore: () => ({
+    data: store.status
+      ? { data: { connection: { status: store.status } } }
+      : undefined
+  })
+}));
+const ads: { list: Array<{ sourceId: string; label: string }> } = {
+  list: []
+};
+vi.mock("@/client-api/functions/campaigns", () => ({
+  listCampaigns: () =>
+    Promise.resolve({ status: "success", data: { campaigns: ads.list } })
+}));
 vi.mock("@/stores/organizationStore", () => ({
   useOrganizationStore: (
     selector: (state: {
@@ -189,6 +205,8 @@ beforeEach(() => {
   listContactDrips.mockReset();
   removeDripContact.mockReset();
   updateSubscriber.mockReset();
+  store.status = undefined;
+  ads.list = [];
 });
 
 describe("DripBuilder", () => {
@@ -837,5 +855,298 @@ describe("ContactDrips", () => {
     const { container } = wrap(<ContactDrips subscriberId="sub-1" />);
     await waitFor(() => expect(listContactDrips).toHaveBeenCalled());
     expect(container.textContent).toBe("");
+  });
+});
+
+describe("more ways to start (phase 2)", () => {
+  const nameIt = () =>
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Ad follow-up" }
+    });
+  const saveDraft = () =>
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+  const replySelect = () =>
+    screen.getByRole("combobox", { name: "When they reply" });
+
+  it("offers orders only with a connected store", () => {
+    wrap(<DripBuilder onSaved={vi.fn()} />);
+    expect(
+      screen.queryByRole("radio", { name: /Someone places an order/ })
+    ).toBeNull();
+    expect(screen.queryByText("They place an order")).toBeNull();
+    cleanup();
+
+    store.status = "needs_attention";
+    wrap(<DripBuilder onSaved={vi.fn()} />);
+    expect(screen.getByText("They place an order")).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("radio", { name: /Someone places an order/ })
+    );
+    // A drip that starts with an order can't also stop on one.
+    expect(screen.queryByText("They place an order")).toBeNull();
+  });
+
+  it("starts from any ad by default and waits for a quiet chat", async () => {
+    ads.list = [{ sourceId: "ad-1", label: "Diwali sale" }];
+    createDrip.mockResolvedValue(savedDrip());
+    wrap(<DripBuilder onSaved={vi.fn()} />);
+    nameIt();
+    fireEvent.click(
+      screen.getByRole("radio", { name: /Someone messages you from an ad/ })
+    );
+    expect(
+      screen.getByRole("radio", { name: "Any ad" }).getAttribute("aria-checked")
+    ).toBe("true");
+    expect(replySelect().textContent).toContain("Pause while");
+    expect(
+      screen.getByText(
+        "Your first message goes once the chat has been quiet for a day."
+      )
+    ).toBeTruthy();
+    expect(
+      within(
+        screen.getByRole("list", { name: "Messages in this drip" })
+      ).getByText("Someone messages you from an ad")
+    ).toBeTruthy();
+
+    saveDraft();
+    await waitFor(() => expect(createDrip).toHaveBeenCalledTimes(1));
+    expect(createDrip.mock.calls[0][0]).toMatchObject({
+      trigger: { type: "ad_lead", adSourceIds: [] },
+      onReply: "pause"
+    });
+    expect(createDrip.mock.calls[0][0].stopOnOrder).toBeUndefined();
+  });
+
+  it("asks for an ad when 'These ads' has none", async () => {
+    ads.list = [{ sourceId: "ad-1", label: "Diwali sale" }];
+    wrap(<DripBuilder onSaved={vi.fn()} />);
+    nameIt();
+    fireEvent.click(
+      screen.getByRole("radio", { name: /Someone messages you from an ad/ })
+    );
+    const these = await screen.findByRole("radio", { name: "These ads" });
+    await waitFor(() => expect(these.hasAttribute("disabled")).toBe(false));
+    fireEvent.click(these);
+    saveDraft();
+    expect(
+      screen.getAllByText("Choose at least one ad.").length
+    ).toBeGreaterThan(0);
+    expect(createDrip).not.toHaveBeenCalled();
+  });
+
+  it("says there are no ads yet and keeps Any ad", async () => {
+    wrap(<DripBuilder onSaved={vi.fn()} />);
+    fireEvent.click(
+      screen.getByRole("radio", { name: /Someone messages you from an ad/ })
+    );
+    expect(
+      await screen.findByText(
+        "No ads yet. People who message you from a Meta ad will appear here."
+      )
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("radio", { name: "These ads" }).hasAttribute("disabled")
+    ).toBe(true);
+  });
+
+  it("saves a first-message drip and the order goal", async () => {
+    store.status = "connected";
+    createDrip.mockResolvedValue(savedDrip());
+    wrap(<DripBuilder onSaved={vi.fn()} />);
+    nameIt();
+    fireEvent.click(
+      screen.getByRole("radio", {
+        name: /Someone messages you for the first time/
+      })
+    );
+    fireEvent.click(screen.getByText("They place an order"));
+    saveDraft();
+    await waitFor(() => expect(createDrip).toHaveBeenCalledTimes(1));
+    expect(createDrip.mock.calls[0][0]).toMatchObject({
+      trigger: { type: "first_message" },
+      stopOnOrder: true,
+      onReply: "pause"
+    });
+  });
+
+  it("shows a started ad drip's ads read-only", async () => {
+    ads.list = [{ sourceId: "ad-1", label: "Diwali sale" }];
+    wrap(
+      <DripBuilder
+        drip={savedDrip({
+          status: "active",
+          activatedAt: "2026-11-25T10:00:00.000Z",
+          trigger: { type: "ad_lead", tag: null, adSourceIds: ["ad-1"] },
+          onReply: "pause"
+        })}
+        onSaved={vi.fn()}
+      />
+    );
+    expect(await screen.findByText("Diwali sale")).toBeTruthy();
+    expect(
+      screen.getByText("This can't change after the drip has started.")
+    ).toBeTruthy();
+    expect(screen.queryByRole("radio", { name: "Any ad" })).toBeNull();
+  });
+
+  it("starts an ad drip with only the consent tick", async () => {
+    startDrip.mockResolvedValue({
+      drip: savedDrip({ status: "active" }),
+      startAt: "2026-11-25T10:00:00.000Z"
+    });
+    wrap(
+      <DripAudienceDialog
+        drip={savedDrip({
+          trigger: { type: "ad_lead", tag: null, adSourceIds: [] },
+          onReply: "pause"
+        })}
+        mode="start"
+        open
+        onOpenChange={vi.fn()}
+      />
+    );
+    expect(
+      screen.getByText(
+        "From now on, anyone who messages you from one of your ads joins on their own."
+      )
+    ).toBeTruthy();
+    expect(screen.queryByText("All contacts")).toBeNull();
+    expect(screen.queryByText(/already have this tag/)).toBeNull();
+    fireEvent.click(
+      screen.getByText(
+        "These contacts agreed to get messages from us on WhatsApp"
+      )
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Start drip" }));
+    await waitFor(() =>
+      expect(startDrip).toHaveBeenCalledWith({
+        dripId: "drip-1",
+        payload: { consentConfirmed: true }
+      })
+    );
+    expect(previewDripAudience).not.toHaveBeenCalled();
+  });
+
+  const report = (overrides: Partial<DripReport> = {}): DripReport => ({
+    drip: savedDrip({
+      status: "active",
+      trigger: { type: "first_message", tag: null },
+      onReply: "pause",
+      contacts: { active: 6, completed: 2, stopped: 4, total: 12 }
+    }),
+    stopReasons: [],
+    waiting: {},
+    joined: { total: 12, byHand: 0, automatic: 12, byTag: 0 },
+    goal: { reached: 3, rate: 25, byTag: 1, byOrder: 2 },
+    revenue: {
+      orders: 3,
+      totals: [{ currency: "INR", amount: "12450.00" }],
+      windowDays: 7
+    },
+    steps: [],
+    ...overrides
+  });
+
+  it("reports automatic joins, both goals and store sales", () => {
+    wrap(
+      <DripResults
+        report={report({
+          drip: {
+            ...report().drip,
+            stopTags: ["Purchased"],
+            stopOnOrder: true
+          }
+        })}
+        onShowPeople={vi.fn()}
+      />
+    );
+    expect(screen.getByText("12 automatically")).toBeTruthy();
+    expect(screen.getByText("Goal reached")).toBeTruthy();
+    expect(screen.getByText("2 by ordering")).toBeTruthy();
+    expect(screen.getByText("Store sales")).toBeTruthy();
+    expect(screen.getByText("3 orders · ₹12,450.00")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Orders people placed after getting this drip, up to 7 days after they left it. Cancelled orders don't count."
+      )
+    ).toBeTruthy();
+  });
+
+  it("shows the goal for an order goal alone, and 'No orders yet'", () => {
+    const onShowPeople = vi.fn();
+    wrap(
+      <DripResults
+        report={report({
+          drip: { ...report().drip, stopOnOrder: true },
+          revenue: { orders: 0, totals: [], windowDays: 7 }
+        })}
+        onShowPeople={onShowPeople}
+      />
+    );
+    expect(screen.queryByText("2 by ordering")).toBeNull();
+    expect(screen.getByText("No orders yet")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Goal reached/ }));
+    expect(onShowPeople).toHaveBeenCalledWith("stopped", "ordered");
+  });
+
+  it("leaves Store sales out without a store", () => {
+    wrap(
+      <DripResults report={report({ revenue: null })} onShowPeople={vi.fn()} />
+    );
+    expect(screen.queryByText("Store sales")).toBeNull();
+    expect(screen.queryByText("Goal reached")).toBeNull();
+  });
+
+  it("labels how each person joined an automatic drip", async () => {
+    const row = {
+      id: "row-1",
+      contact: { id: "c1", name: "Priya", phone: "+91 98765 43210" },
+      status: "active",
+      round: 1,
+      joinedBy: "ad",
+      nextStep: 1,
+      nextRunAt: null,
+      waitingReason: "chatting",
+      stepsSent: 0,
+      stopReason: null,
+      stopReasonText: null,
+      enrolledAt: "2026-11-25T10:00:00.000Z",
+      lastSentAt: null,
+      completedAt: null,
+      stoppedAt: null
+    };
+    listDripContacts.mockResolvedValue({
+      contacts: [row],
+      pagination: { page: 1, limit: 50, total: 1, pages: 1 }
+    });
+    wrap(
+      <DripPeople
+        drip={savedDrip({
+          status: "active",
+          trigger: { type: "ad_lead", tag: null, adSourceIds: [] }
+        })}
+        status="active"
+        stopReason=""
+        stopReasons={[]}
+        onFilterChange={vi.fn()}
+      />
+    );
+    expect(await screen.findByText("From an ad")).toBeTruthy();
+    expect(screen.getByText("Waiting, they're chatting")).toBeTruthy();
+    cleanup();
+
+    // Drips you fill: everyone was added by you, so no label.
+    wrap(
+      <DripPeople
+        drip={savedDrip({ status: "active" })}
+        status="active"
+        stopReason=""
+        stopReasons={[]}
+        onFilterChange={vi.fn()}
+      />
+    );
+    await screen.findByText("Priya");
+    expect(screen.queryByText("From an ad")).toBeNull();
   });
 });

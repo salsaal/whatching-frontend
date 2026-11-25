@@ -2,6 +2,11 @@
 
 This document reflects the frontend and verified sibling-backend contracts on 2026-08-27.
 
+## 2026-11-25 — Drips phase 2: ads, first messages, store orders
+
+- Built from section (k) of the backend's `docs/DRIP_FRONTEND_SPEC.md` (backend main 94bd3a4), as small as the spec asks: three more "Starts when" choices with an ads picker, the order goal, the consent-only start dialog, the report's automatic joins, "by ordering" and Store sales, and People labels (see `docs/FEATURES.md`).
+- Choices: the quiet-chat line under "When they reply" shows only with Pause (see `docs/DECISIONS.md`); with both goals, Goal reached opens everyone who left early, otherwise the one goal reason; the "how they joined" label on People shows only for automatic drips.
+
 ## 2026-11-24 — Automatic drips (start from a tag)
 
 - Built from section (j) of the backend's `docs/DRIP_FRONTEND_SPEC.md` (backend main e5a7001), kept as small as the spec asks: three builder controls, the tag start dialog, the Joined and Goal reached lines, "Joined again", the inbox Drips block, and the tag delete refusal (see `docs/FEATURES.md`). `drip_joined` and `drip_left` inbox notes already show like other system notes.

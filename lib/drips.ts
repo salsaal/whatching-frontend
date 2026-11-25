@@ -2,9 +2,11 @@
 // wait between each. Plain-language helpers shared by the drip pages.
 
 import type {
+  DripJoinedBy,
   DripOnReply,
   DripStatus,
   DripTrigger,
+  DripTriggerType,
   DripWaitingReason
 } from "@/client-api/types/drips.type";
 import type {
@@ -176,13 +178,79 @@ export const ON_REPLY_OPTIONS: Array<{ value: DripOnReply; label: string }> = [
   { value: "continue", label: "Keep going" }
 ];
 
-/** Until someone picks: pause for tag drips, stop for drips you fill. */
+/** Until someone picks: stop for drips you fill, pause for the others. */
 export const defaultOnReply = (
   triggerType: DripTrigger["type"]
-): DripOnReply => (triggerType === "tag_added" ? "pause" : "stop");
+): DripOnReply => (triggerType === "manual" ? "stop" : "pause");
 
 export const isTagDrip = (drip?: { trigger?: DripTrigger | null } | null) =>
   drip?.trigger?.type === "tag_added" && Boolean(drip.trigger.tag);
+
+/** People join on their own (anything but "I add people"). */
+export const isAutomaticDrip = (
+  drip?: { trigger?: DripTrigger | null } | null
+) => Boolean(drip?.trigger?.type) && drip?.trigger?.type !== "manual";
+
+export const MAX_TRIGGER_ADS = 20;
+
+/** "Starts when" in the builder's words. */
+export const DRIP_TRIGGER_TEXT: Record<
+  DripTriggerType,
+  { label: string; help: string; joins: string }
+> = {
+  manual: {
+    label: "I add people",
+    help: "You choose who joins when you start it, and can add more later.",
+    joins: "Someone joins the drip"
+  },
+  tag_added: {
+    label: "A contact gets a tag",
+    help: "Anyone who gets the tag joins on their own.",
+    joins: "Someone gets the tag"
+  },
+  ad_lead: {
+    label: "Someone messages you from an ad",
+    help: "Good for following up on leads from your Click-to-WhatsApp ads.",
+    joins: "Someone messages you from an ad"
+  },
+  first_message: {
+    label: "Someone messages you for the first time",
+    help: "A welcome series for new contacts. Includes people you imported who write to you for the first time.",
+    joins: "Someone messages you for the first time"
+  },
+  order_placed: {
+    label: "Someone places an order",
+    help: "Thank-you, review request or cross-sell after a purchase. If the order is cancelled, they leave the drip.",
+    joins: "Someone places an order"
+  }
+};
+
+/** How a person joined, on the People tab of an automatic drip. */
+export const JOINED_BY_LABEL: Record<DripJoinedBy, string> = {
+  hand: "Added by you",
+  tag: "By tag",
+  ad: "From an ad",
+  first_message: "First message",
+  order: "Ordered"
+};
+
+/**
+ * The Joined tile's line: "5 by tag, 3 added by you" or "12 automatically",
+ * leaving out "added by you" at 0. Empty for drips you fill.
+ */
+export const joinedBreakdown = (
+  drip: { trigger?: DripTrigger | null },
+  joined?: { byHand: number; byTag: number; automatic?: number } | null
+) => {
+  if (!joined || !isAutomaticDrip(drip)) return "";
+  const count = (value: number) => value.toLocaleString("en-IN");
+  const automatic = isTagDrip(drip)
+    ? `${count(joined.byTag)} by tag`
+    : `${count(joined.automatic ?? 0)} automatically`;
+  return joined.byHand > 0
+    ? `${automatic}, ${count(joined.byHand)} added by you`
+    : automatic;
+};
 
 /** The server's message as written, or the fallback. */
 export const dripErrorMessage = (error: unknown, fallback: string) =>

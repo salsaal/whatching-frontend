@@ -29,7 +29,12 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatCount, formatWhen } from "@/lib/displayFormat";
-import { DRIP_WAITING_TEXT, dripErrorMessage } from "@/lib/drips";
+import {
+  DRIP_WAITING_TEXT,
+  dripErrorMessage,
+  isAutomaticDrip,
+  JOINED_BY_LABEL
+} from "@/lib/drips";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 50;
@@ -62,6 +67,8 @@ export function DripPeople({
   const [page, setPage] = useState(1);
   const [removeTarget, setRemoveTarget] = useState<DripContactRow | null>(null);
   const stepCount = drip.steps.length;
+  // How each person joined only matters when they can join on their own.
+  const isAutomatic = isAutomaticDrip(drip);
   const canRemove = drip.status !== "archived";
 
   const { data, isLoading, isError, isFetching, refetch } = useQuery({
@@ -211,6 +218,11 @@ export function DripPeople({
               <div className="min-w-0 sm:w-56">
                 <p className="flex min-w-0 items-center gap-2 text-sm font-medium">
                   <span className="truncate">{contactLabel(row)}</span>
+                  {isAutomatic && row.joinedBy && (
+                    <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                      {JOINED_BY_LABEL[row.joinedBy]}
+                    </span>
+                  )}
                   {row.round > 1 && (
                     <span className="shrink-0 rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-800">
                       Joined again

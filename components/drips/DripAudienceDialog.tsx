@@ -33,7 +33,12 @@ import {
   DialogTitle
 } from "@/components/ui/dialog";
 import { formatCount, formatWhen } from "@/lib/displayFormat";
-import { describeWait, dripErrorMessage, isTagDrip } from "@/lib/drips";
+import {
+  describeWait,
+  dripErrorMessage,
+  isAutomaticDrip,
+  isTagDrip
+} from "@/lib/drips";
 import { hasAudienceSelection, warningText } from "@/lib/broadcastAudience";
 
 const people = (count: number) =>
@@ -62,11 +67,12 @@ type DialogProps = {
  * Who joins a drip: the broadcast audience picker with a live count, then
  * (to start) the consent tick and Start now or Schedule. "add" puts more
  * people into a drip that has already started. A drip that starts from a
- * tag has no audience to choose: see StartTagDripDialog.
+ * tag, an ad, a first message or an order has no audience to choose: see
+ * StartAutomaticDripDialog.
  */
 export function DripAudienceDialog(props: DialogProps) {
-  return props.mode === "start" && isTagDrip(props.drip) ? (
-    <StartTagDripDialog {...props} />
+  return props.mode === "start" && isAutomaticDrip(props.drip) ? (
+    <StartAutomaticDripDialog {...props} />
   ) : (
     <AudienceDialog {...props} />
   );
@@ -324,8 +330,33 @@ function AudienceDialog({
  * Starting a drip that people join by getting a tag: no audience and no
  * scheduling. Optionally adds the contacts who already have the tag.
  */
-function StartTagDripDialog({ drip, open, onOpenChange, onDone }: DialogProps) {
+/** What happens once an automatic drip starts, in plain words. */
+const startsText = (drip: Drip) => {
+  switch (drip.trigger.type) {
+    case "tag_added":
+      return `From now on, anyone who gets the tag “${drip.trigger.tag}” joins on their own, whether you add it, an import does, a tagging rule or your store.`;
+    case "ad_lead":
+      return drip.trigger.adSourceIds?.length
+        ? "From now on, anyone who messages you from one of the chosen ads joins on their own."
+        : "From now on, anyone who messages you from one of your ads joins on their own.";
+    case "first_message":
+      return "From now on, anyone who messages you for the first time joins on their own.";
+    case "order_placed":
+      return "From now on, anyone who places an order in your store joins on their own. If the order is cancelled, they leave the drip.";
+    default:
+      return "";
+  }
+};
+
+function StartAutomaticDripDialog({
+  drip,
+  open,
+  onOpenChange,
+  onDone
+}: DialogProps) {
   const queryClient = useQueryClient();
+  // Only a tag drip can also take the people who already have the tag.
+  const isTag = isTagDrip(drip);
   const tag = drip.trigger.tag || "";
   const [includeExisting, setIncludeExisting] = useState(false);
   const [consent, setConsent] = useState(false);
@@ -345,27 +376,31 @@ function StartTagDripDialog({ drip, open, onOpenChange, onDone }: DialogProps) {
         dripId: drip.id,
         audience: { mode: "tags", tags: [tag], tagMatch: "any" }
       }),
-    enabled: open && Boolean(tag)
+    enabled: open && isTag
   });
-  const existing = preview?.willJoin ?? 0;
+  const existing = isTag ? (preview?.willJoin ?? 0) : 0;
 
   const { mutate: submit, isPending } = useMutation({
     mutationFn: () =>
       startDrip({
         dripId: drip.id,
-        payload: {
-          consentConfirmed: true,
-          includeExisting: includeExisting && existing > 0
-        }
+        payload: isTag
+          ? {
+              consentConfirmed: true,
+              includeExisting: includeExisting && existing > 0
+            }
+          : { consentConfirmed: true }
       }),
     meta: { showToast: false },
     onSuccess: ({ drip: saved }) => {
       rememberDrip(queryClient, saved);
       queryClient.invalidateQueries({ queryKey: ["drip-contacts", saved.id] });
       toast.success(
-        includeExisting && existing > 0
-          ? `Drip started. People with the tag “${tag}” are joining now, and anyone who gets it later joins too.`
-          : `Drip started. Anyone who gets the tag “${tag}” joins from now on.`
+        !isTag
+          ? "Drip started. People join on their own from now on."
+          : includeExisting && existing > 0
+            ? `Drip started. People with the tag “${tag}” are joining now, and anyone who gets it later joins too.`
+            : `Drip started. Anyone who gets the tag “${tag}” joins from now on.`
       );
       onOpenChange(false);
       onDone?.(saved);
@@ -379,10 +414,7 @@ function StartTagDripDialog({ drip, open, onOpenChange, onDone }: DialogProps) {
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Start this drip</DialogTitle>
-          <DialogDescription>
-            From now on, anyone who gets the tag “{tag}” joins on their own,
-            whether you add it, an import does, a tagging rule or your store.
-          </DialogDescription>
+          <DialogDescription>{startsText(drip)}</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           {existing > 0 && (

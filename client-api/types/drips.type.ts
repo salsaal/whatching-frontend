@@ -9,11 +9,26 @@ export type DripWaitingReason =
   | "whatsapp_limit_retry"
   | "chatting";
 
-/** How people join: added by the business, or when a contact gets a tag. */
+/**
+ * How people join: added by the business ("manual"), or on their own when
+ * they get a tag, message you from an ad, message you for the first time,
+ * or place a store order.
+ */
+export type DripTriggerType =
+  | "manual"
+  | "tag_added"
+  | "ad_lead"
+  | "first_message"
+  | "order_placed";
+
 export interface DripTrigger {
-  type: "manual" | "tag_added";
+  type: DripTriggerType;
   tag?: string | null;
+  /** ad_lead: the chosen ads; empty for any ad. */
+  adSourceIds?: string[] | null;
 }
+
+export type DripJoinedBy = "hand" | "tag" | "ad" | "first_message" | "order";
 
 /** What a reply does: stop the drip, pause while chatting, or carry on. */
 export type DripOnReply = "stop" | "pause" | "continue";
@@ -59,6 +74,8 @@ export interface Drip {
   trigger: DripTrigger;
   /** Getting one of these tags ends the drip as "goal reached". */
   stopTags: string[];
+  /** Placing a store order ends the drip as "goal reached". */
+  stopOnOrder?: boolean;
   onReply: DripOnReply;
   /** Older field; read onReply. */
   stopOnReply: boolean;
@@ -83,6 +100,7 @@ export interface DripPayload {
   sendWindow?: Partial<DripSendWindow>;
   trigger?: DripTrigger;
   stopTags?: string[];
+  stopOnOrder?: boolean;
   onReply?: DripOnReply;
 }
 
@@ -136,8 +154,22 @@ export interface DripReport {
   stopReasons: DripStopReasonCount[];
   waiting: Partial<Record<DripWaitingReason, number>>;
   /** Each time through counts. */
-  joined?: { total: number; byHand: number; byTag: number };
-  goal?: { reached: number; rate: number };
+  joined?: {
+    total: number;
+    byHand: number;
+    automatic?: number;
+    byTag: number;
+    byAd?: number;
+    byFirstMessage?: number;
+    byOrder?: number;
+  };
+  goal?: { reached: number; rate: number; byTag?: number; byOrder?: number };
+  /** Store orders after the drip; null when no store was ever connected. */
+  revenue?: {
+    orders: number;
+    totals: Array<{ currency: string | null; amount: string }>;
+    windowDays: number;
+  } | null;
   steps: DripStepReport[];
 }
 
@@ -149,7 +181,7 @@ export interface DripContactRow {
   status: DripContactStatus;
   /** 2 or more: joined this drip again (tag drips). */
   round: number;
-  joinedBy?: "tag" | "hand";
+  joinedBy?: DripJoinedBy;
   nextStep: number | null;
   nextRunAt: string | null;
   waitingReason: DripWaitingReason | null;

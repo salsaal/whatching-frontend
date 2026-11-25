@@ -1,4 +1,11 @@
-import { CheckCircle2, Clock, LogOut, Target, Users } from "lucide-react";
+import {
+  CheckCircle2,
+  Clock,
+  LogOut,
+  ShoppingBag,
+  Target,
+  Users
+} from "lucide-react";
 
 import {
   DripContactStatus,
@@ -11,7 +18,8 @@ import {
   formatPercent,
   humanizeTemplateName
 } from "@/lib/displayFormat";
-import { DRIP_WAITING_TEXT, isTagDrip } from "@/lib/drips";
+import { DRIP_WAITING_TEXT, joinedBreakdown } from "@/lib/drips";
+import { formatOrderTotal } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 type Column = {
@@ -46,12 +54,15 @@ function Tile({
   label,
   value,
   sub,
+  extra,
   icon: Icon,
   onClick
 }: {
   label: string;
-  value: number;
+  value: number | string;
   sub: string;
+  /** A second small line. */
+  extra?: string;
   icon: React.ElementType;
   onClick?: () => void;
 }) {
@@ -70,9 +81,14 @@ function Tile({
         <Icon className="size-4 text-primary" />
       </span>
       <span className="mt-2 block font-heading text-2xl font-semibold">
-        {formatCount(value)}
+        {typeof value === "number" ? formatCount(value) : value}
       </span>
       <span className="mt-0.5 block text-xs text-muted-foreground">{sub}</span>
+      {extra && (
+        <span className="mt-0.5 block text-xs text-muted-foreground">
+          {extra}
+        </span>
+      )}
     </button>
   );
 }
@@ -87,12 +103,27 @@ export function DripResults({
 }) {
   const totals = report.drip.contacts;
   const joined = report.joined;
-  // How people joined matters once a tag can add them.
+  // How people joined matters once they can join on their own.
   const joinedSub =
-    joined && (isTagDrip(report.drip) || joined.byTag > 0)
-      ? `${formatCount(joined.byTag)} by tag, ${formatCount(joined.byHand)} added by you`
-      : "Everyone who has joined so far";
-  const showGoal = (report.drip.stopTags?.length || 0) > 0 && report.goal;
+    joinedBreakdown(report.drip, joined) || "Everyone who has joined so far";
+  const hasTagGoal = (report.drip.stopTags?.length || 0) > 0;
+  const hasOrderGoal = Boolean(report.drip.stopOnOrder);
+  const goal = (hasTagGoal || hasOrderGoal) && report.goal ? report.goal : null;
+  // Opens the people who left for the goal: one reason, or all who left.
+  const goalReason =
+    hasTagGoal && hasOrderGoal ? "" : hasOrderGoal ? "ordered" : "goal_reached";
+  const revenue = report.revenue ?? null;
+  const revenueValue = !revenue
+    ? ""
+    : revenue.orders === 0
+      ? "No orders yet"
+      : [
+          `${formatCount(revenue.orders)} ${revenue.orders === 1 ? "order" : "orders"}`,
+          ...revenue.totals.map((total) =>
+            formatOrderTotal(total.amount, total.currency || undefined)
+          )
+        ].join(" · ");
+  const tileCount = 4 + (goal ? 1 : 0) + (revenue ? 1 : 0);
   const waiting = (
     Object.entries(report.waiting || {}) as Array<[DripWaitingReason, number]>
   ).filter(([reason, count]) => count > 0 && DRIP_WAITING_TEXT[reason]);
@@ -110,7 +141,11 @@ export function DripResults({
       <div
         className={cn(
           "grid gap-3 sm:grid-cols-2",
-          showGoal ? "xl:grid-cols-5" : "xl:grid-cols-4"
+          tileCount === 6
+            ? "xl:grid-cols-3"
+            : tileCount === 5
+              ? "xl:grid-cols-5"
+              : "xl:grid-cols-4"
         )}
       >
         <Tile
@@ -140,13 +175,26 @@ export function DripResults({
           icon={LogOut}
           onClick={() => onShowPeople("stopped")}
         />
-        {showGoal && report.goal && (
+        {goal && (
           <Tile
             label="Goal reached"
-            value={report.goal.reached}
-            sub={`${report.goal.rate}% of everyone who joined`}
+            value={goal.reached}
+            sub={`${goal.rate}% of everyone who joined`}
+            extra={
+              hasTagGoal && hasOrderGoal
+                ? `${formatCount(goal.byOrder ?? 0)} by ordering`
+                : undefined
+            }
             icon={Target}
-            onClick={() => onShowPeople("stopped", "goal_reached")}
+            onClick={() => onShowPeople("stopped", goalReason)}
+          />
+        )}
+        {revenue && (
+          <Tile
+            label="Store sales"
+            value={revenueValue}
+            sub={`Orders people placed after getting this drip, up to ${revenue.windowDays || 7} days after they left it. Cancelled orders don't count.`}
+            icon={ShoppingBag}
           />
         )}
       </div>

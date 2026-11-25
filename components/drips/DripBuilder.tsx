@@ -7,7 +7,10 @@ import {
   FileText,
   Flag,
   Info,
+  Megaphone,
+  MessageCircle,
   Plus,
+  ShoppingBag,
   Tag,
   Trash2,
   UserPlus
@@ -16,6 +19,7 @@ import Link from "next/link";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { listCampaigns } from "@/client-api/functions/campaigns";
 import { createDrip, updateDrip } from "@/client-api/functions/drips";
 import { getTags } from "@/client-api/functions/subscribers";
 import { getAllTemplates } from "@/client-api/functions/templates";
@@ -24,7 +28,8 @@ import {
   DripComponent,
   DripOnReply,
   DripPayload,
-  DripTrigger
+  DripTrigger,
+  DripTriggerType
 } from "@/client-api/types/drips.type";
 import { MessageTemplate } from "@/client-api/types/templates.type";
 import { useOrgTimezone } from "@/components/broadcasts/BroadcastActions";
@@ -51,6 +56,7 @@ import {
   SelectTrigger,
   SelectValue
 } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import MultiSelect from "@/components/ui/multi-select";
 import { isPaymentBlocked } from "@/components/whatsapp/PaymentBlockedCallout";
 import { WhatsAppPreview } from "@/components/whatsapp/WhatsAppPreview";
@@ -59,18 +65,21 @@ import {
   useWhatsAppNumberContext
 } from "@/components/whatsapp/WhatsAppNumberSwitcher";
 import { useCurrentMembership } from "@/hooks/useCurrentMembership";
+import { useStore } from "@/hooks/useStore";
 import { humanizeTemplateName } from "@/lib/displayFormat";
 import {
   DEFAULT_SEND_HOURS,
   defaultOnReply,
   DRIP_MAX_STEPS,
   DRIP_MIN_STEPS,
+  DRIP_TRIGGER_TEXT,
   dripErrorMessage,
   hasStopPromotionsButton,
   hourLabel,
   isDripTemplate,
   isOfferCategory,
   MAX_GOAL_TAGS,
+  MAX_TRIGGER_ADS,
   ON_REPLY_OPTIONS,
   sendHoursProblem,
   waitFromMinutes,
@@ -138,24 +147,25 @@ const mappingsFor = (template: MessageTemplate, saved?: DripComponent[]) => {
   );
 };
 
-const TRIGGER_CHOICES: Array<{
-  value: DripTrigger["type"];
-  label: string;
-  help: string;
-  icon: React.ElementType;
-}> = [
-  {
-    value: "manual",
-    label: "I add people",
-    help: "You choose who joins when you start it, and can add more later.",
-    icon: UserPlus
-  },
-  {
-    value: "tag_added",
-    label: "A contact gets a tag",
-    help: "Anyone who gets the tag joins on their own.",
-    icon: Tag
-  }
+const TRIGGER_ICONS: Record<DripTriggerType, React.ElementType> = {
+  manual: UserPlus,
+  tag_added: Tag,
+  ad_lead: Megaphone,
+  first_message: MessageCircle,
+  order_placed: ShoppingBag
+};
+const TRIGGER_ORDER: DripTriggerType[] = [
+  "manual",
+  "tag_added",
+  "ad_lead",
+  "first_message",
+  "order_placed"
+];
+// These start on a message or an order, when a chat may be going on.
+const STARTS_IN_A_CHAT: DripTriggerType[] = [
+  "ad_lead",
+  "first_message",
+  "order_placed"
 ];
 
 const ON_REPLY_HELP: Record<DripOnReply, string> = {
@@ -216,6 +226,12 @@ export function DripBuilder({
   const [onReply, setOnReply] = useState<DripOnReply>(
     drip?.onReply || defaultOnReply(savedTriggerType)
   );
+  const savedAds = drip?.trigger?.adSourceIds || [];
+  const [adChoice, setAdChoice] = useState<"any" | "these">(
+    savedAds.length ? "these" : "any"
+  );
+  const [adSourceIds, setAdSourceIds] = useState<string[]>(savedAds);
+  const [stopOnOrder, setStopOnOrder] = useState(Boolean(drip?.stopOnOrder));
   // "When they reply" follows "Starts when" until someone picks it.
   const [onReplyPicked, setOnReplyPicked] = useState(
     Boolean(drip?.onReply) && drip?.onReply !== defaultOnReply(savedTriggerType)
@@ -285,6 +301,27 @@ export function DripBuilder({
     setStopTags((current) => current.filter((item) => item !== tag));
   };
   const isTagTrigger = triggerType === "tag_added";
+  const isAutomatic = triggerType !== "manual";
+  const TriggerIcon = TRIGGER_ICONS[triggerType];
+
+  // ---------- store and ads (the newer ways to start) ----------
+  const { data: storeData } = useStore();
+  const storeStatus = storeData?.data.connection?.status;
+  const hasStore =
+    storeStatus === "connected" || storeStatus === "needs_attention";
+  const showOrderGoal = hasStore && triggerType !== "order_placed";
+  const triggerChoices = TRIGGER_ORDER.filter(
+    (type) =>
+      type !== "order_placed" || hasStore || triggerType === "order_placed"
+  );
+  const { data: adsData, isLoading: isAdsLoading } = useQuery({
+    queryKey: ["campaigns", "broadcast-audience"],
+    queryFn: () => listCampaigns({ sort: "recent", limit: 100 }),
+    enabled: triggerType === "ad_lead" && can("contacts:view")
+  });
+  const ads = adsData?.data.campaigns || [];
+  const adLabel = (sourceId: string) =>
+    ads.find((ad) => ad.sourceId === sourceId)?.label || "An ad";
 
   // Saved steps get their values once their templates are known.
   useEffect(() => {
@@ -362,6 +399,13 @@ export function DripBuilder({
     if (!name.trim()) return "Give the drip a name.";
     if (!hasStarted && isTagTrigger && !triggerTag)
       return "Choose the tag that starts the drip.";
+    if (
+      !hasStarted &&
+      triggerType === "ad_lead" &&
+      adChoice === "these" &&
+      !adSourceIds.length
+    )
+      return "Choose at least one ad.";
     if (!hasStarted && (!senderId || (sender && isPaymentBlocked(sender))))
       return "Choose a WhatsApp number.";
     if (stepsChanged) {
@@ -409,10 +453,17 @@ export function DripBuilder({
           ? {}
           : {
               trigger: isTagTrigger
-                ? { type: "tag_added" as const, tag: triggerTag }
-                : { type: "manual" as const }
+                ? { type: triggerType, tag: triggerTag }
+                : triggerType === "ad_lead"
+                  ? {
+                      type: triggerType,
+                      adSourceIds: adChoice === "these" ? adSourceIds : []
+                    }
+                  : { type: triggerType }
             }),
         stopTags,
+        // Only while the choice is on screen (a store is connected).
+        ...(showOrderGoal ? { stopOnOrder } : {}),
         onReply
       };
       const saved = drip
@@ -487,20 +538,32 @@ export function DripBuilder({
             {hasStarted ? (
               <div className="space-y-1">
                 <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
-                  {isTagTrigger ? (
-                    <>
-                      <Tag className="size-4 text-primary" />A contact gets the
-                      tag
-                      <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs text-primary">
-                        {triggerTag}
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      <UserPlus className="size-4 text-primary" />I add people
-                    </>
+                  <TriggerIcon className="size-4 text-primary" />
+                  {DRIP_TRIGGER_TEXT[triggerType].label}
+                  {isTagTrigger && (
+                    <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs text-primary">
+                      {triggerTag}
+                    </span>
                   )}
                 </p>
+                {triggerType === "ad_lead" && (
+                  <p className="flex flex-wrap gap-1.5 text-xs">
+                    {adSourceIds.length ? (
+                      adSourceIds.map((sourceId) => (
+                        <span
+                          key={sourceId}
+                          className="rounded-full bg-muted px-2.5 py-0.5"
+                        >
+                          {adLabel(sourceId)}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="rounded-full bg-muted px-2.5 py-0.5">
+                        Any ad
+                      </span>
+                    )}
+                  </p>
+                )}
                 <p className="text-xs text-muted-foreground">
                   This can&apos;t change after the drip has started.
                 </p>
@@ -512,15 +575,17 @@ export function DripBuilder({
                   aria-label="Starts when"
                   className="grid gap-2 sm:grid-cols-2"
                 >
-                  {TRIGGER_CHOICES.map((choice) => {
-                    const selected = triggerType === choice.value;
+                  {triggerChoices.map((type) => {
+                    const choice = DRIP_TRIGGER_TEXT[type];
+                    const Icon = TRIGGER_ICONS[type];
+                    const selected = triggerType === type;
                     return (
                       <button
-                        key={choice.value}
+                        key={type}
                         type="button"
                         role="radio"
                         aria-checked={selected}
-                        onClick={() => changeTrigger(choice.value)}
+                        onClick={() => changeTrigger(type)}
                         className={cn(
                           "flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-left transition",
                           selected
@@ -529,7 +594,7 @@ export function DripBuilder({
                         )}
                       >
                         <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                          <choice.icon className="size-4" />
+                          <Icon className="size-4" />
                         </span>
                         <span>
                           <span className="block text-sm font-medium">
@@ -572,6 +637,67 @@ export function DripBuilder({
                         Choose the tag that starts the drip.
                       </p>
                     )}
+                  </div>
+                )}
+                {triggerType === "ad_lead" && (
+                  <div className="space-y-2">
+                    <div
+                      role="radiogroup"
+                      aria-label="Which ads"
+                      className="inline-grid grid-cols-2 gap-1 rounded-md bg-muted p-1"
+                    >
+                      {(
+                        [
+                          ["any", "Any ad"],
+                          ["these", "These ads"]
+                        ] as const
+                      ).map(([value, label]) => (
+                        <button
+                          key={value}
+                          type="button"
+                          role="radio"
+                          aria-checked={adChoice === value}
+                          disabled={value === "these" && !ads.length}
+                          onClick={() => setAdChoice(value)}
+                          className={cn(
+                            "cursor-pointer rounded-sm px-3 py-1.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50",
+                            adChoice === value
+                              ? "bg-white text-foreground shadow-xs"
+                              : "text-muted-foreground hover:text-foreground"
+                          )}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    {adChoice === "these" && ads.length > 0 && (
+                      <div className="sm:max-w-md">
+                        <MultiSelect
+                          options={ads.map((ad) => ({
+                            label: ad.label,
+                            value: ad.sourceId
+                          }))}
+                          value={adSourceIds}
+                          onChange={(next) =>
+                            setAdSourceIds(next.slice(0, MAX_TRIGGER_ADS))
+                          }
+                          placeholder="Choose ads"
+                        />
+                      </div>
+                    )}
+                    {!isAdsLoading && !ads.length && (
+                      <p className="text-xs text-muted-foreground">
+                        No ads yet. People who message you from a Meta ad will
+                        appear here.
+                      </p>
+                    )}
+                    {showProblems &&
+                      adChoice === "these" &&
+                      !adSourceIds.length && (
+                        <p className="text-xs text-destructive">
+                          Choose at least one ad.
+                        </p>
+                      )}
                   </div>
                 )}
               </>
@@ -640,16 +766,14 @@ export function DripBuilder({
             <ol aria-label="Messages in this drip">
               <li className="flex items-center gap-3">
                 <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                  {isTagTrigger ? (
-                    <Tag className="size-4" />
-                  ) : (
-                    <UserPlus className="size-4" />
-                  )}
+                  <TriggerIcon className="size-4" />
                 </span>
                 <span className="text-sm font-medium">
                   {isTagTrigger && triggerTag
                     ? `Someone gets the tag “${triggerTag}”`
-                    : "Someone joins the drip"}
+                    : isTagTrigger
+                      ? DRIP_TRIGGER_TEXT.manual.joins
+                      : DRIP_TRIGGER_TEXT[triggerType].joins}
                 </span>
               </li>
               {steps.map((step, index) => {
@@ -966,6 +1090,26 @@ export function DripBuilder({
                   People who get one of these tags leave the drip. Good for
                   “Purchased”.
                 </p>
+                {showOrderGoal && (
+                  <label className="flex cursor-pointer items-start gap-2 pt-1 text-sm">
+                    <Checkbox
+                      checked={stopOnOrder}
+                      onCheckedChange={(value) =>
+                        setStopOnOrder(value === true)
+                      }
+                      className="mt-0.5"
+                    />
+                    <span>
+                      <span className="block font-medium">
+                        They place an order
+                      </span>
+                      <span className="block text-xs text-muted-foreground">
+                        People who buy leave the drip, and it counts as the goal
+                        reached.
+                      </span>
+                    </span>
+                  </label>
+                )}
               </div>
               <div className="space-y-2 sm:max-w-md">
                 <Label>When they reply</Label>
@@ -993,6 +1137,13 @@ export function DripBuilder({
                 <p className="text-xs text-muted-foreground">
                   {ON_REPLY_HELP[onReply]}
                 </p>
+                {onReply === "pause" &&
+                  STARTS_IN_A_CHAT.includes(triggerType) && (
+                    <p className="text-xs text-muted-foreground">
+                      Your first message goes once the chat has been quiet for a
+                      day.
+                    </p>
+                  )}
               </div>
             </div>
           </section>
@@ -1030,7 +1181,7 @@ export function DripBuilder({
             >
               {footerProblem ||
                 (isDraft
-                  ? isTagTrigger
+                  ? isAutomatic
                     ? "Nothing is sent until you start the drip."
                     : "Nothing is sent until you choose who joins and start the drip."
                   : "Changes apply to the next messages people get.")}
@@ -1046,7 +1197,7 @@ export function DripBuilder({
                     Save draft
                   </Button>
                   <Button isLoading={isSaving} onClick={() => attempt("next")}>
-                    {isTagTrigger
+                    {isAutomatic
                       ? "Next: start the drip"
                       : "Next: choose who joins"}
                     <ArrowRight className="size-4" />

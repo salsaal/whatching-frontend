@@ -113,6 +113,10 @@ The builder sends `steps` in `PATCH /organizations/drips/:id` only after a messa
 
 A new drip's reply setting is "Pause while they're chatting" for "A contact gets a tag" and "Stop the drip" for "I add people", and switches with "Starts when" until the person picks one. A saved drip counts as picked when its `onReply` differs from its trigger's default. The builder always sends `onReply` (never `stopOnReply`) and sends `trigger` only before the start, since the server refuses changes after it.
 
+## Drip Order Choices Follow The Store
+
+"Someone places an order" and the "They place an order" goal show only while `GET /organizations/stores` reports `connected` or `needs_attention` (a saved order drip keeps showing its choice). `stopOnOrder` is sent only while its checkbox is on screen, so a hidden goal is never switched off by accident. "Your first message goes once the chat has been quiet for a day" shows only with "Pause while they're chatting": with the other reply settings the server doesn't wait for a quiet chat.
+
 ## Lint Command Mutates
 
 `npm run lint` runs `next lint --fix`. Use `npx tsc --noEmit` for a non-mutating frontend type check. Run lint only when file modifications from auto-fix are acceptable.
