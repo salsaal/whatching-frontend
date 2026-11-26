@@ -1,6 +1,8 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { useInboxUnreadStore } from "@/stores/inboxUnreadStore";
+
 import { useChatReadMarker } from "./useChatReadMarker";
 
 const screenState = { visible: true, focused: true };
@@ -110,5 +112,32 @@ describe("marking the open chat read", () => {
     });
     act(() => vi.advanceTimersByTime(1000));
     expect(onMarkRead).not.toHaveBeenCalled();
+  });
+
+  it("tells the nav badge which chat is being read on screen", () => {
+    const reading = () => useInboxUnreadStore.getState().readingId;
+    const { view } = setup();
+    expect(reading()).toBe("c1");
+
+    screenState.focused = false;
+    act(() => window.dispatchEvent(new Event("blur")));
+    expect(reading()).toBe("");
+    screenState.focused = true;
+    act(() => window.dispatchEvent(new Event("focus")));
+    expect(reading()).toBe("c1");
+
+    screenState.visible = false;
+    act(() => document.dispatchEvent(new Event("visibilitychange")));
+    expect(reading()).toBe("");
+    screenState.visible = true;
+    act(() => document.dispatchEvent(new Event("visibilitychange")));
+    expect(reading()).toBe("c1");
+
+    view.rerender({ selectedId: "c1", isSelectionDeliberate: false });
+    expect(reading()).toBe("");
+    view.rerender({ selectedId: "c2", isSelectionDeliberate: true });
+    expect(reading()).toBe("c2");
+    view.unmount();
+    expect(reading()).toBe("");
   });
 });

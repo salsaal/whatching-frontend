@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
 
 import { isChatOnScreen } from "@/lib/inbox";
+import { useInboxUnreadStore } from "@/stores/inboxUnreadStore";
 
 /** At most one "mark read" call this often. */
 export const MARK_READ_INTERVAL_MS = 1000;
@@ -89,6 +90,29 @@ export function useChatReadMarker({
       timerRef.current = null;
     };
   }, [request]);
+
+  // Tells the nav badge which chat is being read on screen, so a customer
+  // message there doesn't flash it while the read is on its way.
+  useEffect(() => {
+    const { setReading } = useInboxUnreadStore.getState();
+    const update = () =>
+      setReading(
+        selectedId && isSelectionDeliberate && isChatOnScreen()
+          ? selectedId
+          : ""
+      );
+    const away = () => setReading("");
+    update();
+    document.addEventListener("visibilitychange", update);
+    window.addEventListener("focus", update);
+    window.addEventListener("blur", away);
+    return () => {
+      document.removeEventListener("visibilitychange", update);
+      window.removeEventListener("focus", update);
+      window.removeEventListener("blur", away);
+      setReading("");
+    };
+  }, [isSelectionDeliberate, selectedId]);
 
   return request;
 }

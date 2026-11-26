@@ -121,6 +121,8 @@ A new drip's reply setting is "Pause while they're chatting" for "A contact gets
 
 `RealtimeProvider` in `_app` owns the only socket, so the unread badge stays live on every page and doesn't reconnect on each navigation (pages render their own `AppLayout`, which remounts). Pages listen on it with `useRealtimeSocket()` and must `off` their own handlers, never disconnect. The badge starts from the unread chat list, not from `chat/bootstrap`: bootstrap gives a count (as `sidebar.unread`) without IDs, and the badge needs IDs to apply `conversation.updated` and `conversation.read` correctly.
 
+The badge skips "unread" updates for the chat being read on screen (`readingId`, set by `useChatReadMarker`). The backend sends `message.created` and then `conversation.updated`; the mark-read goes out on the first, but the second was built a moment earlier and still says 1 unread, so without the skip the badge blinks for about half a second on every customer message in the open chat.
+
 ## The Ad Reply Flow Picker Uses The Bot Route
 
 Changing an ad reply needs `flows:manage`, so its flow list comes from `GET /bot/canvas/published?view=triggerKeys` (the same data under the same permission) rather than the broadcasts copy, which needs `broadcasts:manage`.

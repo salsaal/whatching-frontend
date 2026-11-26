@@ -10,6 +10,13 @@ interface InboxUnreadState {
   orgId: string | null;
   ids: Set<string>;
   extra: number;
+  /**
+   * The chat open on screen (picked, tab showing, window focused), or "".
+   * Set by the inbox. It's marked read within a second, so a late "unread"
+   * update for it would only make the badge blink; those are skipped.
+   */
+  readingId: string;
+  setReading: (conversationId: string) => void;
   reset: (orgId: string, ids: string[], total: number) => void;
   setUnread: (orgId: string, conversationId: string, unread: boolean) => void;
   /** Read here or elsewhere (another agent or tab). */
@@ -21,6 +28,11 @@ export const useInboxUnreadStore = create<InboxUnreadState>()((set) => ({
   orgId: null,
   ids: new Set(),
   extra: 0,
+  readingId: "",
+  setReading: (conversationId) =>
+    set((state) =>
+      state.readingId === conversationId ? state : { readingId: conversationId }
+    ),
   reset: (orgId, ids, total) =>
     set({
       orgId,
@@ -30,6 +42,7 @@ export const useInboxUnreadStore = create<InboxUnreadState>()((set) => ({
   setUnread: (orgId, conversationId, unread) =>
     set((state) => {
       if (state.orgId !== orgId) return state;
+      if (unread && conversationId === state.readingId) return state;
       if (unread === state.ids.has(conversationId)) return state;
       const ids = new Set(state.ids);
       if (unread) ids.add(conversationId);
@@ -47,6 +60,7 @@ export const useInboxUnreadStore = create<InboxUnreadState>()((set) => ({
       // Not loaded, so likely one of the chats past the loaded page.
       return state.extra > 0 ? { extra: state.extra - 1 } : state;
     }),
+  // Keeps readingId: that belongs to the inbox, which may still be open.
   clear: () => set({ orgId: null, ids: new Set(), extra: 0 })
 }));
 

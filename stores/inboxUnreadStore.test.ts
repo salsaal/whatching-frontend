@@ -9,7 +9,10 @@ import {
 const count = () => selectUnreadChatCount(useInboxUnreadStore.getState());
 const store = () => useInboxUnreadStore.getState();
 
-beforeEach(() => store().clear());
+beforeEach(() => {
+  store().clear();
+  store().setReading("");
+});
 
 describe("unread chats badge", () => {
   it("starts from the unread chat list", () => {
@@ -44,6 +47,17 @@ describe("unread chats badge", () => {
     // An update saying a chat isn't unread says nothing about the rest.
     store().setUnread("org-1", "yyy", false);
     expect(count()).toBe(149);
+  });
+
+  it("skips late 'unread' updates for the chat being read on screen", () => {
+    store().reset("org-1", [], 0);
+    store().setReading("b");
+    store().setUnread("org-1", "b", true);
+    store().setUnread("org-1", "c", true);
+    expect(count()).toBe(1);
+    store().setReading("");
+    store().setUnread("org-1", "b", true);
+    expect(count()).toBe(2);
   });
 
   it("reads like WhatsApp", () => {
