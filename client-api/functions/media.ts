@@ -11,13 +11,21 @@ export const getAllMedia = async (): Promise<MediaResponse> => {
   return res.data;
 };
 
-export const uploadMedia = async (files: File[]): Promise<MediaResponse> => {
+export const uploadMedia = async (
+  files: File[],
+  options: { onProgress?: (percent: number) => void } = {}
+): Promise<MediaResponse> => {
   const formData = new FormData();
   files.forEach((file) => formData.append("files", file));
 
   const res = await api.post<MediaResponse>(MEDIA_ENDPOINTS.UPLOAD, formData, {
     headers: {
       "Content-Type": "multipart/form-data"
+    },
+    onUploadProgress: (event) => {
+      if (options.onProgress && event.total) {
+        options.onProgress(Math.round((event.loaded * 100) / event.total));
+      }
     }
   });
   return res.data;

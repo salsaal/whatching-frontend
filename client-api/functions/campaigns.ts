@@ -1,6 +1,7 @@
 import api from "../axiosInstance";
 import { ANALYTICS_ENDPOINTS, SUBSCRIBER_ENDPOINTS } from "../endpoints";
 import {
+  AdSourceReplySetting,
   CampaignPerformanceResponse,
   CampaignsResponse,
   CampaignTouchesResponse,
@@ -21,16 +22,22 @@ export const listCampaigns = async (
   return res.data;
 };
 
+/** Renames an ad and/or sets its own reply ("default" = same as all ads). */
 export const updateCampaignSource = async ({
   campaignSourceId,
-  label
+  label,
+  reply
 }: {
   campaignSourceId: string;
-  label: string;
+  label?: string;
+  reply?: AdSourceReplySetting;
 }): Promise<UpdateCampaignSourceResponse> => {
   const res = await api.patch<UpdateCampaignSourceResponse>(
     ANALYTICS_ENDPOINTS.CAMPAIGN_BY_ID(campaignSourceId),
-    { label }
+    {
+      ...(label !== undefined ? { label } : {}),
+      ...(reply ? { reply } : {})
+    }
   );
   return res.data;
 };

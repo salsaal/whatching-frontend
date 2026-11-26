@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useCurrentMembership } from "@/hooks/useCurrentMembership";
+import { MediaUploadButton } from "@/components/media/MediaUploadButton";
 
 const mediaTabs: Array<{
   value: MediaFileType;
@@ -68,6 +69,8 @@ interface MediaPickerDialogProps {
   /** Tooltip on media that can't be used here (e.g. WebP for templates). */
   incompatibleHint?: string;
   onBeforeOpenMediaLibrary?: () => Promise<void> | void;
+  /** Template document headers: an uploaded document must be a PDF. */
+  pdfOnly?: boolean;
   onOpenChange: (open: boolean) => void;
   onSelect: (media: MediaAsset) => void;
 }
@@ -106,6 +109,7 @@ export default function MediaPickerDialog({
   requiredType,
   incompatibleHint = DEFAULT_IMAGE_HINT,
   onBeforeOpenMediaLibrary,
+  pdfOnly = false,
   onOpenChange,
   onSelect
 }: MediaPickerDialogProps) {
@@ -156,21 +160,32 @@ export default function MediaPickerDialog({
           <DialogTitle>Select media</DialogTitle>
         </DialogHeader>
 
-        <div className="rounded-sm bg-muted/60 p-3 text-sm text-muted-foreground">
-          Need to add media first? Go to{" "}
-          <Link
-            href="/media"
-            className="font-medium text-primary"
-            onClick={async (event) => {
-              if (!onBeforeOpenMediaLibrary) return;
-              event.preventDefault();
-              await onBeforeOpenMediaLibrary();
-              router.push("/media");
-            }}
-          >
-            Media library
-          </Link>
-          .
+        <div className="flex flex-col gap-3 rounded-sm bg-muted/60 p-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+          <p>
+            {can("media:manage")
+              ? "Upload a new file, or choose one from your library below. "
+              : "Need to add media first? "}
+            Go to{" "}
+            <Link
+              href="/media"
+              className="font-medium text-primary"
+              onClick={async (event) => {
+                if (!onBeforeOpenMediaLibrary) return;
+                event.preventDefault();
+                await onBeforeOpenMediaLibrary();
+                router.push("/media");
+              }}
+            >
+              Media library
+            </Link>{" "}
+            to manage your files.
+          </p>
+          <MediaUploadButton
+            kind={requiredKind || activeTab}
+            pdfOnly={pdfOnly}
+            className="shrink-0 bg-white"
+            onUploaded={onSelect}
+          />
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">

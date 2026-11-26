@@ -171,6 +171,8 @@ export interface ChatMessage {
     filename: string | null;
     publicId: string | null;
     storageStatus: string | null;
+    /** The file was removed after 15 days; mediaUrl is null. */
+    expired?: boolean;
   } | null;
   interactive?: {
     interactiveType: string | null;

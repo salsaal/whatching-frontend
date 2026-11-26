@@ -6,6 +6,24 @@ export type CampaignSourceLabelSource =
   | "manual"
   | "meta_api";
 
+/**
+ * What we send to the first message from an ad. "off" is the normal bot
+ * reply. On one ad, "default" (or no reply at all) means "same as all ads".
+ */
+export type AdReplyMode = "off" | "message" | "flow";
+
+export interface AdReplySetting {
+  mode: AdReplyMode;
+  text?: string;
+  triggerKey?: string;
+}
+
+export interface AdSourceReplySetting {
+  mode: AdReplyMode | "default";
+  text?: string;
+  triggerKey?: string;
+}
+
 export interface CampaignSource {
   _id: string;
   orgId: string;
@@ -25,6 +43,8 @@ export interface CampaignSource {
   lastTouchAt: string;
   touchCount: number;
   subscriberCount: number;
+  /** This ad's own reply. Missing means it follows the all-ads setting. */
+  reply?: AdSourceReplySetting | null;
 }
 
 export interface CampaignsResponse {
@@ -49,6 +69,8 @@ export interface UpdateCampaignSourceResponse {
 
 export interface CampaignSpend {
   amount: number;
+  /** e.g. "INR". */
+  currency?: string | null;
   impressions: number;
   clicks: number;
   reach: number;
@@ -58,11 +80,20 @@ export interface CampaignPerformanceResponse {
   status: string;
   data: {
     campaign: CampaignSource;
+    /** Spend is per campaign, so the numbers cover every ad in it. */
+    scope?: "campaign";
+    campaignName?: string | null;
+    adsInCampaign?: number;
     spendAvailable: boolean;
     message?: string;
     range: { start: string; end: string };
     spend: CampaignSpend | null;
+    lastSyncedAt?: string | null;
+    /** People whose message from one of the campaign's ads came in the range. */
+    leadsInRange?: number;
+    /** subscriberCount is the all-time lead count for this ad. */
     touches: { subscriberCount: number; touchCount: number };
+    /** null without spend for the dates, or without leads. */
     costPerConversation?: number | null;
   };
 }

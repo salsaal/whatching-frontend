@@ -49,7 +49,7 @@ import {
   useQuery,
   useQueryClient
 } from "@tanstack/react-query";
-import { io, Socket } from "socket.io-client";
+import { Socket } from "socket.io-client";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { toast } from "sonner";
@@ -109,6 +109,14 @@ import {
   TemplateComponent
 } from "@/client-api/types/templates.type";
 import MediaPickerDialog from "@/components/media/MediaPickerDialog";
+import { MediaUploadButton } from "@/components/media/MediaUploadButton";
+import { mediaKindOf } from "@/lib/mediaUpload";
+import { useRealtimeSocket } from "@/components/app/RealtimeProvider";
+import { useChatReadMarker } from "@/hooks/useChatReadMarker";
+import {
+  formatUnreadBadge,
+  useInboxUnreadStore
+} from "@/stores/inboxUnreadStore";
 import {
   ALL_WHATSAPP_NUMBERS,
   WhatsAppNumberSwitcher,
@@ -162,6 +170,8 @@ import AppLayout from "@/layouts/AppLayout";
 import {
   CarouselCard,
   FormattedText,
+  REMOVED_FILE_TEXT,
+  RemovedFileKind,
   STATUS_DESCRIPTIONS,
   collectReactions,
   dayKey,
@@ -180,6 +190,7 @@ import {
   isUnsupportedMessageText,
   messageTimestamp,
   parseWhatsAppFormatting,
+  removedFileKind,
   rewriteSystemNote,
   subscriberHandle,
   subscriberName,
@@ -195,7 +206,6 @@ import {
   matchQuickReplies
 } from "@/lib/quickReplies";
 import { cn } from "@/lib/utils";
-import { useAuthStore } from "@/stores/authStore";
 import { useOrganizationStore } from "@/stores/organizationStore";
 import { MobileMenuButton } from "@/layouts/AppMenuContext";
 import { PermissionGate } from "@/components/common/NoAccess";
@@ -272,6 +282,37 @@ const sharedMediaKinds: Array<{
 ];
 
 const MEDIA_MESSAGE_TYPES = new Set(["image", "video", "audio", "document"]);
+
+const REMOVED_FILE_ICONS: Record<RemovedFileKind, ElementType> = {
+  photo: ImageIcon,
+  video: Video,
+  audio: Headphones,
+  document: FileText
+};
+
+/** In place of a photo, video, voice note or file removed after 15 days. */
+function RemovedFileNote({
+  kind,
+  filename
+}: {
+  kind: RemovedFileKind;
+  filename?: string | null;
+}) {
+  const Icon = REMOVED_FILE_ICONS[kind];
+  return (
+    <div className="mb-2 flex items-start gap-2 rounded-lg bg-black/5 p-2 opacity-80">
+      <Icon className="mt-0.5 size-4 shrink-0" />
+      <div className="min-w-0">
+        <p className="text-xs">{REMOVED_FILE_TEXT}</p>
+        {filename && (
+          <p className="truncate text-xs opacity-75" title={filename}>
+            {filename}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function FormattedMessageText({ nodes }: { nodes: FormattedText[] }) {
   return (
@@ -609,6 +650,8 @@ const getMessageContacts = (message: ChatMessage) => {
 };
 
 const getMessageMedia = (message: ChatMessage): MessageMediaPreview[] => {
+  // A removed file's old links in the payload no longer load.
+  if (message.attachment?.expired) return [];
   const payload = message.payload || {};
   const previews: MessageMediaPreview[] = [];
   const addPreview = (
@@ -776,6 +819,7 @@ function ConversationListItem({
   onSelect: () => void;
 }) {
   const name = subscriberName(conversation);
+  const isUnread = conversation.unreadCount > 0;
   const spamMutedUntil = conversation.subscriberId?.spamMutedUntil;
   const isSpamMuted = Boolean(
     spamMutedUntil && new Date(spamMutedUntil).getTime() > Date.now()
@@ -796,18 +840,39 @@ function ConversationListItem({
       />
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">
-          <p className="truncate text-sm font-medium" title={name}>
+          <p
+            className={cn(
+              "truncate text-sm",
+              isUnread ? "font-bold" : "font-medium"
+            )}
+            title={name}
+          >
             {name}
           </p>
-          <span className="shrink-0 text-[11px] text-muted-foreground">
+          <span
+            className={cn(
+              "shrink-0 text-[11px]",
+              isUnread ? "font-medium text-primary" : "text-muted-foreground"
+            )}
+          >
             {formatListTime(
               conversation.lastMessageAt || conversation.updatedAt
             )}
           </span>
         </div>
-        <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
-          {describeLastMessage(conversation.lastMessage)}
-        </p>
+        <div className="mt-0.5 flex items-center justify-between gap-2">
+          <p className="line-clamp-1 min-w-0 text-xs text-muted-foreground">
+            {describeLastMessage(conversation.lastMessage)}
+          </p>
+          {isUnread && (
+            <span
+              className="flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-primary px-1 text-[10px] leading-none font-semibold text-primary-foreground"
+              aria-label={`${conversation.unreadCount} unread`}
+            >
+              {formatUnreadBadge(conversation.unreadCount)}
+            </span>
+          )}
+        </div>
         <div className="mt-1.5 flex flex-wrap items-center gap-1">
           <Badge
             className={cn(
@@ -836,11 +901,6 @@ function ConversationListItem({
               title={senderLabel}
             >
               {senderLabel}
-            </Badge>
-          )}
-          {conversation.unreadCount > 0 && (
-            <Badge className="px-1.5 py-0 text-[10px]">
-              {conversation.unreadCount}
             </Badge>
           )}
           {isSpamMuted && spamMutedUntil && (
@@ -898,10 +958,12 @@ function MessageBubble({
   const location = getMessageLocation(message);
   const interactiveActions = getInteractiveActions(message);
   const carouselCards = getCarouselCards(message.payload);
+  const removedKind = removedFileKind(message);
   // Media messages carry a label like "📷 Photo" as their text; the media
-  // itself already says that, so only the caption is shown.
+  // (or the removed-file note) already says that, so only the caption shows.
   const bodyText =
-    MEDIA_MESSAGE_TYPES.has(message.type) && mediaPreviews.length
+    (MEDIA_MESSAGE_TYPES.has(message.type) && mediaPreviews.length) ||
+    removedKind
       ? getString(message.payload?.caption)
       : messageText(message);
   // Meta's details say what it was; older ones only carry the stored label.
@@ -1069,6 +1131,12 @@ function MessageBubble({
               </p>
             )}
           </div>
+        )}
+        {removedKind && (
+          <RemovedFileNote
+            kind={removedKind}
+            filename={message.attachment?.filename}
+          />
         )}
         {documentPreviews.map((preview) => (
           <a
@@ -1389,6 +1457,9 @@ function ConversationsPageContent() {
   const listEndRef = useRef<HTMLDivElement | null>(null);
   const contactLoadMoreRef = useRef<HTMLDivElement | null>(null);
   const socketRef = useRef<Socket | null>(null);
+  const requestMarkReadRef = useRef<(conversationId: string) => void>(
+    () => undefined
+  );
   const joinedConversationRef = useRef("");
   const replyContextCacheRef = useRef<Record<string, ReplyContext>>({});
   const realtimeTimersRef = useRef<
@@ -1398,7 +1469,8 @@ function ConversationsPageContent() {
     (state) => state.activeOrganization
   );
   const { numbers, selectedPhoneNumberId } = useWhatsAppNumberContext();
-  const token = useAuthStore((state) => state.token);
+  const sharedSocket = useRealtimeSocket();
+  const markChatReadInBadge = useInboxUnreadStore((state) => state.markRead);
   const [search, setSearch] = useState("");
   // Deep link from elsewhere (e.g. a broadcast recipient): ?search=<phone>
   // prefills the search, and the first match opens.
@@ -1763,20 +1835,8 @@ function ConversationsPageContent() {
 
   useEffect(() => {
     const orgId = activeOrganization?._id;
-    const authToken =
-      token ||
-      (typeof window !== "undefined"
-        ? localStorage.getItem("accessToken")
-        : null);
-    const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL;
-    if (!orgId || !authToken || !apiBase) return;
-
-    const socketBase = apiBase.replace(/\/api\/v1\/?$/, "");
-    const socket: Socket = io(socketBase, {
-      auth: { token: authToken },
-      withCredentials: true,
-      transports: ["websocket", "polling"]
-    });
+    const socket = sharedSocket;
+    if (!orgId || !socket) return;
     socketRef.current = socket;
 
     const scheduleRealtimeRefresh = (
@@ -1806,8 +1866,11 @@ function ConversationsPageContent() {
       }, 300);
     };
 
-    socket.on("connect", () => {
-      socket.emit("org:join", { orgId });
+    // The app-wide connection joins the workspace itself; the open chat is
+    // joined here, again after every reconnect. A reconnect may have missed
+    // events, so everything on screen is refreshed then.
+    let hasConnected = socket.connected;
+    const handleConnect = () => {
       if (selectedIdRef.current) {
         socket.emit("conversation:join", {
           orgId,
@@ -1815,119 +1878,141 @@ function ConversationsPageContent() {
         });
         joinedConversationRef.current = selectedIdRef.current;
       }
-    });
-    socket.on(
-      "conversation.updated",
-      (payload: { conversation?: Conversation }) =>
-        scheduleRealtimeRefresh(payload.conversation?._id, {
-          messages: false,
+      if (hasConnected) {
+        scheduleRealtimeRefresh(selectedIdRef.current || undefined, {
           context: true
-        })
-    );
-    socket.on("conversation.read", (payload: { conversationId?: string }) =>
-      scheduleRealtimeRefresh(payload.conversationId, {
-        messages: false,
-        context: true
-      })
-    );
-    socket.on(
-      "conversation.escalated",
-      (payload: { conversation?: Conversation }) =>
-        scheduleRealtimeRefresh(payload.conversation?._id, { context: true })
-    );
-    socket.on(
-      "conversation.agent_takeover",
-      (payload: { conversation?: Conversation }) =>
-        scheduleRealtimeRefresh(payload.conversation?._id, { context: true })
-    );
-    socket.on(
-      "conversation.bot_resumed",
-      (payload: { conversation?: Conversation }) =>
-        scheduleRealtimeRefresh(payload.conversation?._id, { context: true })
-    );
-    socket.on(
-      "message.created",
-      (payload: { conversationId?: string; message?: ChatMessage }) => {
-        const incomingMessage = payload.message;
-        if (payload.conversationId && incomingMessage) {
-          queryClient.setQueryData<InfiniteData<ConversationMessagesResponse>>(
-            ["conversation-messages", orgId, payload.conversationId],
-            (current) => {
-              if (!current) return current;
-              const latestPage = current.pages[0];
-              if (!latestPage) return current;
-              if (
-                current.pages.some((page) =>
-                  page.data.messages.some(
-                    (message) => message._id === incomingMessage._id
-                  )
-                )
-              ) {
-                return current;
-              }
-              return {
-                ...current,
-                pages: [
-                  {
-                    ...latestPage,
-                    results: latestPage.results + 1,
-                    data: {
-                      ...latestPage.data,
-                      messages: insertMessageInOrder(
-                        latestPage.data.messages,
-                        incomingMessage
-                      )
-                    }
-                  },
-                  ...current.pages.slice(1)
-                ]
-              };
-            }
-          );
-        }
-        scheduleRealtimeRefresh(payload.conversationId, { messages: false });
+        });
       }
-    );
-    socket.on(
-      "message.updated",
-      (payload: { conversationId?: string; message?: ChatMessage }) => {
-        if (payload.conversationId && payload.message) {
-          const updatedMessage = payload.message;
-          queryClient.setQueryData<InfiniteData<ConversationMessagesResponse>>(
-            ["conversation-messages", orgId, payload.conversationId],
-            (current) => {
-              if (!current) return current;
-              return {
-                ...current,
-                pages: current.pages.map((page) => ({
-                  ...page,
+      hasConnected = true;
+    };
+    const refreshConversation =
+      (options: { messages?: boolean; context?: boolean }) =>
+      (payload: { conversation?: Conversation; conversationId?: string }) =>
+        scheduleRealtimeRefresh(
+          payload.conversationId || payload.conversation?._id,
+          options
+        );
+
+    const handleMessageCreated = (payload: {
+      conversationId?: string;
+      message?: ChatMessage;
+    }) => {
+      const incomingMessage = payload.message;
+      if (payload.conversationId && incomingMessage) {
+        queryClient.setQueryData<InfiniteData<ConversationMessagesResponse>>(
+          ["conversation-messages", orgId, payload.conversationId],
+          (current) => {
+            if (!current) return current;
+            const latestPage = current.pages[0];
+            if (!latestPage) return current;
+            if (
+              current.pages.some((page) =>
+                page.data.messages.some(
+                  (message) => message._id === incomingMessage._id
+                )
+              )
+            ) {
+              return current;
+            }
+            return {
+              ...current,
+              pages: [
+                {
+                  ...latestPage,
+                  results: latestPage.results + 1,
                   data: {
-                    ...page.data,
-                    messages: page.data.messages.map((message) =>
-                      message._id === updatedMessage._id
-                        ? updatedMessage
-                        : message
+                    ...latestPage.data,
+                    messages: insertMessageInOrder(
+                      latestPage.data.messages,
+                      incomingMessage
                     )
                   }
-                }))
-              };
-            }
-          );
+                },
+                ...current.pages.slice(1)
+              ]
+            };
+          }
+        );
+        // A customer message in the open chat: it's being read right now.
+        if (
+          payload.conversationId === selectedIdRef.current &&
+          incomingMessage.direction === "inbound"
+        ) {
+          requestMarkReadRef.current(payload.conversationId);
         }
-        scheduleRealtimeRefresh(payload.conversationId, { messages: false });
       }
-    );
-    socket.on("socket.error", (payload: { message?: string }) => {
+      scheduleRealtimeRefresh(payload.conversationId, { messages: false });
+    };
+
+    const handleMessageUpdated = (payload: {
+      conversationId?: string;
+      message?: ChatMessage;
+    }) => {
+      if (payload.conversationId && payload.message) {
+        const updatedMessage = payload.message;
+        queryClient.setQueryData<InfiniteData<ConversationMessagesResponse>>(
+          ["conversation-messages", orgId, payload.conversationId],
+          (current) => {
+            if (!current) return current;
+            return {
+              ...current,
+              pages: current.pages.map((page) => ({
+                ...page,
+                data: {
+                  ...page.data,
+                  messages: page.data.messages.map((message) =>
+                    message._id === updatedMessage._id
+                      ? updatedMessage
+                      : message
+                  )
+                }
+              }))
+            };
+          }
+        );
+      }
+      scheduleRealtimeRefresh(payload.conversationId, { messages: false });
+    };
+
+    const handleSocketError = (payload: { message?: string }) => {
       if (payload.message) toast.error(payload.message);
-    });
+    };
+
+    // The connection is shared with the rest of the app, so on the way out
+    // only this page's listeners (and its open chat) are removed.
+    const handlers: Array<[string, Parameters<Socket["on"]>[1]]> = [
+      ["connect", handleConnect],
+      [
+        "conversation.updated",
+        refreshConversation({ messages: false, context: true })
+      ],
+      [
+        "conversation.read",
+        refreshConversation({ messages: false, context: true })
+      ],
+      ["conversation.escalated", refreshConversation({ context: true })],
+      ["conversation.agent_takeover", refreshConversation({ context: true })],
+      ["conversation.bot_resumed", refreshConversation({ context: true })],
+      ["message.created", handleMessageCreated],
+      ["message.updated", handleMessageUpdated],
+      ["socket.error", handleSocketError]
+    ];
+    handlers.forEach(([event, handler]) => socket.on(event, handler));
 
     return () => {
       Object.values(realtimeTimersRef.current).forEach(clearTimeout);
       realtimeTimersRef.current = {};
+      handlers.forEach(([event, handler]) => socket.off(event, handler));
+      if (joinedConversationRef.current) {
+        socket.emit("conversation:leave", {
+          orgId,
+          conversationId: joinedConversationRef.current
+        });
+        joinedConversationRef.current = "";
+      }
       socketRef.current = null;
-      socket.disconnect();
     };
-  }, [activeOrganization?._id, queryClient, token]);
+  }, [activeOrganization?._id, queryClient, sharedSocket]);
 
   useEffect(() => {
     const orgId = activeOrganization?._id;
@@ -1947,22 +2032,60 @@ function ConversationsPageContent() {
         queryKey: ["conversation-messages", orgId, selectedId]
       });
     }
-  }, [activeOrganization?._id, queryClient, selectedId]);
+  }, [activeOrganization?._id, queryClient, selectedId, sharedSocket]);
 
   const { mutate: markRead } = useMutation({
     mutationFn: markConversationRead,
-    onSuccess: invalidateConversations
+    // Runs in the background; a failed one is tried again on the next
+    // message or visit, so no error toast.
+    meta: { showToast: false },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      queryClient.invalidateQueries({ queryKey: ["chat-bootstrap"] });
+      queryClient.invalidateQueries({ queryKey: ["conversation-context"] });
+    }
   });
 
+  // Marking read: once when a chat they picked opens, and again for each
+  // new customer message while it's open -- but only while they can see
+  // it (see useChatReadMarker). The row and the nav badge clear at once.
+  const markReadNow = useCallback(
+    (conversationId: string) => {
+      setLoadedConversations((current) =>
+        current.map((conversation) =>
+          conversation._id === conversationId && conversation.unreadCount > 0
+            ? { ...conversation, unreadCount: 0 }
+            : conversation
+        )
+      );
+      if (activeOrganization?._id) {
+        markChatReadInBadge(activeOrganization._id, conversationId);
+      }
+      markRead(conversationId);
+    },
+    [activeOrganization?._id, markChatReadInBadge, markRead]
+  );
+
+  const requestMarkRead = useChatReadMarker({
+    selectedId,
+    isSelectionDeliberate,
+    onMarkRead: markReadNow
+  });
+
+  useEffect(() => {
+    requestMarkReadRef.current = requestMarkRead;
+  }, [requestMarkRead]);
+
+  // Opening a chat they picked (or a refresh showing it has new messages).
   useEffect(() => {
     if (
       isSelectionDeliberate &&
       selectedConversation &&
       selectedConversation.unreadCount > 0
     ) {
-      markRead(selectedConversation._id);
+      requestMarkRead(selectedConversation._id);
     }
-  }, [isSelectionDeliberate, markRead, selectedConversation]);
+  }, [isSelectionDeliberate, requestMarkRead, selectedConversation]);
 
   const { mutate: assignMutate, isPending: isAssigning } = useMutation({
     mutationFn: assignConversation,
@@ -3953,17 +4076,29 @@ function ConversationsPageContent() {
                               : "Select media from your media library for this send."}
                           </p>
                         </div>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          disabled={isSendingTemplate}
-                          onClick={() => setTemplateMediaPickerOpen(true)}
-                        >
-                          {effectiveTemplateHeaderMedia
-                            ? "Replace media"
-                            : "Choose media"}
-                        </Button>
+                        <div className="flex shrink-0 gap-1.5">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={isSendingTemplate}
+                            onClick={() => setTemplateMediaPickerOpen(true)}
+                          >
+                            {effectiveTemplateHeaderMedia
+                              ? "Replace media"
+                              : "Choose media"}
+                          </Button>
+                          {mediaKindOf(selectedTemplateMediaHeader.format) && (
+                            <MediaUploadButton
+                              kind={
+                                mediaKindOf(selectedTemplateMediaHeader.format)!
+                              }
+                              pdfOnly
+                              disabled={isSendingTemplate}
+                              onUploaded={setTemplateHeaderMedia}
+                            />
+                          )}
+                        </div>
                       </div>
                       {isLinkedTemplateMediaLoading ? (
                         <div className="flex items-center gap-2 rounded-lg bg-muted p-3 text-xs text-muted-foreground">
@@ -4171,6 +4306,7 @@ function ConversationsPageContent() {
         selectedMediaId={effectiveTemplateHeaderMedia?._id}
         requiredType={selectedTemplateMediaHeader?.format}
         incompatibleHint="Image templates support JPG or PNG"
+        pdfOnly
         onOpenChange={setTemplateMediaPickerOpen}
         onSelect={(media) => {
           setTemplateHeaderMedia(media);

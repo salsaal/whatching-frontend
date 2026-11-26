@@ -1328,6 +1328,11 @@ export function InstagramFlowEditor({ canvasId }: { canvasId: string }) {
     const target = mediaPicker;
     setMediaPicker(null);
     if (!target) return;
+    applyMedia(asset, target);
+  };
+
+  // A file picked in the library, or uploaded from the block's own slot.
+  const applyMedia = (asset: MediaAsset, target: MediaPickerTarget) => {
     if (target.kind === "card") {
       if (asset.fileType !== "image") {
         toast.error("Carousel cards can only show images.");
@@ -1916,6 +1921,7 @@ export function InstagramFlowEditor({ canvasId }: { canvasId: string }) {
             }
             setStart={setStart}
             openMediaPicker={setMediaPicker}
+            onMediaUploaded={applyMedia}
             greetings={greetings}
             entryPoints={
               selectedNode

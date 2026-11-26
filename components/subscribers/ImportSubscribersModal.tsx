@@ -85,6 +85,10 @@ export default function ImportSubscribersModal({
               Required columns: phoneNumber and firstName. Optional columns:
               lastName, tags.
             </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Existing contacts keep their tags and fields; the file adds to
+              them. Contacts who unsubscribed stay unsubscribed.
+            </p>
           </div>
 
           {rows.length > 0 && (

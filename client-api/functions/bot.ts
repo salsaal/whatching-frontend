@@ -88,6 +88,17 @@ export const getBotCanvasTriggers = async (
   return res.data;
 };
 
+// The same list from the bot's own route (flows:manage), for screens that
+// change bot behaviour, like the ad reply. A 404 means no published flow.
+export const getBotFlowTriggers =
+  async (): Promise<BotCanvasTriggersResponse> => {
+    const res = await api.get<BotCanvasTriggersResponse>(
+      BOT_ENDPOINTS.CANVAS_PUBLISHED,
+      { params: { view: "triggerKeys" } }
+    );
+    return res.data;
+  };
+
 export const isNoPublishedFlowError = (error: unknown) =>
   (error as { response?: { status?: number } } | null)?.response?.status ===
   404;

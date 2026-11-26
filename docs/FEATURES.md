@@ -122,6 +122,9 @@ Supported WhatsApp action types:
 - Messages the inbox can't show use `payload.unsupported` (Meta's original kind and error code) for a specific explanation (`describeUnsupportedMessage` in `lib/inbox.ts`). Stickers (`displayType: "sticker"`) render without a bubble; reactions (`displayType: "reaction"`) show as an emoji on the message they react to, or as a small line when that message isn't loaded.
 - WhatsApp customers with a WhatsApp username may have no phone number. Their name falls back to `@username` and then "WhatsApp customer"; the line under the name shows the phone, else `@username`, else nothing (`whatsappContactName` / `whatsappContactLine` in `lib/inbox.ts`, used by the inbox, contacts, broadcasts and Overview). Inbox template sends address them by `subscriberId`. The contacts WhatsApp filter includes them. Broadcast recipients carry `subscriberId.whatsappUsername`, so the recipient list shows `@username` when there's no phone. Broadcast audiences still leave them out (a backend gap); a recipient skipped for having no phone reads "Not sent: this customer hasn't shared their phone number." (`lib/recipientOutcome.ts`). Never display `whatsappUserIds`.
 - An Instagram contact picture that fails to load asks `/subscribers/:id/instagram-picture/refresh` for a fresh link, once per contact per page load.
+- Unread badge (spec: the backend's `docs/INBOX_UNREAD_AND_UPLOAD_FRONTEND_SPEC.md`): "Conversations" in the nav shows how many chats have unread messages (green, "99+" above 99, hidden at 0) on every page. `RealtimeProvider` (`components/app/`, mounted once in `_app`) holds the app's one socket for the active workspace (needs `conversations:view`). On connect, and after every reconnect, it loads `GET /conversations?unreadOnly=true&limit=100` and keeps the IDs in `stores/inboxUnreadStore.ts`; unread chats past that page are only counted. `conversation.updated` adds or removes a chat by its `unreadCount`, and `conversation.read` removes it. The inbox listens on the same socket (and removes only its own listeners on the way out).
+- Marking read (`hooks/useChatReadMarker.ts`): only a chat the agent picked, and only while the tab is showing and the window has focus. It runs on opening the chat and again for each customer message that arrives in it, at most once a second per chat. Away, it waits for `visibilitychange`/`focus`. The row and the nav badge clear straight away. Unread rows show a bold name and a green count on the right.
+- Chat files removed after 15 days (spec: `docs/CHAT_FILES_REMOVED_FRONTEND_SPEC.md`): when `attachment.expired` is true the bubble shows a muted note with the file's type icon, "This file was removed after 15 days." and the file name, with no preview or download (`removedFileKind` in `lib/inbox.ts`). "Shared in this chat" only counts, so nothing else changes.
 
 ## Contacts
 
@@ -131,6 +134,8 @@ Supported WhatsApp action types:
 - Infinite-scroll contact pages deduplicate subscriber IDs across overlapping/refetched pages.
 - Deleting a tag a drip uses is refused (409); the delete dialog stays open and shows the server's message.
 - "Stop offers for this contact" (`OffersStoppedControl`) in the contact dialog and the inbox's contact panel: a "Stopped offers" badge with the reason, and a switch (`PATCH` subscriber `offersStopped`). Order updates and replies still go.
+- Custom fields (`metadata`, e.g. `{ city: "Pune" }`) show read-only in the contact dialog (`customFieldRows` in `lib/contactText.ts`). The dialog never sends `metadata`, so saving leaves them alone; a future editor must send every field, since `metadata` replaces the whole set.
+- The import dialog says that re-importing adds tags and fields to existing contacts and keeps unsubscribed contacts unsubscribed.
 
 ## Media
 
@@ -138,6 +143,13 @@ Supported WhatsApp action types:
 - API supports listing, upload, detail, and bulk delete.
 - Media is used by templates and flow previews.
 - Backend uses Cloudinary configuration for storage. Needs verification: exact storage lifecycle and cleanup rules for production media.
+- Upload from any media slot: `MediaUploadButton` sits next to "Choose"/"Select media" on template headers and carousel cards, bot flow media blocks, header media and carousel cards, Instagram image/video blocks and carousel cards, and the inbox's template media; the media picker has one too. It uploads one file (`POST /media/upload`, with progress) and uses `data.media[0]` exactly like a picked file. Checks first (`lib/mediaUpload.ts`): 15 MB, no WebP or SVG ("Use a JPG or PNG image."), and only the slot's type (template documents: PDF only). Hidden without `media:manage`.
+
+## Ads Page (`/campaigns`)
+
+- "Reply to people from your ads" (spec: the backend's `docs/AD_REPLIES_FRONTEND_SPEC.md`): a card at the top choosing the reply to the first message from any ad (Normal bot reply, Send a message (up to 1,024 characters), Start a flow), saved through `PATCH /bot/settings` `adReply`. With the bot off it says ads get no automatic reply. Each ad row has a Reply button ("Same as all ads", "Message", "Flow: {name}", "Normal bot reply") opening the same choice plus "Same as all ads" (`PATCH /analytics/campaigns/:id` `reply`, `mode: "default"` clears it). Flows come from the bot's live flows without subscribe/unsubscribe (`lib/adReplies.ts`). Shown only with `flows:manage` and a WhatsApp account.
+- Rows show the ad's own name (`label`, "Campaign · Ad" from Meta or your rename), not the campaign name.
+- Spend (spec: `docs/CONTACTS_ADS_FRONTEND_NOTES.md`): Meta reports spend per campaign, so the dialog shows "Campaign: {name} ({n} ads)", spend with its currency, leads in the dates, "Cost per lead" ("–" without spend or leads), and "All-time leads from this ad". Without synced spend it says "No ad spend for these dates yet." rather than ₹0.
 
 ## Instagram Connection
 
@@ -228,4 +240,4 @@ Preview is intentionally not shown for control blocks such as the follower check
 `/analytics` (`pages/analytics.tsx`), backed by `/api/v1/organizations/analytics`. Agents see performance only; owners and admins also see WhatsApp (Meta) costs.
 
 - Free customer replies (owners and admins; spec: the backend's `docs/FREE_REPLIES_FRONTEND_SPEC.md`): `FreeRepliesCard` sits at the top of the costs area, above the spend card. `GET /analytics/free-replies` gives each number's count of WhatsApp's 1,000 free replies a month; one row per number with a bar (grey, amber from 800, red when used up or once a reply was charged), "{n} free replies left" or "All free replies used · {n} charged replies so far", and the small print with when it was updated (`lib/freeReplies.ts`). Before the first 6-hourly refresh (`lastUpdatedAt` null) the rows are replaced by "We'll show your free replies here within a few hours."; with no numbers, or on an error, the card is hidden.
-- Meta charges per message, so the cost wording says messages, not conversations: "Charged messages", "Messages in this period", "Charged share", "{x}% charged", "{n} charged · {m} free", "Daily message volume". Inbox wording ("Conversations", "Conversation status") is unchanged. The campaign figure reads "Cost per contact": it is ad spend divided by the contacts the ad brought in, not a Meta message charge. API field names are unchanged.
+- Meta charges per message, so the cost wording says messages, not conversations: "Charged messages", "Messages in this period", "Charged share", "{x}% charged", "{n} charged · {m} free", "Daily message volume". Inbox wording ("Conversations", "Conversation status") is unchanged. The Ads page figure reads "Cost per lead": the campaign's spend divided by the people its ads brought in over the same dates, not a Meta message charge. API field names are unchanged.

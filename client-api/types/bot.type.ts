@@ -1,3 +1,4 @@
+import { AdReplySetting } from "./campaigns.type";
 import { ApiResponse } from "./api";
 
 export type BotBlockType =
@@ -221,6 +222,8 @@ export interface BotSettings {
   spamFloodWindowSeconds: number;
   /** Sent to the customer when a chat is handed to the team. */
   handoffMessage?: string;
+  /** The reply to the first message from an ad. Missing means "off". */
+  adReply?: AdReplySetting;
 }
 
 export type BotSettingsPatch = Partial<
@@ -236,6 +239,7 @@ export type BotSettingsPatch = Partial<
     | "spamFloodThreshold"
     | "spamFloodWindowSeconds"
     | "handoffMessage"
+    | "adReply"
   >
 >;
 

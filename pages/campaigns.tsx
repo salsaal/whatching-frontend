@@ -5,6 +5,9 @@ import Script from "next/script";
 import { useEffect } from "react";
 
 import CampaignsTab from "@/components/analytics/CampaignsTab";
+import { AdReplyCard } from "@/components/campaigns/AdReplyCard";
+import { useCurrentMembership } from "@/hooks/useCurrentMembership";
+import { useOrganizationStore } from "@/stores/organizationStore";
 import AdAccountConnection from "@/components/whatsapp/AdAccountConnection";
 import AppLayout from "@/layouts/AppLayout";
 import { PermissionGate } from "@/components/common/NoAccess";
@@ -14,6 +17,14 @@ const facebookGraphVersion =
 const metaAppId = process.env.NEXT_PUBLIC_META_APP_ID;
 
 function CampaignsPageContent() {
+  const { can } = useCurrentMembership();
+  const metaConfig = useOrganizationStore(
+    (state) => state.activeOrganization?.metaConfig
+  );
+  // Ad replies are for WhatsApp ads only, and change how the bot answers.
+  const showAdReply =
+    can("flows:manage") &&
+    Boolean(metaConfig?.wabaId || metaConfig?.phoneNumberId);
   // AdAccountConnection's Meta login only needs window.FB to exist by the
   // time it's clicked -- no readiness state to track here, unlike the
   // embedded signup flow on the overview page.
@@ -61,6 +72,8 @@ function CampaignsPageContent() {
           </div>
           <AdAccountConnection />
         </section>
+
+        {showAdReply && <AdReplyCard />}
 
         <CampaignsTab />
       </div>

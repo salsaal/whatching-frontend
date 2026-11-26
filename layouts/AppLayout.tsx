@@ -59,6 +59,11 @@ import { useStore } from "@/hooks/useStore";
 import { useAuthStore } from "@/stores/authStore";
 import { Organization, useOrganizationStore } from "@/stores/organizationStore";
 import { AppMenuProvider } from "@/layouts/AppMenuContext";
+import {
+  formatUnreadBadge,
+  selectUnreadChatCount,
+  useInboxUnreadStore
+} from "@/stores/inboxUnreadStore";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -289,6 +294,10 @@ export default function AppLayout({
   const visibleNavigation = navigation.filter(
     (item) => !item.needsStore || isStoreAvailable
   );
+  // Chats with unread messages, kept live on every page (RealtimeProvider).
+  const unreadChatBadge = formatUnreadBadge(
+    useInboxUnreadStore(selectUnreadChatCount)
+  );
 
   const renderNavLinks = (mobile = false) => (
     <nav className={cn("space-y-1", mobile ? "px-0" : "px-3 pt-8 pb-4")}>
@@ -319,7 +328,19 @@ export default function AppLayout({
             )}
             title={item.label}
           >
-            <Icon className="size-5 shrink-0" />
+            <span className="relative shrink-0">
+              <Icon className="size-5" />
+              {item.href === "/conversations" && unreadChatBadge && (
+                <span
+                  className="absolute -top-2 -right-2.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary px-1 text-[10px] leading-none font-semibold text-primary-foreground ring-2 ring-white"
+                  aria-label={`${unreadChatBadge} unread ${
+                    unreadChatBadge === "1" ? "chat" : "chats"
+                  }`}
+                >
+                  {unreadChatBadge}
+                </span>
+              )}
+            </span>
             <span
               className={cn(
                 !mobile &&

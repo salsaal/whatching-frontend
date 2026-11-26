@@ -39,6 +39,8 @@ import {
   TemplateCreationType
 } from "@/client-api/types/templates.type";
 import MediaPickerDialog from "@/components/media/MediaPickerDialog";
+import { MediaUploadButton } from "@/components/media/MediaUploadButton";
+import { mediaKindOf } from "@/lib/mediaUpload";
 import LocationPickerDialog, {
   PickedLocation
 } from "@/components/location/LocationPickerDialog";
@@ -759,6 +761,28 @@ export default function TemplateCreateForm({
   };
 
   // ---------- header / format changes ----------
+  // A file picked in the library or uploaded from a slot: a carousel card
+  // (by index) or the header (null).
+  const applyPickedMedia = (media: MediaAsset, cardIndex: number | null) => {
+    if (cardIndex !== null) {
+      setCarouselCards((current) =>
+        current.map((card, index) =>
+          index === cardIndex
+            ? {
+                mediaId: media._id,
+                mediaName: media.name,
+                mediaUrl: media.cloudinaryUrl
+              }
+            : card
+        )
+      );
+    } else {
+      setSelectedMediaId(media._id);
+      setSelectedMediaName(media.name);
+      setSelectedMediaUrl(media.cloudinaryUrl);
+    }
+  };
+
   const clearMedia = () => {
     setSelectedMediaId("");
     setSelectedMediaName("");
@@ -1215,18 +1239,25 @@ export default function TemplateCreateForm({
                           {card.mediaName || "No image yet"}
                         </p>
                       </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={!canEditFields}
-                        onClick={() => {
-                          setCarouselMediaIndex(index);
-                          setIsMediaPickerOpen(true);
-                        }}
-                      >
-                        {card.mediaId ? "Change" : "Choose"}
-                      </Button>
+                      <div className="flex shrink-0 flex-col gap-1.5 sm:flex-row">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={!canEditFields}
+                          onClick={() => {
+                            setCarouselMediaIndex(index);
+                            setIsMediaPickerOpen(true);
+                          }}
+                        >
+                          {card.mediaId ? "Change" : "Choose"}
+                        </Button>
+                        <MediaUploadButton
+                          kind="image"
+                          disabled={!canEditFields}
+                          onUploaded={(media) => applyPickedMedia(media, index)}
+                        />
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1328,6 +1359,14 @@ export default function TemplateCreateForm({
                       >
                         {selectedMediaId ? "Change" : "Choose"}
                       </Button>
+                      {mediaKindOf(headerFormat) && (
+                        <MediaUploadButton
+                          kind={mediaKindOf(headerFormat)!}
+                          pdfOnly
+                          disabled={!canEditFields}
+                          onUploaded={(media) => applyPickedMedia(media, null)}
+                        />
+                      )}
                       {selectedMediaId && (
                         <Button
                           type="button"
@@ -1590,24 +1629,9 @@ export default function TemplateCreateForm({
           setIsMediaPickerOpen(open);
           if (!open) setCarouselMediaIndex(null);
         }}
+        pdfOnly
         onSelect={(media: MediaAsset) => {
-          if (carouselMediaIndex !== null) {
-            setCarouselCards((current) =>
-              current.map((card, index) =>
-                index === carouselMediaIndex
-                  ? {
-                      mediaId: media._id,
-                      mediaName: media.name,
-                      mediaUrl: media.cloudinaryUrl
-                    }
-                  : card
-              )
-            );
-          } else {
-            setSelectedMediaId(media._id);
-            setSelectedMediaName(media.name);
-            setSelectedMediaUrl(media.cloudinaryUrl);
-          }
+          applyPickedMedia(media, carouselMediaIndex);
           setIsMediaPickerOpen(false);
           setCarouselMediaIndex(null);
         }}

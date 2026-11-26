@@ -1,4 +1,4 @@
-import { BarChart3, Pencil, Target } from "lucide-react";
+import { BarChart3, MessageSquareReply, Pencil, Target } from "lucide-react";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -9,7 +9,12 @@ import {
   updateCampaignSource
 } from "@/client-api/functions/campaigns";
 import { CampaignSource } from "@/client-api/types/campaigns.type";
+import { AdReplyDialog } from "@/components/campaigns/AdReplyDialog";
+import { useAdReplyFlows } from "@/components/campaigns/AdReplyChoice";
+import { useCurrentMembership } from "@/hooks/useCurrentMembership";
+import { adReplyLabel } from "@/lib/adReplies";
 import { formatDate } from "@/lib/displayFormat";
+import { formatOrderTotal } from "@/lib/store";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,10 +31,10 @@ import { QueryErrorState } from "@/components/shared/QueryErrorState";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const numberFormat = new Intl.NumberFormat("en-IN");
-const decimalFormat = new Intl.NumberFormat("en-IN", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2
-});
+
+// The ad's own name: "Campaign · Ad" from Meta, or the name you gave it.
+const adName = (campaign: CampaignSource) =>
+  campaign.label || campaign.campaignName || "Unnamed ad";
 
 // Only names that might be wrong get a note; a name from Meta, or one set
 // in the ad's link, is just the name.
@@ -121,6 +126,33 @@ function EditCampaignLabelDialog({
   );
 }
 
+function PerformanceTile({
+  label,
+  value,
+  highlight = false
+}: {
+  label: string;
+  value: string;
+  highlight?: boolean;
+}) {
+  return (
+    <div
+      className={
+        highlight ? "rounded-md bg-primary/5 p-3" : "rounded-md border p-3"
+      }
+    >
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p
+        className={`mt-1 font-heading text-lg font-semibold ${
+          highlight ? "text-primary" : ""
+        }`}
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
+
 function CampaignPerformanceDialog({
   campaign,
   onOpenChange
@@ -134,6 +166,9 @@ function CampaignPerformanceDialog({
     enabled: Boolean(campaign)
   });
   const performance = data?.data;
+  const currency = performance?.spend?.currency || undefined;
+  const money = (amount: number) => formatOrderTotal(String(amount), currency);
+  const adsInCampaign = performance?.adsInCampaign || 0;
 
   return (
     <Dialog
@@ -144,10 +179,10 @@ function CampaignPerformanceDialog({
     >
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{campaign?.campaignName || campaign?.label}</DialogTitle>
+          <DialogTitle>{campaign ? adName(campaign) : ""}</DialogTitle>
           <DialogDescription>
-            Meta ad spend against your own WhatsApp funnel outcomes, last 30
-            days.
+            Last 30 days. Meta counts ad spend per campaign, so these numbers
+            cover every ad in the campaign.
           </DialogDescription>
         </DialogHeader>
 
@@ -159,54 +194,73 @@ function CampaignPerformanceDialog({
           </div>
         ) : isError ? (
           <QueryErrorState message="Performance could not be loaded for this campaign." />
-        ) : !performance?.spendAvailable ? (
-          <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-            {performance?.message ||
-              "Ad spend is not available yet -- connect an ad account and grant ads_read, then it resolves on the next scheduled sync."}
-          </p>
-        ) : (
+        ) : performance ? (
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <div className="rounded-md border p-3">
-                <p className="text-xs text-muted-foreground">Spend</p>
-                <p className="mt-1 font-heading text-lg font-semibold">
-                  {decimalFormat.format(performance.spend?.amount || 0)}
-                </p>
-              </div>
-              <div className="rounded-md border p-3">
-                <p className="text-xs text-muted-foreground">Impressions</p>
-                <p className="mt-1 font-heading text-lg font-semibold">
-                  {numberFormat.format(performance.spend?.impressions || 0)}
-                </p>
-              </div>
-              <div className="rounded-md border p-3">
-                <p className="text-xs text-muted-foreground">Clicks</p>
-                <p className="mt-1 font-heading text-lg font-semibold">
-                  {numberFormat.format(performance.spend?.clicks || 0)}
-                </p>
-              </div>
-              <div className="rounded-md border p-3">
-                <p className="text-xs text-muted-foreground">Reach</p>
-                <p className="mt-1 font-heading text-lg font-semibold">
-                  {numberFormat.format(performance.spend?.reach || 0)}
-                </p>
-              </div>
-            </div>
+            {performance.scope === "campaign" && (
+              <p className="text-sm">
+                <span className="text-muted-foreground">Campaign:</span>{" "}
+                <span className="font-medium">
+                  {performance.campaignName || "Not named"}
+                </span>{" "}
+                <span className="text-muted-foreground">
+                  ({numberFormat.format(adsInCampaign)}{" "}
+                  {adsInCampaign === 1 ? "ad" : "ads"})
+                </span>
+              </p>
+            )}
 
-            <div className="rounded-md bg-primary/5 p-3">
-              <p className="text-xs text-muted-foreground">Cost per contact</p>
-              <p className="mt-1 font-heading text-lg font-semibold text-primary">
-                {performance.costPerConversation != null
-                  ? decimalFormat.format(performance.costPerConversation)
-                  : "-"}
+            {performance.spendAvailable && performance.spend ? (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <PerformanceTile
+                  label="Spend"
+                  value={money(performance.spend.amount || 0)}
+                />
+                <PerformanceTile
+                  label="Leads"
+                  value={numberFormat.format(performance.leadsInRange || 0)}
+                />
+                <PerformanceTile
+                  label="Cost per lead"
+                  value={
+                    performance.costPerConversation != null
+                      ? money(performance.costPerConversation)
+                      : "–"
+                  }
+                  highlight
+                />
+                <PerformanceTile
+                  label="Impressions"
+                  value={numberFormat.format(
+                    performance.spend.impressions || 0
+                  )}
+                />
+                <PerformanceTile
+                  label="Clicks"
+                  value={numberFormat.format(performance.spend.clicks || 0)}
+                />
+                <PerformanceTile
+                  label="Reach"
+                  value={numberFormat.format(performance.spend.reach || 0)}
+                />
+              </div>
+            ) : (
+              <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+                {performance.scope === "campaign"
+                  ? "No ad spend for these dates yet."
+                  : "We can't see the spend for this ad yet. Connect your Meta ad account at the top of this page; spend shows after the next daily update."}
+                {performance.scope === "campaign" &&
+                  ` Leads in these dates: ${numberFormat.format(
+                    performance.leadsInRange || 0
+                  )}.`}
               </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {numberFormat.format(performance.touches.subscriberCount)}{" "}
-                contacts from this campaign
-              </p>
-            </div>
+            )}
+
+            <p className="text-xs text-muted-foreground">
+              All-time leads from this ad:{" "}
+              {numberFormat.format(performance.touches.subscriberCount)}
+            </p>
           </div>
-        )}
+        ) : null}
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
@@ -226,6 +280,12 @@ export default function CampaignsTab() {
   );
   const [performanceCampaign, setPerformanceCampaign] =
     useState<CampaignSource | null>(null);
+  const [replyCampaign, setReplyCampaign] = useState<CampaignSource | null>(
+    null
+  );
+  // Ad replies are bot work: changing one needs flows:manage.
+  const { can } = useCurrentMembership();
+  const canManageReplies = can("flows:manage");
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["campaigns", sort, needsReviewOnly],
@@ -238,6 +298,7 @@ export default function CampaignsTab() {
   });
 
   const campaigns = data?.data.campaigns || [];
+  const { flows } = useAdReplyFlows(canManageReplies && campaigns.length > 0);
 
   return (
     <section className="rounded-lg bg-white p-5 shadow-xs">
@@ -295,6 +356,7 @@ export default function CampaignsTab() {
                 <th className="p-3">Contacts</th>
                 <th className="p-3">Chats started</th>
                 <th className="p-3">Latest chat</th>
+                {canManageReplies && <th className="p-3">Reply</th>}
                 <th className="p-3 text-right">Actions</th>
               </tr>
             </thead>
@@ -304,9 +366,7 @@ export default function CampaignsTab() {
                 return (
                   <tr key={campaign.sourceId} className="border-t">
                     <td className="max-w-xs p-3">
-                      <p className="truncate font-medium">
-                        {campaign.campaignName || campaign.label}
-                      </p>
+                      <p className="truncate font-medium">{adName(campaign)}</p>
                       {badge && (
                         <Badge
                           variant="secondary"
@@ -327,6 +387,22 @@ export default function CampaignsTab() {
                       {numberFormat.format(campaign.touchCount)}
                     </td>
                     <td className="p-3">{formatDate(campaign.lastTouchAt)}</td>
+                    {canManageReplies && (
+                      <td className="p-3">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="max-w-48 justify-start"
+                          onClick={() => setReplyCampaign(campaign)}
+                        >
+                          <MessageSquareReply className="size-3.5 shrink-0" />
+                          <span className="truncate">
+                            {adReplyLabel(campaign.reply, flows)}
+                          </span>
+                        </Button>
+                      </td>
+                    )}
                     <td className="p-3">
                       <div className="flex justify-end gap-1">
                         <Button
@@ -372,6 +448,7 @@ export default function CampaignsTab() {
       )}
 
       <EditCampaignLabelDialog
+        key={editingCampaign?._id || "none"}
         campaign={editingCampaign}
         onOpenChange={(open) => !open && setEditingCampaign(null)}
       />
@@ -379,6 +456,12 @@ export default function CampaignsTab() {
         campaign={performanceCampaign}
         onOpenChange={(open) => !open && setPerformanceCampaign(null)}
       />
+      {canManageReplies && (
+        <AdReplyDialog
+          campaign={replyCampaign}
+          onOpenChange={(open) => !open && setReplyCampaign(null)}
+        />
+      )}
     </section>
   );
 }

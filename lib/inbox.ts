@@ -554,3 +554,38 @@ export const subscriberSubtitle = (conversation?: Conversation | null) => {
   const name = subscriberName(conversation);
   return handle === name || handle === `@${name}` ? "" : handle;
 };
+
+export type RemovedFileKind = "photo" | "video" | "audio" | "document";
+
+/**
+ * What kind of file a chat message had, for the placeholder shown once the
+ * file was removed (after 15 days). Null while the file is still there.
+ */
+export const removedFileKind = (message: {
+  type?: string;
+  displayType?: string;
+  attachment?: { expired?: boolean; mimeType?: string | null } | null;
+}): RemovedFileKind | null => {
+  if (!message.attachment?.expired) return null;
+  const type = message.displayType || message.type || "";
+  const mime = message.attachment.mimeType || "";
+  if (type === "video" || mime.startsWith("video/")) return "video";
+  if (type === "audio" || type === "voice" || mime.startsWith("audio/")) {
+    return "audio";
+  }
+  if (type === "image" || type === "sticker" || mime.startsWith("image/")) {
+    return "photo";
+  }
+  return "document";
+};
+
+export const REMOVED_FILE_TEXT = "This file was removed after 15 days.";
+
+/**
+ * Whether the person can see the open chat right now: the tab is showing
+ * and the window has focus. Only then is a new message marked read.
+ */
+export const isChatOnScreen = () =>
+  typeof document !== "undefined" &&
+  document.visibilityState === "visible" &&
+  document.hasFocus();

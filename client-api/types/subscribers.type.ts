@@ -31,6 +31,11 @@ export interface Subscriber {
   instagramProfilePictureUrl?: string;
   spamMutedUntil?: string;
   spamMutedReason?: string;
+  /**
+   * Custom fields, e.g. { city: "Pune" }. Saving `metadata` replaces the
+   * whole set, so always send every field.
+   */
+  metadata?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
   __v?: number;

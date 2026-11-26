@@ -117,6 +117,14 @@ A new drip's reply setting is "Pause while they're chatting" for "A contact gets
 
 "Someone places an order" and the "They place an order" goal show only while `GET /organizations/stores` reports `connected` or `needs_attention` (a saved order drip keeps showing its choice). `stopOnOrder` is sent only while its checkbox is on screen, so a hidden goal is never switched off by accident. "Your first message goes once the chat has been quiet for a day" shows only with "Pause while they're chatting": with the other reply settings the server doesn't wait for a quiet chat.
 
+## One Socket For The Whole App
+
+`RealtimeProvider` in `_app` owns the only socket, so the unread badge stays live on every page and doesn't reconnect on each navigation (pages render their own `AppLayout`, which remounts). Pages listen on it with `useRealtimeSocket()` and must `off` their own handlers, never disconnect. The badge starts from the unread chat list, not from `chat/bootstrap`: bootstrap gives a count (as `sidebar.unread`) without IDs, and the badge needs IDs to apply `conversation.updated` and `conversation.read` correctly.
+
+## The Ad Reply Flow Picker Uses The Bot Route
+
+Changing an ad reply needs `flows:manage`, so its flow list comes from `GET /bot/canvas/published?view=triggerKeys` (the same data under the same permission) rather than the broadcasts copy, which needs `broadcasts:manage`.
+
 ## Lint Command Mutates
 
 `npm run lint` runs `next lint --fix`. Use `npx tsc --noEmit` for a non-mutating frontend type check. Run lint only when file modifications from auto-fix are acceptable.

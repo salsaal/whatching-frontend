@@ -97,6 +97,8 @@ import { layoutFlow } from "@/components/flows/flowGraph";
 import FlowDiagramPreviewDialog from "@/components/flows/FlowDiagramPreviewDialog";
 import LocationPickerDialog from "@/components/location/LocationPickerDialog";
 import MediaPickerDialog from "@/components/media/MediaPickerDialog";
+import { MediaUploadButton } from "@/components/media/MediaUploadButton";
+import { mediaKindOf } from "@/lib/mediaUpload";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -202,6 +204,15 @@ import { MobileMenuButton } from "@/layouts/AppMenuContext";
 type MediaPickerTarget =
   | { kind: "node"; nodeId?: string }
   | { kind: "carousel-card"; cardIndex: number; nodeId?: string };
+
+// What a picked or uploaded file sets on a block (or carousel card).
+const mediaContentFor = (media: MediaAsset) => ({
+  mediaId: media._id,
+  mediaName: media.name,
+  mediaType: media.fileType,
+  mediaUrl: media.cloudinaryUrl,
+  filename: media.fileType === "document" ? media.name : undefined
+});
 // "live" shows the version customers get, read-only.
 type CanvasMode = "draft" | "live";
 
@@ -2490,16 +2501,7 @@ function FlowsBuilder() {
         const card = cards[cardIndex];
         if (!card) return data;
         const nextCards = cards.map((item, index) =>
-          index === cardIndex
-            ? {
-                ...item,
-                mediaId: media._id,
-                mediaName: media.name,
-                mediaType: media.fileType,
-                mediaUrl: media.cloudinaryUrl,
-                filename: media.fileType === "document" ? media.name : undefined
-              }
-            : item
+          index === cardIndex ? { ...item, ...mediaContentFor(media) } : item
         );
         return {
           ...data,
@@ -2514,11 +2516,7 @@ function FlowsBuilder() {
         ...data,
         content: {
           ...data.content,
-          mediaId: media._id,
-          mediaName: media.name,
-          mediaType: media.fileType,
-          mediaUrl: media.cloudinaryUrl,
-          filename: media.fileType === "document" ? media.name : undefined
+          ...mediaContentFor(media)
         }
       }));
     }
@@ -4009,7 +4007,7 @@ function PropertiesPanel({
                       </Button>
                     )}
                   </div>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
+                  <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
                     <Select
                       value={String(content.mediaType || "image")}
                       disabled={readOnly}
@@ -4047,6 +4045,14 @@ function PropertiesPanel({
                     >
                       Select media
                     </Button>
+                    <MediaUploadButton
+                      kind={mediaKindOf(String(content.mediaType)) || "image"}
+                      size="default"
+                      disabled={readOnly}
+                      onUploaded={(media) =>
+                        updateContent(mediaContentFor(media))
+                      }
+                    />
                   </div>
                   <p className="mt-2 truncate text-xs text-muted-foreground">
                     {content.mediaName ||
@@ -4065,6 +4071,7 @@ function PropertiesPanel({
                 <MediaField
                   node={node}
                   openMediaPicker={openMediaPicker}
+                  onUploaded={(media) => updateContent(mediaContentFor(media))}
                   readOnly={readOnly}
                 />
               )}
@@ -4730,6 +4737,9 @@ function PropertiesPanel({
                             nodeId: followUpNode.id
                           })
                         }
+                        onUploaded={(media) =>
+                          updateFollowUpContent(mediaContentFor(media))
+                        }
                       />
                       <Field label="Optional caption">
                         <Textarea
@@ -5223,6 +5233,7 @@ function ContactPhoneField({
 function MediaField({
   node,
   openMediaPicker,
+  onUploaded,
   readOnly
 }: {
   node: BuilderNode;
@@ -5230,6 +5241,8 @@ function MediaField({
     type: "IMAGE" | "DOCUMENT" | "VIDEO",
     target?: MediaPickerTarget
   ) => void;
+  /** A file uploaded from here, used like one picked from the library. */
+  onUploaded: (media: MediaAsset) => void;
   readOnly: boolean;
 }) {
   const requiredType =
@@ -5251,15 +5264,24 @@ function MediaField({
         url={getMediaPreviewUrl(node.data.content)}
         label={String(node.data.content.mediaName || "")}
       />
-      <Button
-        className="mt-3 w-full"
-        variant="outline"
-        disabled={readOnly}
-        data-issue-field="content.mediaId"
-        onClick={() => openMediaPicker(requiredType)}
-      >
-        Select {requiredType.toLowerCase()}
-      </Button>
+      <div className="mt-3 flex gap-2">
+        <Button
+          className="flex-1"
+          variant="outline"
+          disabled={readOnly}
+          data-issue-field="content.mediaId"
+          onClick={() => openMediaPicker(requiredType)}
+        >
+          Select {requiredType.toLowerCase()}
+        </Button>
+        <MediaUploadButton
+          kind={mediaKindOf(requiredType) || "image"}
+          size="default"
+          className="flex-1"
+          disabled={readOnly}
+          onUploaded={onUploaded}
+        />
+      </div>
     </div>
   );
 }
@@ -5477,7 +5499,7 @@ function GenericCarouselEditor({
                 </p>
               )}
             </div>
-            <div className="grid grid-cols-[1fr_auto] gap-2">
+            <div className="grid grid-cols-[1fr_auto_auto] gap-2">
               <Select
                 value={card.mediaType || "image"}
                 disabled={readOnly}
@@ -5512,6 +5534,14 @@ function GenericCarouselEditor({
               >
                 Select media
               </Button>
+              <MediaUploadButton
+                kind={mediaKindOf(pickerType) || "image"}
+                size="default"
+                disabled={readOnly}
+                onUploaded={(media) =>
+                  updateCard(index, mediaContentFor(media))
+                }
+              />
             </div>
             <p className="truncate text-xs text-muted-foreground">
               {card.mediaName || card.mediaId || "No media selected"}

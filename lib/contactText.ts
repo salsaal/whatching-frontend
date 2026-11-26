@@ -31,3 +31,19 @@ export const broadcastRestrictionText = (reason?: string | null) =>
   (reason && Object.hasOwn(RESTRICTION_REASONS, reason)
     ? RESTRICTION_REASONS[reason]
     : null) || RESTRICTED_FALLBACK;
+
+/**
+ * A contact's custom fields (from an import or the API) as rows to show,
+ * in the order saved. Empty values are left out.
+ */
+export const customFieldRows = (
+  metadata?: Record<string, unknown> | null
+): Array<[string, string]> =>
+  Object.entries(metadata || {})
+    .map(([key, value]): [string, string] => {
+      if (value === null || value === undefined) return [key, ""];
+      if (typeof value === "boolean") return [key, value ? "Yes" : "No"];
+      if (typeof value === "object") return [key, JSON.stringify(value)];
+      return [key, String(value).trim()];
+    })
+    .filter(([key, value]) => key.trim() && value);

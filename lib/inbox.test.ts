@@ -23,6 +23,7 @@ import {
   subscriberSubtitle,
   whatsappContactLine
 } from "./inbox";
+import { isChatOnScreen, removedFileKind } from "./inbox";
 
 describe("parseWhatsAppFormatting", () => {
   it("formats bold, italic, strike and mono", () => {
@@ -442,5 +443,40 @@ describe("WhatsApp contact lines", () => {
       subscriberSubtitle(chat({ firstName: "Asha", whatsappUsername: "asha" }))
     ).toBe("@asha");
     expect(subscriberSubtitle(chat({}))).toBe("");
+  });
+});
+
+describe("files removed after 15 days", () => {
+  const removed = (type: string, mimeType: string | null = null) => ({
+    type,
+    attachment: { expired: true, mimeType }
+  });
+
+  it("is only a removed file when the backend says so", () => {
+    expect(removedFileKind({ type: "image" })).toBeNull();
+    expect(
+      removedFileKind({ type: "image", attachment: { mimeType: "image/png" } })
+    ).toBeNull();
+  });
+
+  it("names the kind of file it was", () => {
+    expect(removedFileKind(removed("image"))).toBe("photo");
+    expect(removedFileKind(removed("sticker"))).toBe("photo");
+    expect(removedFileKind(removed("video"))).toBe("video");
+    expect(removedFileKind(removed("audio"))).toBe("audio");
+    expect(removedFileKind(removed("document"))).toBe("document");
+    expect(removedFileKind(removed("unknown", "audio/ogg"))).toBe("audio");
+    expect(removedFileKind(removed("unknown", null))).toBe("document");
+  });
+});
+
+describe("isChatOnScreen", () => {
+  it("needs the tab showing and the window focused", () => {
+    const hasFocus = document.hasFocus;
+    document.hasFocus = () => true;
+    expect(isChatOnScreen()).toBe(document.visibilityState === "visible");
+    document.hasFocus = () => false;
+    expect(isChatOnScreen()).toBe(false);
+    document.hasFocus = hasFocus;
   });
 });

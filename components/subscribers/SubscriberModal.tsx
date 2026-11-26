@@ -1,8 +1,12 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { getSubscriberCampaignTouches } from "@/client-api/functions/campaigns";
-import { broadcastRestrictionText, storeOptInText } from "@/lib/contactText";
+import {
+  broadcastRestrictionText,
+  customFieldRows,
+  storeOptInText
+} from "@/lib/contactText";
 import { formatDate } from "@/lib/displayFormat";
 import { formatWhatsAppUsername } from "@/lib/inbox";
 import { updateSubscriberBroadcastEligibility } from "@/client-api/functions/subscribers";
@@ -95,6 +99,9 @@ export default function SubscriberModal({
       tags: selectedTags
     });
   };
+
+  // Shown only: saving this form leaves custom fields as they are.
+  const customFields = subscriber ? customFieldRows(subscriber.metadata) : [];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -246,6 +253,22 @@ export default function SubscriberModal({
                 offersStoppedReason: subscriber.offersStoppedReason
               }}
             />
+          )}
+
+          {customFields.length > 0 && (
+            <div className="space-y-2 rounded-sm border p-3">
+              <p className="text-sm font-medium">Custom fields</p>
+              <dl className="grid grid-cols-[minmax(0,auto)_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-sm">
+                {customFields.map(([key, value]) => (
+                  <Fragment key={key}>
+                    <dt className="truncate text-muted-foreground" title={key}>
+                      {key}
+                    </dt>
+                    <dd className="break-words">{value}</dd>
+                  </Fragment>
+                ))}
+              </dl>
+            </div>
           )}
 
           {subscriber &&

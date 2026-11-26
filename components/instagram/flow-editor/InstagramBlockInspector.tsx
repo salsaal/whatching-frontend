@@ -22,6 +22,8 @@ import {
 import { InstagramFlowBlockPreview } from "@/components/flows/FlowBlockPreview";
 import { FlowBlockPicker } from "@/components/flows/FlowBlockPicker";
 import { FloatingBlockPreview } from "@/components/flows/FlowPhonePreview";
+import { MediaAsset } from "@/client-api/types/media.type";
+import { MediaUploadButton } from "@/components/media/MediaUploadButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -276,7 +278,8 @@ function MediaPickerField({
   kind,
   disabled,
   issueField,
-  onPick
+  onPick,
+  onUploaded
 }: {
   label: string;
   content: {
@@ -289,6 +292,8 @@ function MediaPickerField({
   disabled: boolean;
   issueField: string;
   onPick: () => void;
+  /** A file uploaded here, used like one picked from the library. */
+  onUploaded: (media: MediaAsset) => void;
 }) {
   const url = String(content.mediaUrl || content.imageUrl || "");
   const Icon = kind === "video" ? Video : ImageIcon;
@@ -322,6 +327,13 @@ function MediaPickerField({
           >
             {content.mediaId ? `Change ${kind}` : `Choose ${kind}`}
           </Button>
+          <MediaUploadButton
+            kind={kind}
+            variant="outline"
+            className="mt-1 ml-1.5 h-7"
+            disabled={disabled}
+            onUploaded={onUploaded}
+          />
         </div>
       </div>
     </Field>
@@ -463,12 +475,14 @@ function ContentTab({
   node,
   readOnly,
   updateContent,
-  openMediaPicker
+  openMediaPicker,
+  onMediaUploaded
 }: {
   node: IgFlowNode;
   readOnly: boolean;
   updateContent: (patch: Partial<InstagramCanvasContent>) => void;
   openMediaPicker: (target: MediaPickerTarget) => void;
+  onMediaUploaded: (media: MediaAsset, target: MediaPickerTarget) => void;
 }) {
   const { blockType, content } = node.data;
   const replies = (content.quickReplies || []) as InstagramQuickReply[];
@@ -523,6 +537,9 @@ function ContentTab({
           disabled={readOnly}
           issueField="content.mediaId"
           onPick={() => openMediaPicker({ kind: "node", nodeId: node.id })}
+          onUploaded={(media) =>
+            onMediaUploaded(media, { kind: "node", nodeId: node.id })
+          }
         />
       );
 
@@ -724,6 +741,13 @@ function ContentTab({
                   issueField={`content.cards.${cardIndex}.mediaId`}
                   onPick={() =>
                     openMediaPicker({
+                      kind: "card",
+                      nodeId: node.id,
+                      cardIndex
+                    })
+                  }
+                  onUploaded={(media) =>
+                    onMediaUploaded(media, {
                       kind: "card",
                       nodeId: node.id,
                       cardIndex
@@ -1230,6 +1254,7 @@ export function InstagramBlockInspector({
   createConnectedBlock,
   setStart,
   openMediaPicker,
+  onMediaUploaded,
   greetings,
   entryPoints,
   unreachableMessage,
@@ -1252,6 +1277,8 @@ export function InstagramBlockInspector({
   createConnectedBlock: (handle: string, type: InstagramBlockType) => void;
   setStart: (nodeId: string, start: IgStart | undefined) => void;
   openMediaPicker: (target: MediaPickerTarget) => void;
+  /** A file uploaded from a media slot, applied to that slot. */
+  onMediaUploaded: (media: MediaAsset, target: MediaPickerTarget) => void;
   /** The words that open the main menu, from Settings. */
   greetings: string[];
   /** From the last check; undefined until the block has been checked. */
@@ -1418,6 +1445,7 @@ export function InstagramBlockInspector({
               readOnly={readOnly}
               updateContent={updateContent}
               openMediaPicker={openMediaPicker}
+              onMediaUploaded={onMediaUploaded}
             />
             {!readOnly && (
               <div className="space-y-2 border-t pt-4">

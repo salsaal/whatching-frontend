@@ -2,6 +2,11 @@
 
 This document reflects the frontend and verified sibling-backend contracts on 2026-08-27.
 
+## 2026-11-26 — Ad replies, unread badge, upload anywhere, chat file clean-up, contacts and ads fixes
+
+- Built from the backend's 26 Nov specs (backend main 878d658): ad replies on the Ads page, the corrected spend numbers and "Campaign · Ad" names, the nav unread badge with mark-read only while the chat is on screen, Upload next to every media picker, the removed-file note in chat bubbles, read-only custom fields and the import note (see `docs/FEATURES.md`). The 401 from a failed refresh already ends the session and goes to login, so nothing changed there.
+- Not done: the optional "files are kept for 15 days" help text waits until the clean-up is switched on (it runs in report mode); editing custom fields waits for the owner's contacts page changes.
+
 ## 2026-11-25 — Drips phase 2: ads, first messages, store orders
 
 - Built from section (k) of the backend's `docs/DRIP_FRONTEND_SPEC.md` (backend main 94bd3a4), as small as the spec asks: three more "Starts when" choices with an ads picker, the order goal, the consent-only start dialog, the report's automatic joins, "by ordering" and Store sales, and People labels (see `docs/FEATURES.md`).

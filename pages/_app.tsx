@@ -17,6 +17,7 @@ import "@/styles/globals.css";
 import "@xyflow/react/dist/style.css";
 import { ApiResponse } from "@/client-api/types/api";
 import { CurrentMembership } from "@/client-api/types/organizations.type";
+import { RealtimeProvider } from "@/components/app/RealtimeProvider";
 import RouteGuard from "@/components/auth/RouteGuard";
 import { AppErrorBoundary } from "@/components/shared/AppErrorBoundary";
 import { humanizeBillingMessage } from "@/lib/billing";
@@ -368,7 +369,9 @@ export default function CustomApp({ Component, pageProps }: AppProps) {
           {isShopifyPath(router.pathname) ? (
             page
           ) : (
-            <RouteGuard>{page}</RouteGuard>
+            <RouteGuard>
+              <RealtimeProvider>{page}</RealtimeProvider>
+            </RouteGuard>
           )}
         </NuqsAdapter>
       </QueryClientProvider>

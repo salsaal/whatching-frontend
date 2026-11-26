@@ -5,6 +5,7 @@ export interface MediaAsset {
   orgId: string;
   name: string;
   fileType: MediaFileType;
+  mimeType?: string;
   fileSize: number;
   cloudinaryUrl: string;
   metaHandle: string;
