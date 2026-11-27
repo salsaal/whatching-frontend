@@ -165,7 +165,8 @@ export const DRIP_WAITING_TEXT: Record<DripWaitingReason, string> = {
   once_a_day: "Waiting, one offer a day",
   daily_limit: "Waiting, daily WhatsApp sending limit reached",
   whatsapp_limit_retry: "Trying once more after a day",
-  chatting: "Waiting, they're chatting"
+  chatting: "Waiting, they're chatting",
+  workspace_paused: "Waiting: workspace paused"
 };
 
 // ---- Automatic drips ---------------------------------------------------------

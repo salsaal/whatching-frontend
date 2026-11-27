@@ -162,6 +162,7 @@ import { ContactAvatar } from "@/components/inbox/ContactAvatar";
 import { ContactDrips } from "@/components/drips/ContactDrips";
 import { OffersStoppedControl } from "@/components/subscribers/OffersStoppedControl";
 import { isStopPromotionsLabel } from "@/lib/drips";
+import { useWorkspacePaused } from "@/lib/workspacePause";
 import { QueryErrorState } from "@/components/shared/QueryErrorState";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
@@ -1605,6 +1606,8 @@ function ConversationsPageContent() {
   // reply, assign, change status, or delete. All false while loading.
   const { can, isOwnerOrAdmin } = useCurrentMembership();
   const hasReplyAccess = can("conversations:reply");
+  // Paused by a Whatching admin: replies and templates would only get a 403.
+  const isPaused = useWorkspacePaused();
   const canAssign = can("conversations:assign");
   const canManageStatus = can("conversations:manage_status");
   const canDeleteConversation = canManageStatus;
@@ -2376,7 +2379,9 @@ function ConversationsPageContent() {
   );
   const replyWindow = contextConversation?.replyWindow;
   const isReplyWindowClosed = Boolean(replyWindow && !replyWindow.isOpen);
-  const canReply = Boolean(hasReplyAccess && replyWindow?.isOpen && selectedId);
+  const canReply = Boolean(
+    hasReplyAccess && replyWindow?.isOpen && selectedId && !isPaused
+  );
   const { data: quickRepliesData } = useQuery({
     queryKey: ["quick-replies", activeOrganization?._id],
     queryFn: () => listQuickReplies(),
@@ -3158,6 +3163,7 @@ function ConversationsPageContent() {
           <div className="flex flex-wrap items-center gap-2">
             <Button
               type="button"
+              disabled={isPaused}
               onClick={() => {
                 setTemplateMode("contact");
                 setSelectedTemplateId("");
@@ -3760,7 +3766,7 @@ function ConversationsPageContent() {
                         variant={isReplyWindowClosed ? "default" : "outline"}
                         className="h-10 shrink-0 rounded-full px-3"
                         tooltip="Send an approved WhatsApp template"
-                        disabled={!selectedId || isSendingTemplate}
+                        disabled={!selectedId || isSendingTemplate || isPaused}
                         onClick={() => {
                           setTemplateMode("conversation");
                           setIsTemplateModalOpen(true);
@@ -3784,15 +3790,17 @@ function ConversationsPageContent() {
                       placeholder={
                         !hasReplyAccess
                           ? "You need Conversations → View and reply access to reply."
-                          : isReplyWindowClosed
-                            ? canSendTemplate
-                              ? "You can only send a template until the customer replies."
-                              : "You can reply once the customer messages again."
-                            : attachment
-                              ? "Add a caption..."
-                              : quickReplies?.length
-                                ? "Type a reply, or / for a quick reply"
-                                : "Type a reply..."
+                          : isPaused
+                            ? "Your workspace is paused, so replies can't be sent."
+                            : isReplyWindowClosed
+                              ? canSendTemplate
+                                ? "You can only send a template until the customer replies."
+                                : "You can reply once the customer messages again."
+                              : attachment
+                                ? "Add a caption..."
+                                : quickReplies?.length
+                                  ? "Type a reply, or / for a quick reply"
+                                  : "Type a reply..."
                       }
                       aria-expanded={isSlashOpen}
                       aria-controls={
@@ -4277,7 +4285,7 @@ function ConversationsPageContent() {
             </Button>
             <Button
               type="button"
-              disabled={!selectedTemplate || isSendingTemplate}
+              disabled={!selectedTemplate || isSendingTemplate || isPaused}
               onClick={submitTemplate}
             >
               {isSendingTemplate ? (

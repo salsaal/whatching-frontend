@@ -14,6 +14,7 @@ This file lists functionality visible in the current frontend and contracts pres
 - Authenticated pages require an active organization.
 - Organization state includes plan tier, subscription status, wallet balance, usage, and Meta integration state.
 - Team management exists under settings and backend membership routes.
+- Paused workspace: when `GET /organizations` returns `organization.pausedAt` (set by a Whatching admin), every page shows a red, non-dismissible banner, "Your workspace is paused. Nothing is being sent to your customers. Please contact support.", with a Contact support button to `/settings/help` (`WorkspacePausedNotice`, `lib/workspacePause.ts`). Send buttons are off while paused: inbox reply and templates (including Start conversation), the broadcast wizard's draft/send, Start, and the limit-retry Retry; the automatic retry consent waits until the unpause. A send that still goes through gets the API's 403 message as-is. Drips show "Waiting: workspace paused".
 
 ## Overview And WhatsApp Connection
 
@@ -142,7 +143,7 @@ Supported WhatsApp action types:
 - `/media` manages uploaded media.
 - API supports listing, upload, detail, and bulk delete.
 - Media is used by templates and flow previews.
-- Backend uses Cloudinary configuration for storage. Needs verification: exact storage lifecycle and cleanup rules for production media.
+- Backend uses Cloudinary configuration for storage. Chat files are deleted 15 days after they were sent and chat messages after 180 days (clean-up on since 27 Nov 2026); the Media library, templates, flows and AI knowledge are never touched. The page says so under its description.
 - Upload from any media slot: `MediaUploadButton` sits next to "Choose"/"Select media" on template headers and carousel cards, bot flow media blocks, header media and carousel cards, Instagram image/video blocks and carousel cards, and the inbox's template media; the media picker has one too. It uploads one file (`POST /media/upload`, with progress) and uses `data.media[0]` exactly like a picked file. Checks first (`lib/mediaUpload.ts`): 15 MB, no WebP or SVG ("Use a JPG or PNG image."), and only the slot's type (template documents: PDF only). Hidden without `media:manage`.
 
 ## Ads Page (`/campaigns`)

@@ -198,6 +198,12 @@ describe("automatic drips", () => {
   it("says why someone is waiting while they chat", () => {
     expect(DRIP_WAITING_TEXT.chatting).toBe("Waiting, they're chatting");
   });
+
+  it("says when a paused workspace is holding someone", () => {
+    expect(DRIP_WAITING_TEXT.workspace_paused).toBe(
+      "Waiting: workspace paused"
+    );
+  });
 });
 
 describe("more ways to start", () => {

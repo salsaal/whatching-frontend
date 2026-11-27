@@ -46,6 +46,7 @@ import { computeBroadcastFunnel } from "@/lib/broadcastFunnel";
 import { formatCount } from "@/lib/displayFormat";
 import { isBroadcastSending } from "@/lib/statusPresentation";
 import { cn } from "@/lib/utils";
+import { useWorkspacePaused } from "@/lib/workspacePause";
 import { useOrganizationStore } from "@/stores/organizationStore";
 
 const errorMessage = (error: unknown, fallback: string) =>
@@ -153,6 +154,7 @@ export function StartBroadcastDialog({
     }
   }, [open]);
 
+  const isPaused = useWorkspacePaused();
   const { mutate, isPending } = useMutation({
     mutationFn: startBroadcast,
     meta: { showToast: false },
@@ -237,7 +239,7 @@ export function StartBroadcastDialog({
             Close
           </Button>
           <Button
-            disabled={!broadcast || Boolean(problem)}
+            disabled={!broadcast || Boolean(problem) || isPaused}
             isLoading={isPending}
             onClick={() =>
               broadcast &&
@@ -344,6 +346,9 @@ export function CancelBroadcastDialog({
  */
 export function useAutoConsentRetry(broadcasts: Broadcast[]) {
   const queryClient = useQueryClient();
+  // While the workspace is paused the consent would only get a 403 and
+  // drop the preference; holding off keeps it for after the unpause.
+  const isPaused = useWorkspacePaused();
   const { mutate, isPending } = useMutation({
     mutationFn: consentToBroadcastMessagingLimitRetry,
     meta: { showToast: false },
@@ -366,10 +371,10 @@ export function useAutoConsentRetry(broadcasts: Broadcast[]) {
         broadcast.messagingLimitRetry?.status === "awaiting_consent" &&
         hasBroadcastRetryPreference(broadcast._id)
     );
-    if (candidate && !isPending) mutate(candidate._id);
-  }, [broadcasts, isPending, mutate]);
+    if (candidate && !isPending && !isPaused) mutate(candidate._id);
+  }, [broadcasts, isPaused, isPending, mutate]);
 
-  return { consent: mutate, isConsenting: isPending };
+  return { consent: mutate, isConsenting: isPending, isPaused };
 }
 
 /** Which actions a broadcast offers, by status (list and details agree). */

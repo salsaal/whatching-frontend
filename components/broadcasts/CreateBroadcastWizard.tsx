@@ -91,6 +91,7 @@ import {
 } from "@/lib/templateVariables";
 import { whatsappContactName } from "@/lib/inbox";
 import { cn } from "@/lib/utils";
+import { useWorkspacePaused } from "@/lib/workspacePause";
 import { useOrganizationStore } from "@/stores/organizationStore";
 
 const STEPS = ["Message", "Audience", "Personalise", "Review & send"] as const;
@@ -423,7 +424,10 @@ export function CreateBroadcastWizard({
     }
   });
 
-  const canSubmit = [0, 1, 2, 3].every((index) => !stepProblem(index));
+  // A paused workspace can't create broadcasts, not even drafts (403).
+  const isPaused = useWorkspacePaused();
+  const canSubmit =
+    !isPaused && [0, 1, 2, 3].every((index) => !stepProblem(index));
 
   // ---------- render helpers ----------
   const preview = (

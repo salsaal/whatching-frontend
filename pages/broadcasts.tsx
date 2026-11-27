@@ -235,7 +235,7 @@ function BroadcastsPageContent() {
       .forEach((broadcast) => unique.set(broadcast._id, broadcast));
     return Array.from(unique.values());
   }, [data?.pages]);
-  const { consent, isConsenting } = useAutoConsentRetry(broadcasts);
+  const { consent, isConsenting, isPaused } = useAutoConsentRetry(broadcasts);
 
   useEffect(() => {
     const sentinel = loadMoreRef.current;
@@ -301,7 +301,7 @@ function BroadcastsPageContent() {
           <Button
             size="sm"
             variant="outline"
-            disabled={isConsenting}
+            disabled={isConsenting || isPaused}
             onClick={() => consent(broadcast._id)}
           >
             <RotateCcw className="size-4" />

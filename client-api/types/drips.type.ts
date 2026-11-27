@@ -7,7 +7,9 @@ export type DripWaitingReason =
   | "once_a_day"
   | "daily_limit"
   | "whatsapp_limit_retry"
-  | "chatting";
+  | "chatting"
+  // Held while a Whatching admin has paused the workspace; carries on after.
+  | "workspace_paused";
 
 /**
  * How people join: added by the business ("manual"), or on their own when

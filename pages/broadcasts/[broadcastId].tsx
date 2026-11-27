@@ -285,7 +285,7 @@ function BroadcastDetailsPageContent() {
   const actions = broadcast ? broadcastActionsFor(broadcast) : null;
   const failureReasons = firstPage?.failureReasons || [];
   const warnings = firstPage?.warnings || [];
-  const { consent, isConsenting } = useAutoConsentRetry(
+  const { consent, isConsenting, isPaused } = useAutoConsentRetry(
     useMemo(() => (broadcast ? [broadcast] : []), [broadcast])
   );
 
@@ -505,6 +505,7 @@ function BroadcastDetailsPageContent() {
                     <Button
                       variant="outline"
                       isLoading={isConsenting}
+                      disabled={isPaused}
                       onClick={() => consent(broadcast._id)}
                     >
                       <RotateCcw className="size-4" />

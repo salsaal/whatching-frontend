@@ -226,6 +226,10 @@ function MediaPageContent() {
             <p className="mt-2 text-sm text-muted-foreground">
               Upload and manage reusable WhatsApp images, videos, and documents.
             </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Files in chats are kept for 15 days and messages for 180 days.
+              Save anything you need to keep to your Media library.
+            </p>
           </div>
 
           <div className="flex flex-col gap-2 sm:flex-row">

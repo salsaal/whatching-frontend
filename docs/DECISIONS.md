@@ -123,6 +123,10 @@ A new drip's reply setting is "Pause while they're chatting" for "A contact gets
 
 The badge skips "unread" updates for the chat being read on screen (`readingId`, set by `useChatReadMarker`). The backend sends `message.created` and then `conversation.updated`; the mark-read goes out on the first, but the second was built a moment earlier and still says 1 unread, so without the skip the badge blinks for about half a second on every customer message in the open chat.
 
+## The Paused Banner On Full-Screen Pages
+
+The inbox, flow editors and Instagram pages use `hideHeader`/`fullBleed` and size themselves to the window (`h-dvh`), so a banner above them would push the composer off screen. While a workspace is paused, `AppLayout` turns that column into a full-height flex column and gives the page `h-full` instead (`*:h-full!` on `main`). Only paused workspaces get this, so the normal layout of those pages is untouched.
+
 ## The Ad Reply Flow Picker Uses The Bot Route
 
 Changing an ad reply needs `flows:manage`, so its flow list comes from `GET /bot/canvas/published?view=triggerKeys` (the same data under the same permission) rather than the broadcasts copy, which needs `broadcasts:manage`.

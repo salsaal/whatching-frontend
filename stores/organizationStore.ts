@@ -62,6 +62,11 @@ export interface Organization {
   lastPlanChangeFailureAt?: string | null;
   paymentFailedAt?: string | null;
   paymentGraceUntil?: string | null;
+  /**
+   * Set by a Whatching admin: nothing is sent for this workspace until it's
+   * unpaused (sends answer 403). Not the same as a paused subscription.
+   */
+  pausedAt?: string | null;
   /** Pro paid up front until the new autopay takes over at this date. */
   prepaidUpgradeTier?: "pro" | null;
   prepaidUpgradeUntil?: string | null;

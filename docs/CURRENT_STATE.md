@@ -2,10 +2,15 @@
 
 This document reflects the frontend and verified sibling-backend contracts on 2026-08-27.
 
+## 2026-11-27 — Paused workspaces, chat clean-up on, undelivered-file note
+
+- Built from the backend's `docs/WORKSPACE_PAUSE_AND_CLEANUP_FRONTEND_NOTES.md` (backend main ed8e5cb): the paused banner on every page, send buttons off while paused, "Waiting: workspace paused" for drips, and the clean-up help text on the Media library page (see `docs/FEATURES.md`). Store log skip reasons already show the API's text.
+- The new "file couldn't arrive" chat note (`customer_file_undelivered`) already shows like other system notes; checked locally with a signed status webhook.
+
 ## 2026-11-26 — Ad replies, unread badge, upload anywhere, chat file clean-up, contacts and ads fixes
 
 - Built from the backend's 26 Nov specs (backend main 878d658): ad replies on the Ads page, the corrected spend numbers and "Campaign · Ad" names, the nav unread badge with mark-read only while the chat is on screen, Upload next to every media picker, the removed-file note in chat bubbles, read-only custom fields and the import note (see `docs/FEATURES.md`). The 401 from a failed refresh already ends the session and goes to login, so nothing changed there.
-- Not done: the optional "files are kept for 15 days" help text waits until the clean-up is switched on (it runs in report mode); editing custom fields waits for the owner's contacts page changes.
+- Not done: editing custom fields waits for the owner's contacts page changes. (The "files are kept for 15 days" help text was added on 27 Nov, once the clean-up was switched on.)
 
 ## 2026-11-25 — Drips phase 2: ads, first messages, store orders
 

@@ -32,6 +32,7 @@ import {
   getOrganization
 } from "@/client-api/functions/organizations";
 import { UserAvatar, UserMenu } from "@/components/account/UserMenu";
+import { WorkspacePausedNotice } from "@/components/app/WorkspacePausedNotice";
 import { PaymentFailedNotice } from "@/components/billing/PaymentFailedNotice";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -54,6 +55,7 @@ import {
   getPlanByTier
 } from "@/lib/billing";
 import { cn } from "@/lib/utils";
+import { isWorkspacePaused } from "@/lib/workspacePause";
 import { useCurrentMembership } from "@/hooks/useCurrentMembership";
 import { useStore } from "@/hooks/useStore";
 import { useAuthStore } from "@/stores/authStore";
@@ -157,6 +159,11 @@ export default function AppLayout({
   const isNoPlan = currentPlan === "none";
   const paymentState = getPaymentState(activeOrganization);
   const complimentaryNotice = getComplimentaryNotice(activeOrganization);
+  // Shown on every page, the full-screen ones (inbox, flow editors) too.
+  // Those size themselves to the window, so while it's up the layout
+  // becomes a full-height column and the page fits under it.
+  const isPaused = isWorkspacePaused(activeOrganization);
+  const pausedOnFullPage = isPaused && hideHeader;
   const currentPlanName = getPlanByTier(currentPlan)?.name || currentPlan;
   const planChipLabel = isNoPlan
     ? "No plan"
@@ -433,7 +440,12 @@ export default function AppLayout({
           </div>
         </aside>
 
-        <div className="transition-all duration-200 lg:pl-20">
+        <div
+          className={cn(
+            "transition-all duration-200 lg:pl-20",
+            pausedOnFullPage && "flex h-dvh flex-col"
+          )}
+        >
           {!hideHeader && (
             <header className="sticky top-0 z-20 bg-white/95 shadow-xs backdrop-blur">
               <div className="grid min-h-18 gap-3 px-4 py-3 sm:px-6 lg:grid-cols-[1fr_auto_1fr] lg:items-center lg:px-8">
@@ -543,6 +555,19 @@ export default function AppLayout({
             </header>
           )}
 
+          {isPaused && (
+            <div
+              className={cn(
+                "shrink-0",
+                hideHeader ? "px-3 pt-3" : "px-4 pt-3 sm:px-6 lg:px-8"
+              )}
+            >
+              <WorkspacePausedNotice
+                className={hideHeader ? undefined : "mx-auto max-w-7xl"}
+              />
+            </div>
+          )}
+
           {!hideHeader &&
             shouldShowPaymentFailedBanner &&
             paymentState !== "ok" && (
@@ -650,7 +675,12 @@ export default function AppLayout({
               </div>
             )}
 
-          <main className={cn(fullBleed ? "p-0" : "px-4 py-6 sm:px-6 lg:px-8")}>
+          <main
+            className={cn(
+              fullBleed ? "p-0" : "px-4 py-6 sm:px-6 lg:px-8",
+              pausedOnFullPage && "min-h-0 flex-1 *:h-full!"
+            )}
+          >
             {children}
           </main>
         </div>
