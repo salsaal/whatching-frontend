@@ -482,10 +482,10 @@ describe("contact wording", () => {
       "Can't be reached on WhatsApp.",
       "You excluded this contact from broadcasts.",
       "Archived.",
-      "Waiting for room in your plan's contact limit.",
-      "Waiting for room in your plan's contact limit.",
-      "Waiting for room in your plan's contact limit.",
-      "Over your plan's contact limit. Your most recently active contacts are kept first."
+      "Waiting for a place on your broadcast list.",
+      "Waiting for a place on your broadcast list.",
+      "Waiting for a place on your broadcast list.",
+      "Not on your broadcast list. The list is full, and your most recently active contacts come first."
     ]);
     // A reason to include a contact, an unknown code, or none.
     for (const reason of [

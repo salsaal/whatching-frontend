@@ -76,6 +76,9 @@ export interface SubscribersResponse {
       whatsapp: number;
       instagram: number;
       both: number;
+      /** On the broadcast list: the contacts broadcasts and drips go to. */
+      broadcastEligible?: number;
+      retainedOnly?: number;
     };
   };
 }
@@ -117,6 +120,11 @@ export interface ImportSubscribersResponse {
       skippedRows: unknown[];
       dryRun: boolean;
       currentSubscriberCount: number;
+      reactivatedSubscribers?: number;
+      /** The plan's broadcast list size (null when there's no limit). */
+      subscriberLimit?: number | null;
+      /** Dry run only: how many contacts there will be after the import. */
+      contactsAfterImport?: number;
     };
   };
 }

@@ -1,7 +1,9 @@
-import { Upload } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
+import { Info, Upload } from "lucide-react";
 import { useState } from "react";
 import * as XLSX from "xlsx";
 
+import { importSubscribers } from "@/client-api/functions/subscribers";
 import { SubscriberPayload } from "@/client-api/types/subscribers.type";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,6 +14,7 @@ import {
   DialogTitle
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { importBroadcastListNote } from "@/lib/contactText";
 
 interface ImportSubscribersModalProps {
   open: boolean;
@@ -56,6 +59,18 @@ export default function ImportSubscribersModal({
   onImport
 }: ImportSubscribersModalProps) {
   const [rows, setRows] = useState<SubscriberPayload[]>([]);
+  // A dry run of the file, only to say when it goes past the broadcast list
+  // size. Quiet on failure: the real import reports any problem.
+  const {
+    mutate: previewImport,
+    data: preview,
+    reset: resetPreview
+  } = useMutation({
+    mutationFn: (subscribers: SubscriberPayload[]) =>
+      importSubscribers({ dryRun: true, subscribers }),
+    meta: { showToast: false }
+  });
+  const broadcastListNote = importBroadcastListNote(preview?.data.summary);
 
   const handleFile = async (file?: File) => {
     if (!file) return;
@@ -64,7 +79,12 @@ export default function ImportSubscribersModal({
     const workbook = XLSX.read(buffer);
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
-    setRows(rawRows.map(normalizeRow).filter(Boolean) as SubscriberPayload[]);
+    const parsed = rawRows
+      .map(normalizeRow)
+      .filter(Boolean) as SubscriberPayload[];
+    setRows(parsed);
+    resetPreview();
+    if (parsed.length) previewImport(parsed);
   };
 
   return (
@@ -90,6 +110,13 @@ export default function ImportSubscribersModal({
               them. Contacts who unsubscribed stay unsubscribed.
             </p>
           </div>
+
+          {rows.length > 0 && broadcastListNote && (
+            <p className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+              <Info className="mt-0.5 size-4 shrink-0 text-amber-600" />
+              {broadcastListNote}
+            </p>
+          )}
 
           {rows.length > 0 && (
             <div className="max-h-80 overflow-auto rounded-lg bg-white shadow-xs">

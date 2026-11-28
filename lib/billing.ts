@@ -63,7 +63,8 @@ export const plans: PlanDefinition[] = [
     description: "Ideal for small businesses",
     features: [
       "Bulk WhatsApp Messaging",
-      "10k WhatsApp Contacts",
+      "Unlimited WhatsApp contacts",
+      "Broadcasts & drips to 10k contacts",
       "Automatic Lead Qualification",
       "0% Markup Fees",
       "Drag & Drop Chatbot Builder",
@@ -90,7 +91,7 @@ export const plans: PlanDefinition[] = [
     highlighted: true,
     features: [
       "Includes all Basic features",
-      "25k WhatsApp Contacts",
+      "Broadcasts & drips to 25k contacts",
       "Up to 2 Phone Numbers per Organisation",
       "Owner + 5 Team Members",
       "3M AI Message Tokens"

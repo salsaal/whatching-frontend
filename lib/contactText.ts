@@ -1,5 +1,7 @@
 // Plain words for contact fields the backend sends as codes.
 
+import { formatCount } from "@/lib/displayFormat";
+
 /** Where a contact came from, when it was the store; null otherwise. */
 export const storeOptInText = (optInSource?: string | null) => {
   if (optInSource === "store_checkout") return "Added from your store (order)";
@@ -7,7 +9,9 @@ export const storeOptInText = (optInSource?: string | null) => {
   return null;
 };
 
-const PLAN_LIMIT_WAIT = "Waiting for room in your plan's contact limit.";
+// The plan's number is the size of the broadcast list (the contacts that
+// broadcasts and drips go to), not a cap on contacts.
+const PLAN_LIMIT_WAIT = "Waiting for a place on your broadcast list.";
 
 // Every reason the backend sets in broadcastEligibilityReason for a
 // restricted contact. (recent_engagement is why one is included, so it
@@ -21,7 +25,7 @@ const RESTRICTION_REASONS: Record<string, string> = {
   plan_subscriber_limit: PLAN_LIMIT_WAIT,
   awaiting_plan_capacity: PLAN_LIMIT_WAIT,
   less_recent_than_plan_pool:
-    "Over your plan's contact limit. Your most recently active contacts are kept first."
+    "Not on your broadcast list. The list is full, and your most recently active contacts come first."
 };
 
 export const RESTRICTED_FALLBACK = "Currently restricted from broadcasts.";
@@ -31,6 +35,30 @@ export const broadcastRestrictionText = (reason?: string | null) =>
   (reason && Object.hasOwn(RESTRICTION_REASONS, reason)
     ? RESTRICTION_REASONS[reason]
     : null) || RESTRICTED_FALLBACK;
+
+/**
+ * The import preview's note when the file takes the workspace past its
+ * broadcast list size; null otherwise. Not an error: the import still runs.
+ */
+export const importBroadcastListNote = (summary?: {
+  contactsAfterImport?: number;
+  subscriberLimit?: number | null;
+}) => {
+  const after = summary?.contactsAfterImport;
+  const limit = summary?.subscriberLimit;
+  if (typeof after !== "number" || typeof limit !== "number") return null;
+  if (limit <= 0 || after <= limit) return null;
+  return `After this import you'll have ${formatCount(after)} contacts. Broadcasts and drips go to your ${formatCount(limit)} most recently active contacts.`;
+};
+
+/** "N of M contacts get broadcasts", or null without WhatsApp contacts. */
+export const broadcastListLine = (summary?: {
+  broadcastEligible?: number;
+  whatsapp?: number;
+}) =>
+  typeof summary?.broadcastEligible === "number" && summary.whatsapp
+    ? `${formatCount(summary.broadcastEligible)} of ${formatCount(summary.whatsapp)} contacts get broadcasts`
+    : null;
 
 /**
  * A contact's custom fields (from an import or the API) as rows to show,

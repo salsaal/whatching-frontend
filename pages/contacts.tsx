@@ -77,6 +77,7 @@ import AppLayout from "@/layouts/AppLayout";
 import { describePermission } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { LockedButton, PermissionGate } from "@/components/common/NoAccess";
+import { broadcastListLine } from "@/lib/contactText";
 import { formatCount, formatDate } from "@/lib/displayFormat";
 import {
   contactFullName,
@@ -86,6 +87,16 @@ import {
 
 type ContactChannel = "all" | "whatsapp" | "instagram";
 const CONTACTS_PAGE_SIZE = 50;
+
+type BroadcastFilter = "all" | "eligible" | "retained_only";
+
+// "Left out" also covers contacts who unsubscribed or were excluded by hand.
+const broadcastFilterOptions: Array<{ value: BroadcastFilter; label: string }> =
+  [
+    { value: "all", label: "All" },
+    { value: "eligible", label: "Included" },
+    { value: "retained_only", label: "Left out" }
+  ];
 
 const contactChannelOptions: Array<{
   value: ContactChannel;
@@ -135,6 +146,8 @@ function ContactsPageContent() {
     `You need ${describePermission(permission, permissionSchema)} access`;
   const [query, setQuery] = useState("");
   const [channel, setChannel] = useState<ContactChannel>("all");
+  const [broadcastFilter, setBroadcastFilter] =
+    useState<BroadcastFilter>("all");
   const [selectedSubscriber, setSelectedSubscriber] =
     useState<Subscriber | null>(null);
   const [isSubscriberModalOpen, setIsSubscriberModalOpen] = useState(false);
@@ -168,13 +181,15 @@ function ContactsPageContent() {
       channel,
       query.trim(),
       primaryTagFilter,
-      remainingTagFilters
+      remainingTagFilters,
+      broadcastFilter
     ],
     queryFn: ({ pageParam }) =>
       getAllSubscribers({
         channel,
         q: query,
         tag: primaryTagFilter,
+        broadcastEligibility: broadcastFilter,
         page: pageParam,
         limit: CONTACTS_PAGE_SIZE
       }),
@@ -228,6 +243,8 @@ function ContactsPageContent() {
       );
     return Array.from(uniqueSubscribers.values());
   }, [data?.pages]);
+  // Counted over every contact, whatever the filters.
+  const broadcastLine = broadcastListLine(allCountData?.data.summary);
   const channelCounts = {
     all: allCountData?.pagination.total,
     whatsapp: whatsappCountData?.pagination.total,
@@ -299,7 +316,7 @@ function ContactsPageContent() {
   const totalSubscriberCount =
     data?.pages[data.pages.length - 1]?.pagination.total || 0;
   const isFilteringContacts = Boolean(
-    query.trim() || selectedTagFilters.length
+    query.trim() || selectedTagFilters.length || broadcastFilter !== "all"
   );
   const describeContacts = (count: number) =>
     `${formatCount(count)} ${isFilteringContacts ? "matching " : ""}contact${
@@ -521,6 +538,7 @@ function ContactsPageContent() {
         channel,
         q: query,
         tag: primaryTagFilter,
+        broadcastEligibility: broadcastFilter,
         page: 1,
         limit: 100
       });
@@ -536,6 +554,7 @@ function ContactsPageContent() {
               channel,
               q: query,
               tag: primaryTagFilter,
+              broadcastEligibility: broadcastFilter,
               page,
               limit: 100
             })
@@ -603,6 +622,11 @@ function ContactsPageContent() {
             <p className="mt-2 text-sm text-muted-foreground">
               Manage WhatsApp subscribers, tags, and opt-in records.
             </p>
+            {broadcastLine && (
+              <p className="mt-1 text-sm font-medium text-foreground">
+                {broadcastLine}
+              </p>
+            )}
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
             {selectedIds.length > 0 && canManageContacts && (
@@ -709,7 +733,7 @@ function ContactsPageContent() {
         </section>
 
         <section className="rounded-lg bg-white p-4 shadow-xs">
-          <div className="grid gap-4 lg:grid-cols-[360px_minmax(0,1fr)] lg:items-center">
+          <div className="grid gap-4 lg:grid-cols-[360px_minmax(0,1fr)_auto] lg:items-center">
             <div className="grid w-full grid-cols-3 gap-1 rounded-xl bg-muted p-1">
               {contactChannelOptions.map((option) => {
                 const Icon = option.icon;
@@ -748,6 +772,28 @@ function ContactsPageContent() {
                 className="h-12 rounded-sm border-0 bg-muted/70 pl-9 shadow-none"
               />
             </div>
+            <Select
+              value={broadcastFilter}
+              onValueChange={(value) => {
+                setBroadcastFilter(value as BroadcastFilter);
+                setSelectedIds([]);
+              }}
+            >
+              <SelectTrigger
+                aria-label="Broadcasts"
+                className="h-12 w-full lg:w-52"
+              >
+                <span className="text-muted-foreground">Broadcasts:</span>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {broadcastFilterOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="mt-4 flex gap-2 overflow-x-auto pb-1">

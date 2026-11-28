@@ -105,8 +105,9 @@ export default function PlansPage() {
                 Choose a Whatching plan
               </h1>
               <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-                Review contact limits, team access, automation features, GST,
-                and checkout requirements before starting or changing a plan.
+                Review broadcast list sizes, team access, automation features,
+                GST, and checkout requirements before starting or changing a
+                plan.
               </p>
             </div>
             <div className="rounded-md border bg-muted/40 px-4 py-3 text-sm">

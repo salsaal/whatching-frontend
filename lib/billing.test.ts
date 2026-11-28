@@ -360,6 +360,15 @@ describe("getDowngradeSeatCheck", () => {
 });
 
 describe("plans", () => {
+  it("sells unlimited contacts and a broadcast list size", () => {
+    const basic = plans.find((plan) => plan.id === "basic")!.features;
+    const pro = plans.find((plan) => plan.id === "pro")!.features;
+    expect(basic).toContain("Unlimited WhatsApp contacts");
+    expect(basic).toContain("Broadcasts & drips to 10k contacts");
+    expect(pro).toContain("Broadcasts & drips to 25k contacts");
+    expect([...basic, ...pro].join(" ")).not.toMatch(/WhatsApp Contacts/);
+  });
+
   it("lists role-based permissions under Basic only", () => {
     const feature = "Role-Based Team Permissions";
     expect(plans.find((plan) => plan.id === "basic")!.features).toContain(

@@ -52,7 +52,7 @@ export const previewLines = (preview: DripAudiencePreview) =>
     preview.usNumbers > 0 &&
       `${people(preview.usNumbers)} ${preview.usNumbers === 1 ? "has a US number" : "have US numbers"}. WhatsApp doesn't deliver offers to US numbers, so they're left out.`,
     preview.cantMessage > 0 &&
-      `${people(preview.cantMessage)} can't be messaged (they opted out, have no WhatsApp number, or are outside your plan's contact limit).`
+      `${people(preview.cantMessage)} can't be messaged (they opted out, have no WhatsApp number, or aren't on your broadcast list).`
   ].filter(Boolean) as string[];
 
 type DialogProps = {

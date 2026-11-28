@@ -2,6 +2,11 @@
 
 This document reflects the frontend and verified sibling-backend contracts on 2026-08-27.
 
+## 2026-11-28 — The plan number is the broadcast list size
+
+- Built from the backend's `docs/BROADCAST_LIST_LIMIT_NOTES.md` (backend main 2cdb2f7), customer app only: the import dry-run note, the contacts line and Broadcasts filter, the broadcast-list wording, and the plans page features (see `docs/FEATURES.md`). The notes' website section (Whatching-Website pricing and comparison posts) is a separate repo and wasn't part of this.
+- The Enterprise card still says "High Volume Contacts"; the notes only change Basic and Pro in this app.
+
 ## 2026-11-27 — Paused workspaces, chat clean-up on, undelivered-file note
 
 - Built from the backend's `docs/WORKSPACE_PAUSE_AND_CLEANUP_FRONTEND_NOTES.md` (backend main ed8e5cb): the paused banner on every page, send buttons off while paused, "Waiting: workspace paused" for drips, and the clean-up help text on the Media library page (see `docs/FEATURES.md`). Store log skip reasons already show the API's text.

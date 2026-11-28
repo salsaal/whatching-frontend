@@ -487,7 +487,7 @@ describe("audience preview lines", () => {
       })
     ).toEqual([
       "1 person asked not to get offers, so they're left out.",
-      "2 people can't be messaged (they opted out, have no WhatsApp number, or are outside your plan's contact limit)."
+      "2 people can't be messaged (they opted out, have no WhatsApp number, or aren't on your broadcast list)."
     ]);
   });
 });

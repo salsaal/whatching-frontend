@@ -137,6 +137,11 @@ Supported WhatsApp action types:
 - "Stop offers for this contact" (`OffersStoppedControl`) in the contact dialog and the inbox's contact panel: a "Stopped offers" badge with the reason, and a switch (`PATCH` subscriber `offersStopped`). Order updates and replies still go.
 - Custom fields (`metadata`, e.g. `{ city: "Pune" }`) show read-only in the contact dialog (`customFieldRows` in `lib/contactText.ts`). The dialog never sends `metadata`, so saving leaves them alone; a future editor must send every field, since `metadata` replaces the whole set.
 - The import dialog says that re-importing adds tags and fields to existing contacts and keeps unsubscribed contacts unsubscribed.
+- Broadcast list (since 28 Nov 2026): the plan number (Basic 10,000, Pro 25,000) is the size of the broadcast list, not a contact cap. Contacts past it are saved and left out of broadcasts and drips; the most recently active contacts keep their places.
+  - The page header shows "{broadcastEligible} of {whatsapp} contacts get broadcasts" (`GET /subscribers` summary, counted over every contact; hidden with no WhatsApp contacts).
+  - "Broadcasts: All / Included / Left out" filters the list and Export CSV (`broadcastEligibility=all|eligible|retained_only`; Left out also covers unsubscribed and hand-excluded contacts).
+  - Picking a file in the import dialog runs a dry run (`dryRun: true`). When `contactsAfterImport` is above `subscriberLimit`, an amber note says how many contacts there will be and that broadcasts and drips go to the most recently active ones. Not an error: the import still runs. A failed dry run stays quiet; the real import reports any problem.
+  - Reasons a contact is left out read as the broadcast list ("Waiting for a place on your broadcast list.", `lib/contactText.ts`).
 
 ## Media
 
